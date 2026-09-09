@@ -2,8 +2,18 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>EBD Consultores — Monotributo e Ingresos Brutos</title>
+
+<!-- ---------- Instalable como app (PWA) ---------- -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1A73E8">
+<meta name="description" content="Liquidación de monotributo, ingresos brutos y tasas municipales, con control de recategorización semestral.">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="EBD">
 
 <!-- ============================================================
      CSS PRINCIPAL — va SIEMPRE en el <head>.
@@ -32,17 +42,94 @@ input,select,textarea{font-family:inherit;font-size:14px}
 a{color:var(--azul);text-decoration:none}
 .oculto{display:none !important}
 
-/* ---------- LOGIN ---------- */
+/* ---------- LOGO ----------
+   Isotipo: la letra E armada con tres barras que crecen hacia abajo.
+   Se lee como letra, como gráfico de barras y como renglones de un libro.
+*/
+.logo-marca{display:flex;align-items:center;gap:13px}
+.logo-marca svg{flex:none;display:block}
+.logo-txt{
+  font-size:9.5px;font-weight:500;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--gris);line-height:1;white-space:nowrap;
+}
+.logo-marca.claro .logo-txt{color:rgba(255,255,255,.78)}
+/* Sobre el azul del panel, la marca necesita despegarse del fondo */
+.logo-marca.claro svg{filter:drop-shadow(0 2px 7px rgba(3,26,72,.4))}
+
+/* La órbita gira lento alrededor de las letras. Se frena sola si el usuario
+   pidió menos movimiento en su sistema. */
+.orbita{transform-origin:60px 60px;animation:girarOrbita 18s linear infinite}
+@keyframes girarOrbita{
+  from{transform:rotate(-24deg)}
+  to{transform:rotate(336deg)}
+}
+@media (prefers-reduced-motion:reduce){
+  .orbita{animation:none;transform:rotate(-24deg)}
+}
+
+/* ---------- LOGIN: pantalla de presentación ---------- */
 #pantallaLogin{
-  position:fixed;inset:0;background:var(--fondo);
-  display:flex;align-items:center;justify-content:center;z-index:9000;padding:20px;
+  position:fixed;inset:0;z-index:9000;background:var(--blanco);
+  display:grid;grid-template-columns:1.12fr .88fr;
 }
-.login-card{
-  background:var(--blanco);border:1px solid var(--borde);border-radius:var(--r);
-  padding:44px 40px;width:100%;max-width:420px;box-shadow:var(--sombra);
+
+/* Panel izquierdo: la "slide" */
+.slide{
+  position:relative;overflow:hidden;color:#fff;
+  padding:56px 58px;display:flex;flex-direction:column;justify-content:space-between;
+  background:linear-gradient(135deg,#0B4BB8 0%,#1A73E8 48%,#3D8BFF 100%);
 }
-.login-card .marca{font-size:26px;font-weight:500;margin-bottom:4px}
-.login-card .sub{color:var(--gris);margin-bottom:28px;font-size:14px}
+.slide::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(circle at 84% 10%, rgba(255,255,255,.18), transparent 44%),
+    radial-gradient(circle at 4% 96%, rgba(0,0,0,.20), transparent 48%);
+}
+/* retícula tenue, como el papel de un libro contable */
+.slide::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.13;
+  background-image:
+    linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px);
+  background-size:58px 58px;
+  -webkit-mask-image:radial-gradient(circle at 28% 44%, #000, transparent 76%);
+  mask-image:radial-gradient(circle at 28% 44%, #000, transparent 76%);
+}
+.slide > *{position:relative;z-index:1}
+.slide h1{
+  font-size:clamp(28px,3.1vw,42px);font-weight:500;line-height:1.12;
+  letter-spacing:-1.1px;margin-bottom:15px;
+}
+.slide .bajada{font-size:16px;line-height:1.6;opacity:.92;max-width:450px}
+.slide ul{list-style:none;margin-top:32px;display:grid;gap:14px}
+.slide li{display:flex;gap:12px;align-items:flex-start;font-size:14.5px;opacity:.95;line-height:1.45}
+.slide li .tic{
+  flex:none;width:22px;height:22px;border-radius:50%;margin-top:1px;
+  background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:11px;
+}
+.slide .pie{font-size:12.5px;opacity:.7;line-height:1.65}
+
+/* Panel derecho: el formulario */
+.lado-form{display:flex;align-items:center;justify-content:center;padding:40px 44px}
+.login-card{width:100%;max-width:376px}
+.login-card .titulo{font-size:27px;font-weight:500;letter-spacing:-.5px;margin-bottom:6px}
+.login-card .sub{color:var(--gris);margin-bottom:26px;font-size:14px}
+.login-card .legal{
+  margin-top:26px;padding-top:18px;border-top:1px solid var(--borde);
+  font-size:12px;color:var(--gris2);line-height:1.6;
+}
+
+@media(max-width:900px){
+  #pantallaLogin{display:block;overflow-y:auto}
+  .slide{padding:30px 24px 34px}
+  .slide h1{font-size:25px;letter-spacing:-.6px;margin-bottom:10px}
+  .slide .bajada{font-size:14.5px}
+  .slide ul,.slide .pie{display:none}
+  .lado-form{padding:32px 20px 48px;align-items:flex-start}
+}
+@media(max-width:420px){
+  .slide .logo-txt .n{font-size:18px}
+}
 
 /* ---------- LAYOUT ---------- */
 #app{display:none;min-height:100vh}
@@ -150,6 +237,31 @@ tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:#FAFBFC}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mono{font-family:"Roboto Mono",ui-monospace,Consolas,monospace;font-size:12.5px}
+
+/* ---------- CUADRO DE DOBLE ENTRADA (honorarios) ---------- */
+.dobleentrada{min-width:920px}
+.dobleentrada th.cli,.dobleentrada td.cli{
+  position:sticky;left:0;z-index:2;background:var(--blanco);
+  min-width:210px;max-width:210px;box-shadow:1px 0 0 var(--borde);
+}
+.dobleentrada th.cli{background:#F8F9FA;z-index:3}
+.dobleentrada tbody tr:hover td.cli{background:#FAFBFC}
+.dobleentrada th.mes{text-align:center;width:62px;padding:10px 4px}
+.dobleentrada td.mes{text-align:center;padding:5px 4px}
+.celda{
+  display:block;width:100%;border-radius:7px;padding:7px 3px;
+  font-size:11.5px;font-weight:500;line-height:1.25;cursor:pointer;
+  border:1px solid transparent;transition:.12s;
+}
+.celda:hover{transform:translateY(-1px);box-shadow:var(--sombra)}
+.celda .m{display:block;font-size:10px;opacity:.75;font-weight:400}
+.c-pago{background:var(--verde-bg);color:var(--verde)}
+.c-debe{background:var(--rojo-bg);color:var(--rojo)}
+.c-porv{background:var(--amar-bg);color:var(--amar)}
+.c-nada{background:var(--fondo);color:var(--gris2);cursor:default}
+.c-nada:hover{transform:none;box-shadow:none}
+.c-parc{background:#FFF0E1;color:#B06000}
+.col-deuda{background:#FFFBFA;font-weight:500}
 
 /* ---------- BADGES / SEMAFORO ---------- */
 .badge{
@@ -261,27 +373,130 @@ tbody tr:hover{background:#FAFBFC}
 
 <!-- ==================== LOGIN ==================== -->
 <div id="pantallaLogin">
-  <div class="login-card">
-    <div class="marca">EBD <span style="color:#1A73E8">Consultores</span></div>
-    <div class="sub">Liquidación de monotributo e ingresos brutos</div>
-    <div id="avisoLogin"></div>
-    <div class="campo">
-      <label>Correo electrónico</label>
-      <input type="email" id="loginMail" autocomplete="username" placeholder="usuario@estudio.com">
+
+  <!-- Panel de presentación -->
+  <aside class="slide">
+    <div class="logo-marca claro">
+      <svg viewBox="10 28 100 64" width="94" height="60" role="img" aria-label="EBD Consultores">
+        <defs>
+          <linearGradient id="caraL" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CBE0FF"/>
+          </linearGradient>
+          <linearGradient id="cantoL" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#0A3D96"/><stop offset="1" stop-color="#05215C"/>
+          </linearGradient>
+          <linearGradient id="aroL" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#FFFFFF" stop-opacity=".18"/>
+            <stop offset=".32" stop-color="#FFFFFF" stop-opacity="1"/>
+            <stop offset=".70" stop-color="#B4D5FF" stop-opacity=".92"/>
+            <stop offset="1" stop-color="#FFFFFF" stop-opacity=".18"/>
+          </linearGradient>
+          <clipPath id="delanteL"><rect x="0" y="63" width="120" height="57"/></clipPath>
+        </defs>
+        <ellipse class="orbita" cx="60" cy="60" rx="50" ry="21.5" fill="none"
+                 stroke="url(#aroL)" stroke-width="3.2" opacity=".5"/>
+        <g font-family="Google Sans, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+           font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">
+          <g fill="url(#cantoL)">
+            <text x="60.4" y="72.4">EBD</text><text x="60.8" y="72.8">EBD</text>
+            <text x="61.2" y="73.2">EBD</text><text x="61.6" y="73.6">EBD</text>
+            <text x="62.0" y="74.0">EBD</text><text x="62.4" y="74.4">EBD</text>
+            <text x="62.8" y="74.8">EBD</text><text x="63.2" y="75.2">EBD</text>
+            <text x="63.6" y="75.6">EBD</text><text x="64.0" y="76.0">EBD</text>
+            <text x="64.4" y="76.4">EBD</text><text x="64.8" y="76.8">EBD</text>
+          </g>
+          <text x="60" y="72" fill="url(#caraL)">EBD</text>
+        </g>
+        <g clip-path="url(#delanteL)">
+          <ellipse class="orbita" cx="60" cy="60" rx="50" ry="21.5" fill="none"
+                   stroke="url(#aroL)" stroke-width="3.2"/>
+        </g>
+      </svg>
+      <span class="logo-txt">Consultores</span>
     </div>
-    <div class="campo">
-      <label>Contraseña</label>
-      <input type="password" id="loginPass" autocomplete="current-password" placeholder="••••••••">
+
+    <div>
+      <h1>Todos tus monotributistas,<br>en una sola pantalla.</h1>
+      <p class="bajada">Control de recategorización, liquidación mensual y avisos de pago
+        para ARCA, ingresos brutos y tasas municipales.</p>
+      <ul>
+        <li><span class="tic">✓</span><span>Recategorización calculada sobre los últimos 12 meses, con semáforo por cliente</span></li>
+        <li><span class="tic">✓</span><span>Importación de comprobantes emitidos y recibidos desde Mis Comprobantes</span></li>
+        <li><span class="tic">✓</span><span>Escala oficial de ARCA vigente, actualizable por período</span></li>
+        <li><span class="tic">✓</span><span>Avisos de pago con VEP enviados por correo a cada contribuyente</span></li>
+      </ul>
     </div>
-    <button class="btn" id="btnLogin" style="width:100%;margin-top:6px">Ingresar</button>
+
+    <p class="pie">Escala vigente desde el 01/08/2026 · Claves fiscales protegidas con cifrado AES-256</p>
+  </aside>
+
+  <!-- Panel del formulario -->
+  <div class="lado-form">
+    <div class="login-card">
+
+      <div class="titulo">Ingresar</div>
+      <div class="sub">Acceso al sistema del estudio</div>
+      <div id="avisoLogin"></div>
+      <div class="campo">
+        <label>Correo electrónico</label>
+        <input type="email" id="loginMail" autocomplete="username" placeholder="usuario@estudio.com">
+      </div>
+      <div class="campo">
+        <label>Contraseña</label>
+        <input type="password" id="loginPass" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button class="btn" id="btnLogin" style="width:100%;margin-top:6px">Ingresar</button>
+
+      <p class="legal">El acceso queda registrado. Si no tenés usuario, pedíselo al administrador del estudio.</p>
+    </div>
   </div>
+
 </div>
 
 <!-- ==================== APP ==================== -->
 <div id="app">
   <header class="top">
-    <div class="marca">EBD <span>Consultores</span></div>
+    <div class="logo-marca">
+      <svg viewBox="10 28 100 64" width="58" height="37" role="img" aria-label="EBD Consultores">
+        <defs>
+          <linearGradient id="caraH" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#3D8BFF"/><stop offset="1" stop-color="#1A5FD0"/>
+          </linearGradient>
+          <linearGradient id="cantoH" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#0E3E90"/><stop offset="1" stop-color="#07245E"/>
+          </linearGradient>
+          <linearGradient id="aroH" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#1A73E8" stop-opacity=".15"/>
+            <stop offset=".32" stop-color="#1A73E8" stop-opacity=".85"/>
+            <stop offset=".70" stop-color="#6BA8FF" stop-opacity=".8"/>
+            <stop offset="1" stop-color="#1A73E8" stop-opacity=".15"/>
+          </linearGradient>
+          <clipPath id="delanteH"><rect x="0" y="63" width="120" height="57"/></clipPath>
+        </defs>
+        <g transform="rotate(-24 60 60)">
+          <ellipse cx="60" cy="60" rx="50" ry="21.5" fill="none"
+                   stroke="url(#aroH)" stroke-width="3.2" opacity=".55"/>
+        </g>
+        <g font-family="Google Sans, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+           font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">
+          <g fill="url(#cantoH)">
+            <text x="60.4" y="72.4">EBD</text><text x="60.8" y="72.8">EBD</text>
+            <text x="61.2" y="73.2">EBD</text><text x="61.6" y="73.6">EBD</text>
+            <text x="62.0" y="74.0">EBD</text><text x="62.4" y="74.4">EBD</text>
+            <text x="62.8" y="74.8">EBD</text><text x="63.2" y="75.2">EBD</text>
+            <text x="63.6" y="75.6">EBD</text><text x="64.0" y="76.0">EBD</text>
+          </g>
+          <text x="60" y="72" fill="url(#caraH)">EBD</text>
+        </g>
+        <g transform="rotate(-24 60 60)" clip-path="url(#delanteH)">
+          <ellipse cx="60" cy="60" rx="50" ry="21.5" fill="none"
+                   stroke="url(#aroH)" stroke-width="3.2"/>
+        </g>
+      </svg>
+      <span class="logo-txt">Consultores</span>
+    </div>
     <div class="sep"></div>
+    <button class="btn sec chico oculto" id="btnInstalar" title="Instalar como aplicación">⬇ Instalar app</button>
     <button class="btn-icono" id="btnBoveda" title="Bóveda de claves">🔒</button>
     <div class="chip-user">
       <div class="avatar" id="avatarUser">?</div>
@@ -296,6 +511,8 @@ tbody tr:hover{background:#FAFBFC}
     <button data-tab="tabComprobantes">Comprobantes</button>
     <button data-tab="tabRecat">Recategorización</button>
     <button data-tab="tabLiquidacion">Liquidación</button>
+    <button data-tab="tabHonorarios">Honorarios</button>
+    <button data-tab="tabCaja">Caja</button>
     <button data-tab="tabMails">Mails</button>
     <button data-tab="tabEscalas">Escalas ARCA</button>
     <button data-tab="tabConfig">Configuración</button>
@@ -424,6 +641,57 @@ tbody tr:hover{background:#FAFBFC}
           <button class="btn sec chico" id="btnRecalcularLiq">Recalcular cuotas ARCA</button>
         </div>
         <div id="tablaLiquidacion"></div>
+      </div>
+    </section>
+
+    <!-- ---------- HONORARIOS ---------- -->
+    <section class="panel" id="tabHonorarios">
+      <div class="grid g4" style="margin-bottom:18px">
+        <div class="kpi"><div class="lbl">Honorarios del año</div><div class="val" id="kpiHonAsignado">—</div><div class="pie">lo que corresponde cobrar</div></div>
+        <div class="kpi ok"><div class="lbl">Cobrado</div><div class="val" id="kpiHonCobrado">—</div><div class="pie" id="kpiHonPct">&nbsp;</div></div>
+        <div class="kpi bad"><div class="lbl">Deuda acumulada</div><div class="val" id="kpiHonDeuda">—</div><div class="pie">meses ya exigibles</div></div>
+        <div class="kpi warn"><div class="lbl">Clientes que deben</div><div class="val" id="kpiHonMorosos">—</div><div class="pie" id="kpiHonMorososPie">&nbsp;</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Honorarios por cliente y mes</h2>
+          <select id="honAnio" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:999px"></select>
+          <button class="btn sec chico" id="btnHonExportar">Exportar CSV</button>
+          <button class="btn sec chico" id="btnHonGenerar">Generar meses</button>
+        </div>
+        <div class="aviso info">
+          <span>ℹ️</span>
+          <div>Cada celda es un mes. <b>Verde</b> = cobrado, <b>rojo</b> = vencido e impago, <b>amarillo</b> = corresponde pero todavía no vence,
+            <b>gris</b> = el cliente no tenía honorario ese mes. Hacé clic en cualquier celda para registrar el cobro.</div>
+        </div>
+        <div id="tablaHonorarios"></div>
+      </div>
+    </section>
+
+    <!-- ---------- CAJA ---------- -->
+    <section class="panel" id="tabCaja">
+      <div class="grid g4" id="kpisCuentas" style="margin-bottom:18px"></div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Movimientos</h2>
+          <button class="btn sec chico" id="btnGestionCuentas">Cuentas</button>
+          <button class="btn sec chico" id="btnGestionProveedores">Proveedores</button>
+          <button class="btn sec chico" id="btnCajaExportar">Exportar CSV</button>
+          <button class="btn" id="btnNuevoMovimiento">+ Movimiento</button>
+        </div>
+        <div class="filtros">
+          <input type="month" id="cajaPeriodo" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:999px">
+          <select id="cajaCuenta"></select>
+          <select id="cajaTipo">
+            <option value="">Ingresos y egresos</option>
+            <option value="ingreso">Solo ingresos</option>
+            <option value="egreso">Solo egresos</option>
+          </select>
+          <input type="text" id="cajaBuscar" placeholder="Buscar por concepto o contraparte…">
+        </div>
+        <div id="tablaCaja"></div>
       </div>
     </section>
 
@@ -596,13 +864,32 @@ var ESTADO = {
   totales: {},       // clienteId -> { "202601": {emitido, recibido, ...} }
   liquidaciones: {}, // clienteId -> { "202601": {...} }
   escalas: {},       // "20260801" -> {vigencia, alquileres, categorias:{A:{...}}}
+  honorarios: {},    // clienteId -> { "202601": {monto, pagado, montoPagado, ...} }
+  caja: {},          // id -> movimiento de caja
+  proveedores: {},   // id -> proveedor
+  cuentas: {},       // id -> caja/banco/billetera
   config: {},
   claveMaestra: null // CryptoKey en memoria, nunca se persiste
 };
 
 /* Todos los IDs de panel. Si agregás un tab nuevo, sumalo acá o se rompe la navegación. */
 var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
-                "tabLiquidacion","tabMails","tabEscalas","tabConfig"];
+                "tabLiquidacion","tabHonorarios","tabCaja","tabMails",
+                "tabEscalas","tabConfig"];
+
+/* Cuentas que se crean solas la primera vez que arranca el sistema. */
+var CUENTAS_SEMILLA = {
+  efectivo: { nombre:"Efectivo", tipo:"efectivo", saldoInicial:0, activa:true, orden:1 },
+  banco:    { nombre:"Cuenta bancaria", tipo:"banco", saldoInicial:0, activa:true, orden:2 }
+};
+
+var MEDIOS_PAGO = [
+  { clave:"efectivo",      nombre:"Efectivo" },
+  { clave:"transferencia", nombre:"Transferencia" },
+  { clave:"debito",        nombre:"Débito automático" },
+  { clave:"cheque",        nombre:"Cheque" },
+  { clave:"otro",          nombre:"Otro" }
+];
 
 /* ---------- 3. ESCALA OFICIAL ARCA — vigencia 01/08/2026 ----------
    Fuente: arca.gob.ar/monotributo/categorias.asp (ajuste 16,8% por IPC 1er semestre 2026).
@@ -668,6 +955,21 @@ function toast(msg, tipo){
   t.className = "ver" + (tipo ? " " + tipo : "");
   clearTimeout(toast._t);
   toast._t = setTimeout(function(){ t.className = ""; }, 3600);
+}
+
+/* Traduce los errores de Firebase a algo accionable. El más común es
+   PERMISSION_DENIED, que casi siempre es un problema de rol, no de datos. */
+function explicarError(e){
+  var msg = (e && (e.message || e.code)) || String(e);
+  if (msg.indexOf("PERMISSION_DENIED") !== -1 || msg.indexOf("permission_denied") !== -1){
+    if (ESTADO.rol === "lector"){
+      return "Permiso denegado: entraste con rol LECTOR (" + (ESTADO.usuario ? ESTADO.usuario.email : "?") +
+             "), que solo puede mirar. Hay que cambiarte el rol a admin.";
+    }
+    return "Permiso denegado pese a tener rol " + ESTADO.rol +
+           ". Revisá que las reglas de la base estén publicadas en Firebase.";
+  }
+  return "Error al guardar: " + msg;
 }
 
 /* CUIT: formato y validación por dígito verificador */
@@ -929,22 +1231,38 @@ if (!FIREBASE_OK){
 auth.onAuthStateChanged(function(u){
   if (!u){
     ESTADO.usuario = null;
-    $("pantallaLogin").style.display = "flex";
+    /* Vacío, no "flex": deja que mande el CSS, que en pantalla grande
+       usa grid de dos columnas y en celular pasa a una sola. */
+    $("pantallaLogin").style.display = "";
     $("app").classList.remove("visible");
     $("btnLogin").disabled = false;
     $("btnLogin").textContent = "Ingresar";
     return;
   }
   ESTADO.usuario = u;
-  ref("usuarios/" + u.uid).once("value").then(function(s){
-    var perfil = s.val() || {};
-    ESTADO.rol = (u.email === ADMIN_INICIAL) ? "admin" : (perfil.rol || "lector");
-    if (!s.exists()){
+
+  /* Leemos TODO el nodo de usuarios, no solo el propio, porque si el sistema
+     está vacío el primero que entra tiene que quedar como admin. Sin esto,
+     un correo distinto al de ADMIN_INICIAL quedaba como lector y no podía
+     guardar nada, sin forma de arreglarlo desde adentro. */
+  ref("usuarios").once("value").then(function(todos){
+    var lista  = todos.val() || {};
+    var vacio  = Object.keys(lista).length === 0;
+    var perfil = lista[u.uid] || {};
+    var existe = !!lista[u.uid];
+
+    if (vacio)                        ESTADO.rol = "admin";   // primer usuario del sistema
+    else if (u.email === ADMIN_INICIAL) ESTADO.rol = "admin";
+    else                              ESTADO.rol = perfil.rol || "lector";
+
+    if (!existe){
       ref("usuarios/" + u.uid).set({
         email: u.email,
         nombre: perfil.nombre || u.email.split("@")[0],
         rol: ESTADO.rol,
         alta: new Date().toISOString()
+      }).catch(function(e){
+        toast("No pude registrar tu usuario en la base: " + ((e && e.message) || e), "error");
       });
     }
     var nom = perfil.nombre || u.email.split("@")[0];
@@ -952,7 +1270,31 @@ auth.onAuthStateChanged(function(u){
     $("avatarUser").textContent = nom.charAt(0).toUpperCase();
     $("pantallaLogin").style.display = "none";
     $("app").classList.add("visible");
+
+    /* Con rol lector no se puede guardar nada. Mejor avisarlo al entrar que
+       dejar que se entere cuando le rebote el primer cliente que cargue. */
+    if (ESTADO.rol === "lector"){
+      setTimeout(function(){
+        toast("Entraste como LECTOR: podés mirar pero no guardar. Hay que cambiarte el rol a admin.", "error");
+      }, 900);
+    }
     cargarTodo();
+  }).catch(function(e){
+    /* Si ni siquiera se puede leer la lista de usuarios, casi siempre es que
+       las reglas quedaron en "modo bloqueado" y nunca se publicaron. */
+    var msg = (e && e.message) || String(e);
+    var bloqueado = msg.indexOf("permission_denied") !== -1 || msg.indexOf("PERMISSION_DENIED") !== -1;
+    $("avisoLogin").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
+      (bloqueado
+        ? "<b>La base está bloqueada.</b><br>Entraste bien, pero Firebase no deja leer ni escribir nada. " +
+          "Hay que pegar las reglas de <span class=mono>database.rules.json</span> en " +
+          "<b>Realtime Database → Reglas</b> y publicarlas."
+        : "<b>No se pudo leer la base.</b><br>" + esc(msg)) + "</div></div>";
+    $("pantallaLogin").style.display = "";
+    $("app").classList.remove("visible");
+    $("btnLogin").disabled = false;
+    $("btnLogin").textContent = "Ingresar";
+    auth.signOut();
   });
 });
 } /* fin arrancarAuth */
@@ -964,13 +1306,27 @@ function cargarTodo(){
     ref("totales").once("value"),
     ref("liquidaciones").once("value"),
     ref("escalas").once("value"),
-    ref("config").once("value")
+    ref("config").once("value"),
+    ref("honorarios").once("value"),
+    ref("caja").once("value"),
+    ref("proveedores").once("value"),
+    ref("cuentas").once("value")
   ]).then(function(s){
     ESTADO.clientes      = s[0].val() || {};
     ESTADO.totales       = s[1].val() || {};
     ESTADO.liquidaciones = s[2].val() || {};
     ESTADO.escalas       = s[3].val() || {};
     ESTADO.config        = s[4].val() || {};
+    ESTADO.honorarios    = s[5].val() || {};
+    ESTADO.caja          = s[6].val() || {};
+    ESTADO.proveedores   = s[7].val() || {};
+    ESTADO.cuentas       = s[8].val() || {};
+
+    /* Primera vez: efectivo y cuenta bancaria, para no arrancar con la caja vacía */
+    if (!Object.keys(ESTADO.cuentas).length){
+      ESTADO.cuentas = JSON.parse(JSON.stringify(CUENTAS_SEMILLA));
+      ref("cuentas").set(ESTADO.cuentas);
+    }
 
     /* Primera vez: sembramos la escala oficial vigente desde el 01/08/2026 */
     if (!Object.keys(ESTADO.escalas).length){
@@ -1005,6 +1361,8 @@ function irA(tabId){
   if (tabId === "tabComprobantes") renderComprobantes();
   if (tabId === "tabRecat")        renderRecat();
   if (tabId === "tabLiquidacion")  renderLiquidacion();
+  if (tabId === "tabHonorarios")   renderHonorarios();
+  if (tabId === "tabCaja")         renderCaja();
   if (tabId === "tabMails")        renderMails();
   if (tabId === "tabEscalas")      renderEscala();
   if (tabId === "tabConfig")       renderConfig();
@@ -1042,6 +1400,8 @@ function inicializarUI(){
   $("verCompTipo").onchange       = renderTablaComprobantes;
 
   renderHome();
+  aplicarTabDeLaUrl();
+  ofrecerInstalacion();
 }
 
 function llenarSelectClientes(sel, incluirTodos){
@@ -1202,7 +1562,11 @@ function formCliente(c){
   '<div class="seccion-tit">Datos del contribuyente</div>' +
   '<div class="grid g2">' +
     '<div class="campo"><label>Razón social / Nombre *</label><input type="text" id="fcNombre" value="' + esc(c.razonSocial || "") + '"></div>' +
+    '<div class="campo"><label>Nombre de fantasía</label><input type="text" id="fcFantasia" value="' + esc(c.nombreFantasia || "") + '" placeholder="Como lo conocen comercialmente">' +
+      '<div class="ayuda">Si lo cargás, es el que se muestra en los listados.</div></div>' +
     '<div class="campo"><label>CUIT *</label><input type="text" id="fcCuit" value="' + esc(c.cuit || "") + '" placeholder="20-12345678-9"></div>' +
+    '<div class="campo"><label>Nº de Ingresos Brutos</label><input type="text" id="fcIIBB" value="' + esc(c.nroIIBB || "") + '" placeholder="901-123456-7 o el CUIT">' +
+      '<div class="ayuda">El de Convenio Multilateral o el local, según cómo esté inscripto.</div></div>' +
     '<div class="campo"><label>Correo electrónico</label><input type="email" id="fcMail" value="' + esc(c.email || "") + '"></div>' +
     '<div class="campo"><label>Teléfono</label><input type="text" id="fcTel" value="' + esc(c.telefono || "") + '"></div>' +
   '</div>' +
@@ -1256,6 +1620,27 @@ function formCliente(c){
       '<div class="ayuda">Los usa el web service WSFE para traer los comprobantes emitidos.</div>' +
     "</div>" +
   "</div>" +
+  '<div class="seccion-tit">Honorarios del estudio</div>' +
+  '<div class="grid g3">' +
+    '<div class="campo"><label>Honorario mensual</label>' +
+      '<input type="number" step="0.01" id="fcHonMonto" value="' + (c.honorarioMensual || "") + '" placeholder="0,00"></div>' +
+    '<div class="campo"><label>Cobra a</label><select id="fcHonModalidad">' +
+      '<option value="curso"'   + (c.honorarioModalidad !== "vencido" ? " selected" : "") + '>Mes en curso</option>' +
+      '<option value="vencido"' + (c.honorarioModalidad === "vencido" ? " selected" : "") + '>Mes vencido</option>' +
+    '</select><div class="ayuda">Vencido: el de septiembre se paga en octubre.</div></div>' +
+    '<div class="campo"><label>Cobra desde</label>' +
+      '<input type="month" id="fcHonDesde" value="' + esc(c.honorarioDesde || "") + '">' +
+      '<div class="ayuda">Antes de ese mes no se le reclama nada.</div></div>' +
+  '</div>' +
+  '<div class="grid g2">' +
+    '<div class="campo"><label>Medio de pago habitual</label><select id="fcHonMedio">' +
+      MEDIOS_PAGO.map(function(m){
+        return '<option value="' + m.clave + '"' + (c.honorarioMedio === m.clave ? " selected" : "") + ">" + m.nombre + "</option>";
+      }).join("") +
+    "</select></div>" +
+    '<div class="campo"><label>Cuenta donde ingresa</label><select id="fcHonCuenta">' + opcionesCuentas(c.honorarioCuenta) + "</select></div>" +
+  "</div>" +
+
   '<label class="check"><input type="checkbox" id="fcActivo"' + (c.activo !== false ? " checked" : "") + "> Cliente activo</label>";
 }
 
@@ -1288,9 +1673,16 @@ function guardarFormCliente(id){
 
   var datos = {
     razonSocial: nombre,
+    nombreFantasia: $("fcFantasia").value.trim(),
     cuit: cuit,
+    nroIIBB: $("fcIIBB").value.trim(),
     email: $("fcMail").value.trim(),
     telefono: $("fcTel").value.trim(),
+    honorarioMensual: parseFloat($("fcHonMonto").value) || 0,
+    honorarioModalidad: $("fcHonModalidad").value,
+    honorarioDesde: $("fcHonDesde").value,
+    honorarioMedio: $("fcHonMedio").value,
+    honorarioCuenta: $("fcHonCuenta").value,
     actividad: $("fcActividad").value,
     categoriaActual: $("fcCategoria").value || null,
     obraSocial: $("fcObraSocial").value.trim(),
@@ -1328,7 +1720,7 @@ function guardarFormCliente(id){
     renderClientes(); renderHome();
     llenarSelectClientes($("impCliente"), false);
     llenarSelectClientes($("verCompCliente"), false);
-  }).catch(function(e){ toast("Error al guardar: " + e.message, "error"); });
+  }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
 /* Ficha con el detalle mes a mes y el análisis de los dos cortes */
@@ -1659,7 +2051,7 @@ function confirmarImportacion(clienteId, tipo, registros, porPeriodo){
       "Ya podés ver el resultado en <b>Recategorización</b>.</div></div>";
     renderHome();
     renderTablaComprobantes();
-  }).catch(function(e){ toast("Error al guardar: " + e.message, "error"); });
+  }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
 /* Dropzone */
@@ -2600,7 +2992,827 @@ function guardarCredenciales(clienteId){
   }).catch(function(e){ toast("Error: " + e.message, "error"); });
 }
 
-/* ---------- 19. ARRANQUE ----------
+/* ---------- 19. INSTALACIÓN COMO APP (PWA) ---------- */
+
+/* Registro del service worker. Solo funciona sobre https o localhost:
+   desde file:// el navegador lo bloquea, y no pasa nada — la app anda igual. */
+if ("serviceWorker" in navigator && location.protocol !== "file:"){
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("sw.js").then(function(reg){
+      /* Si mientras estás usando el sistema subimos una versión nueva,
+         avisamos en vez de dejarte con la vieja sin que te enteres. */
+      reg.addEventListener("updatefound", function(){
+        var nuevo = reg.installing;
+        if (!nuevo) return;
+        nuevo.addEventListener("statechange", function(){
+          if (nuevo.state === "installed" && navigator.serviceWorker.controller){
+            mostrarAvisoActualizacion(reg);
+          }
+        });
+      });
+    }).catch(function(){ /* sin service worker el sistema funciona igual */ });
+  });
+}
+
+function mostrarAvisoActualizacion(reg){
+  var t = $("toast");
+  t.innerHTML = 'Hay una versión nueva del sistema. ' +
+    '<a href="#" id="lnkActualizar" style="color:#8AB4F8;font-weight:500">Actualizar</a>';
+  t.className = "ver";
+  var lnk = $("lnkActualizar");
+  if (lnk) lnk.onclick = function(e){
+    e.preventDefault();
+    if (reg.waiting) reg.waiting.postMessage("actualizar-ya");
+    location.reload();
+  };
+}
+
+/* Botón "Instalar app". El navegador avisa cuándo se puede ofrecer. */
+var promptInstalacion = null;
+window.addEventListener("beforeinstallprompt", function(e){
+  e.preventDefault();
+  promptInstalacion = e;
+  $("btnInstalar").classList.remove("oculto");
+});
+$("btnInstalar").onclick = function(){
+  if (!promptInstalacion){ explicarInstalacionManual(); return; }
+  promptInstalacion.prompt();
+  promptInstalacion.userChoice.then(function(r){
+    if (r.outcome === "accepted") $("btnInstalar").classList.add("oculto");
+    promptInstalacion = null;
+  });
+};
+window.addEventListener("appinstalled", function(){
+  $("btnInstalar").classList.add("oculto");
+  toast("Sistema instalado", "ok");
+});
+
+/* iPhone y iPad no tienen botón de instalar: hay que explicar el paso a mano. */
+function explicarInstalacionManual(){
+  var esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  abrirModal("Instalar el sistema",
+    esIOS
+      ? '<div class="aviso info"><span>📱</span><div>En iPhone y iPad se instala desde Safari, con el menú del navegador.</div></div>' +
+        "<ol style='padding-left:20px;line-height:2'>" +
+        "<li>Abrí esta página en <b>Safari</b> (no anda desde Chrome en iPhone).</li>" +
+        "<li>Tocá el botón <b>Compartir</b> — el cuadradito con la flecha para arriba, abajo en el medio.</li>" +
+        "<li>Bajá y elegí <b>Agregar a inicio</b>.</li>" +
+        "<li>Tocá <b>Agregar</b>. Te queda el ícono azul de EBD en la pantalla.</li>" +
+        "</ol>"
+      : '<div class="aviso info"><span>💻</span><div>Buscá el ícono de instalar en la barra de direcciones del navegador.</div></div>' +
+        "<ol style='padding-left:20px;line-height:2'>" +
+        "<li>Mirá la barra donde está la dirección web, del lado derecho.</li>" +
+        "<li>Tocá el ícono de <b>una pantalla con una flecha</b> ⊕, o abrí el menú de tres puntos.</li>" +
+        "<li>Elegí <b>Instalar</b> o <b>Agregar a la pantalla de inicio</b>.</li>" +
+        "</ol>" +
+        '<div class="ayuda">Si no aparece la opción, puede ser que ya lo tengas instalado, o que estés abriendo el archivo desde el disco en vez de desde el link del sitio.</div>',
+    [{ texto:"Entendido", clase:"gris", accion:cerrarModal }], "angosto");
+}
+
+/* Muestra el botón de instalar aunque el navegador no dispare el evento
+   (iPhone nunca lo dispara). Si ya está instalado, no molesta. */
+function ofrecerInstalacion(){
+  var yaInstalado = window.matchMedia("(display-mode: standalone)").matches ||
+                    window.navigator.standalone === true;
+  if (yaInstalado || location.protocol === "file:") return;
+  setTimeout(function(){
+    $("btnInstalar").classList.remove("oculto");
+  }, 2500);
+}
+
+/* Accesos directos del ícono de la app: ?tab=tabRecat abre esa pestaña. */
+function aplicarTabDeLaUrl(){
+  var t = new URLSearchParams(location.search).get("tab");
+  if (t && ALL_TABS.indexOf(t) !== -1) irA(t);
+}
+
+/* ==========================================================================
+   21. HONORARIOS DEL ESTUDIO
+   Ojo con la diferencia: esto NO es la liquidación de impuestos del cliente.
+   Acá se lleva lo que el cliente le debe al estudio por el servicio.
+   ========================================================================== */
+
+/* En los listados manda el nombre de fantasía si está cargado. */
+function nombreCliente(id){
+  var c = ESTADO.clientes[id];
+  if (!c) return "(cliente eliminado)";
+  return c.nombreFantasia || c.razonSocial;
+}
+
+function sumarMes(periodo, n){
+  var a = parseInt(periodo.slice(0,4),10), m = parseInt(periodo.slice(4),10) + n;
+  while (m > 12){ m -= 12; a++; }
+  while (m < 1){ m += 12; a--; }
+  return a + String(m).padStart(2,"0");
+}
+
+/* Mes en el que se le reclama el honorario de un período dado. */
+function mesVencimiento(periodo, modalidad){
+  return modalidad === "vencido" ? sumarMes(periodo, 1) : periodo;
+}
+
+function correspondeHonorario(cli, periodo){
+  if (!cli || !cli.honorarioMensual) return false;
+  if (cli.honorarioDesde && periodo < cli.honorarioDesde.replace("-","")) return false;
+  return true;
+}
+
+function honorarioDe(clienteId, periodo){
+  return (ESTADO.honorarios[clienteId] || {})[periodo] || null;
+}
+
+/* Estado de una celda del cuadro:
+   pago | parcial | debe (vencido e impago) | porvenir (todavía no vence) | nada */
+function estadoHonorario(clienteId, periodo){
+  var cli = ESTADO.clientes[clienteId];
+  if (!correspondeHonorario(cli, periodo)) return { estado:"nada", monto:0, pagado:0, saldo:0 };
+
+  var h      = honorarioDe(clienteId, periodo);
+  var monto  = (h && h.monto !== undefined && h.monto !== null) ? h.monto : cli.honorarioMensual;
+  var pagado = h ? (h.montoPagado || 0) : 0;
+  var saldo  = Math.max(0, monto - pagado);
+  var vence  = mesVencimiento(periodo, cli.honorarioModalidad);
+
+  var estado;
+  if (saldo <= 0.005)           estado = "pago";
+  else if (pagado > 0.005)      estado = "parcial";
+  else if (vence > periodoHoy()) estado = "porvenir";
+  else                          estado = "debe";
+
+  return { estado:estado, monto:monto, pagado:pagado, saldo:saldo, vence:vence, registro:h };
+}
+
+/* Todos los períodos que le aplican a un cliente, tenga o no registro cargado. */
+function periodosDe(clienteId, hastaPeriodo){
+  var cli = ESTADO.clientes[clienteId] || {};
+  var set = {};
+  Object.keys(ESTADO.honorarios[clienteId] || {}).forEach(function(p){ set[p] = true; });
+  if (cli.honorarioMensual && cli.honorarioDesde){
+    var p = cli.honorarioDesde.replace("-","");
+    var tope = hastaPeriodo || periodoHoy(), guarda = 0;
+    while (p <= tope && guarda++ < 240){ set[p] = true; p = sumarMes(p, 1); }
+  }
+  return Object.keys(set).sort();
+}
+
+/* Deuda exigible: todo lo vencido e impago. Lo que todavía no vence no cuenta. */
+function deudaCliente(clienteId){
+  var total = 0;
+  periodosDe(clienteId).forEach(function(p){
+    var e = estadoHonorario(clienteId, p);
+    if (e.estado === "debe" || e.estado === "parcial") total += e.saldo;
+  });
+  return total;
+}
+
+function opcionesCuentas(sel){
+  var ids = Object.keys(ESTADO.cuentas).filter(function(id){ return ESTADO.cuentas[id].activa !== false; });
+  ids.sort(function(a,b){ return (ESTADO.cuentas[a].orden || 99) - (ESTADO.cuentas[b].orden || 99); });
+  return ids.map(function(id){
+    return '<option value="' + id + '"' + (sel === id ? " selected" : "") + ">" + esc(ESTADO.cuentas[id].nombre) + "</option>";
+  }).join("");
+}
+function nombreCuenta(id){ return (ESTADO.cuentas[id] || {}).nombre || "—"; }
+function nombreMedio(clave){
+  var m = MEDIOS_PAGO.filter(function(x){ return x.clave === clave; })[0];
+  return m ? m.nombre : (clave || "—");
+}
+
+function renderHonorarios(){
+  var sel = $("honAnio");
+  if (!sel.options.length){
+    var hoy = new Date().getFullYear(), out = "";
+    for (var a = hoy + 1; a >= hoy - 4; a--){
+      out += '<option value="' + a + '"' + (a === hoy ? " selected" : "") + ">" + a + "</option>";
+    }
+    sel.innerHTML = out;
+    sel.onchange = renderHonorarios;
+  }
+  var anio = sel.value;
+
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){
+    var c = ESTADO.clientes[id];
+    return c.honorarioMensual > 0 || (ESTADO.honorarios[id] && Object.keys(ESTADO.honorarios[id]).length);
+  });
+  ids.sort(function(a,b){ return nombreCliente(a).localeCompare(nombreCliente(b)); });
+
+  if (!ids.length){
+    $("tablaHonorarios").innerHTML = '<div class="vacio"><div class="ico">💼</div>' +
+      "<div>Ningún cliente tiene honorario mensual cargado.</div>" +
+      '<div style="font-size:13px;margin-top:6px">Se carga en la ficha del cliente, en la sección <b>Honorarios del estudio</b>.</div>' +
+      '<button class="btn sec chico" style="margin-top:14px" onclick="irA(\'tabClientes\')">Ir a Clientes</button></div>';
+    ["kpiHonAsignado","kpiHonCobrado","kpiHonDeuda","kpiHonMorosos"].forEach(function(k){ $(k).textContent = "—"; });
+    return;
+  }
+
+  var totalAsignado = 0, totalCobrado = 0, totalDeuda = 0, morosos = 0;
+
+  var html = '<div class="tabla-wrap"><table class="dobleentrada"><thead><tr><th class="cli">Cliente</th>';
+  for (var m = 1; m <= 12; m++) html += '<th class="mes">' + MESES[m-1].slice(0,3) + "</th>";
+  html += '<th class="num">Deuda</th></tr></thead><tbody>';
+
+  ids.forEach(function(id){
+    var cli = ESTADO.clientes[id];
+    var deuda = deudaCliente(id);
+    totalDeuda += deuda;
+    if (deuda > 0.005) morosos++;
+
+    var etiqueta = cli.honorarioModalidad === "vencido" ? "mes vencido" : "mes en curso";
+    html += '<tr><td class="cli"><b>' + esc(nombreCliente(id)) + "</b>" +
+      '<div style="color:#5F6368;font-size:11.5px">' + pesos(cli.honorarioMensual || 0) + " · " + etiqueta + "</div></td>";
+
+    for (var mm = 1; mm <= 12; mm++){
+      var per = anio + String(mm).padStart(2,"0");
+      var e = estadoHonorario(id, per);
+      if (e.estado !== "nada"){ totalAsignado += e.monto; totalCobrado += e.pagado; }
+
+      var clase = { pago:"c-pago", debe:"c-debe", porvenir:"c-porv", parcial:"c-parc", nada:"c-nada" }[e.estado];
+      var texto = "—", sub = "";
+      if (e.estado === "pago"){ texto = "✓"; sub = pesosCorto(e.monto); }
+      else if (e.estado === "parcial"){ texto = pesosCorto(e.saldo); sub = "resta"; }
+      else if (e.estado === "debe"){ texto = pesosCorto(e.saldo); sub = "debe"; }
+      else if (e.estado === "porvenir"){ texto = pesosCorto(e.saldo); sub = "por venir"; }
+
+      html += '<td class="mes">' +
+        (e.estado === "nada"
+          ? '<span class="celda c-nada">—</span>'
+          : '<button class="celda ' + clase + '" onclick="abrirCobro(\'' + id + "','" + per + '\')">' +
+            texto + '<span class="m">' + sub + "</span></button>") +
+        "</td>";
+    }
+
+    html += '<td class="num col-deuda">' + (deuda > 0.005
+      ? '<b style="color:#C5221F">' + pesos(deuda) + "</b>"
+      : '<span style="color:#188038">al día</span>') + "</td></tr>";
+  });
+
+  $("tablaHonorarios").innerHTML = html + "</tbody></table></div>";
+
+  $("kpiHonAsignado").textContent   = pesosCorto(totalAsignado);
+  $("kpiHonCobrado").textContent    = pesosCorto(totalCobrado);
+  $("kpiHonPct").textContent        = totalAsignado ? Math.round(totalCobrado / totalAsignado * 100) + "% del año" : "";
+  $("kpiHonDeuda").textContent      = pesosCorto(totalDeuda);
+  $("kpiHonMorosos").textContent    = morosos;
+  $("kpiHonMorososPie").textContent = "de " + ids.length + " con honorario";
+}
+
+/* Modal para registrar el cobro de un mes. */
+function abrirCobro(clienteId, periodo){
+  var cli = ESTADO.clientes[clienteId];
+  var e = estadoHonorario(clienteId, periodo);
+  var h = e.registro || {};
+  var hoyISO = new Date().toISOString().slice(0,10);
+
+  var etiqueta   = { pago:"Cobrado", parcial:"Cobrado en parte", debe:"Vencido e impago", porvenir:"Todavía no vence" }[e.estado];
+  var claseAviso = { pago:"ok",      parcial:"warn",             debe:"bad",              porvenir:"info" }[e.estado];
+
+  var html =
+    '<div class="aviso ' + claseAviso + '"><span>•</span><div><b>' + etiqueta + "</b> — vence en " +
+      periodoLargo(e.vence) + " (cobra a " + (cli.honorarioModalidad === "vencido" ? "mes vencido" : "mes en curso") + ")</div></div>" +
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Honorario del mes</label>' +
+        '<input type="number" step="0.01" id="hoMonto" value="' + e.monto + '"></div>' +
+      '<div class="campo"><label>Importe cobrado</label>' +
+        '<input type="number" step="0.01" id="hoPagado" value="' + (e.pagado || "") + '" placeholder="0,00">' +
+        '<div class="ayuda">Vacío si todavía no pagó. Admite pagos parciales.</div></div>' +
+      '<div class="campo"><label>Fecha del cobro</label>' +
+        '<input type="date" id="hoFecha" value="' + esc(h.fechaPago || hoyISO) + '"></div>' +
+      '<div class="campo"><label>Medio de pago</label><select id="hoMedio">' +
+        MEDIOS_PAGO.map(function(m){
+          var s = (h.medio || cli.honorarioMedio) === m.clave ? " selected" : "";
+          return '<option value="' + m.clave + '"' + s + ">" + m.nombre + "</option>";
+        }).join("") + "</select></div>" +
+      '<div class="campo"><label>Cuenta donde entra</label>' +
+        '<select id="hoCuenta">' + opcionesCuentas(h.cuentaId || cli.honorarioCuenta) + "</select></div>" +
+      '<div class="campo"><label>Observaciones</label>' +
+        '<input type="text" id="hoObs" value="' + esc(h.obs || "") + '"></div>' +
+    "</div>" +
+    '<div class="aviso info"><span>ℹ️</span><div>Si cargás un importe cobrado, se genera solo el movimiento de ingreso en la <b>Caja</b>.</div></div>';
+
+  var botones = [{ texto:"Cancelar", clase:"gris", accion:cerrarModal }];
+  if (e.pagado > 0.005){
+    botones.push({ texto:"Marcar como impago", clase:"peligro", accion:function(){ anularCobro(clienteId, periodo); } });
+  } else {
+    botones.push({ texto:"Cobrado completo", clase:"sec", accion:function(){
+      $("hoPagado").value = $("hoMonto").value;
+      guardarCobro(clienteId, periodo);
+    } });
+  }
+  botones.push({ texto:"Guardar", accion:function(){ guardarCobro(clienteId, periodo); } });
+
+  abrirModal(nombreCliente(clienteId) + " · " + periodoLargo(periodo), html, botones);
+}
+
+function guardarCobro(clienteId, periodo){
+  var previo = honorarioDe(clienteId, periodo) || {};
+  var monto  = parseFloat($("hoMonto").value) || 0;
+  var pagado = parseFloat($("hoPagado").value) || 0;
+
+  if (pagado > monto + 0.005){
+    toast("El importe cobrado no puede superar el honorario del mes", "error");
+    return;
+  }
+
+  var reg = {
+    monto: monto,
+    montoPagado: pagado,
+    pagado: monto > 0 && pagado >= monto - 0.005,
+    fechaPago: pagado > 0 ? $("hoFecha").value : null,
+    medio:     pagado > 0 ? $("hoMedio").value : null,
+    cuentaId:  pagado > 0 ? $("hoCuenta").value : null,
+    obs: $("hoObs").value.trim(),
+    actualizado: new Date().toISOString()
+  };
+
+  var updates = {};
+
+  /* El movimiento de caja anterior se borra siempre: si cambió el importe,
+     no queremos que queden dos ingresos por el mismo mes. */
+  if (previo.movimientoId){
+    updates["caja/" + previo.movimientoId] = null;
+    delete ESTADO.caja[previo.movimientoId];
+  }
+
+  if (pagado > 0){
+    var movId = ref("caja").push().key;
+    var mov = {
+      fecha: reg.fechaPago,
+      tipo: "ingreso",
+      concepto: "Honorarios " + periodoLargo(periodo),
+      contraparteTipo: "cliente",
+      contraparteId: clienteId,
+      contraparteNombre: nombreCliente(clienteId),
+      medio: reg.medio,
+      cuentaId: reg.cuentaId,
+      monto: pagado,
+      origen: "honorario",
+      refHonorario: clienteId + "/" + periodo,
+      creado: new Date().toISOString()
+    };
+    updates["caja/" + movId] = mov;
+    ESTADO.caja[movId] = mov;
+    reg.movimientoId = movId;
+  } else {
+    reg.movimientoId = null;
+  }
+
+  updates["honorarios/" + clienteId + "/" + periodo] = reg;
+
+  ref("").update(updates).then(function(){
+    if (!ESTADO.honorarios[clienteId]) ESTADO.honorarios[clienteId] = {};
+    ESTADO.honorarios[clienteId][periodo] = reg;
+    cerrarModal();
+    toast(pagado > 0 ? "Cobro registrado" : "Guardado", "ok");
+    renderHonorarios();
+  }).catch(function(err){ toast("Error: " + err.message, "error"); });
+}
+
+function anularCobro(clienteId, periodo){
+  var previo = honorarioDe(clienteId, periodo) || {};
+  var updates = {};
+  if (previo.movimientoId){
+    updates["caja/" + previo.movimientoId] = null;
+    delete ESTADO.caja[previo.movimientoId];
+  }
+  var reg = Object.assign({}, previo, {
+    montoPagado: 0, pagado: false, fechaPago: null,
+    medio: null, cuentaId: null, movimientoId: null,
+    actualizado: new Date().toISOString()
+  });
+  updates["honorarios/" + clienteId + "/" + periodo] = reg;
+
+  ref("").update(updates).then(function(){
+    ESTADO.honorarios[clienteId][periodo] = reg;
+    cerrarModal();
+    toast("Marcado como impago", "ok");
+    renderHonorarios();
+  });
+}
+
+/* Congela el honorario del año con el valor actual de cada ficha, para los meses
+   que todavía no tienen registro propio. Sirve cuando vas a cambiar la tarifa. */
+$("btnHonGenerar").onclick = function(){
+  var anio = $("honAnio").value;
+  var pendientes = [];
+  Object.keys(ESTADO.clientes).forEach(function(id){
+    var cli = ESTADO.clientes[id];
+    for (var m = 1; m <= 12; m++){
+      var per = anio + String(m).padStart(2,"0");
+      if (correspondeHonorario(cli, per) && !honorarioDe(id, per)){
+        pendientes.push({ id:id, per:per, monto:cli.honorarioMensual });
+      }
+    }
+  });
+  if (!pendientes.length){ toast("No hay meses pendientes de generar en " + anio, "ok"); return; }
+
+  abrirModal("Generar meses de " + anio,
+    '<div class="aviso info"><span>ℹ️</span><div>Se van a crear <b>' + pendientes.length + " registros</b> con el honorario que hoy tiene cada ficha. " +
+    "Los meses ya cargados no se tocan. Sirve para dejar fijo el importe antes de actualizar la tarifa.</div></div>",
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Generar " + pendientes.length, accion:function(){
+          var updates = {};
+          pendientes.forEach(function(p){
+            var reg = { monto:p.monto, montoPagado:0, pagado:false, generado:new Date().toISOString() };
+            updates["honorarios/" + p.id + "/" + p.per] = reg;
+            if (!ESTADO.honorarios[p.id]) ESTADO.honorarios[p.id] = {};
+            ESTADO.honorarios[p.id][p.per] = reg;
+          });
+          ref("").update(updates).then(function(){
+            cerrarModal(); toast(pendientes.length + " meses generados", "ok"); renderHonorarios();
+          });
+        } }
+    ]);
+};
+
+$("btnHonExportar").onclick = function(){
+  var anio = $("honAnio").value;
+  var cab = ["Cliente","Nombre de fantasia","CUIT","Honorario","Modalidad"];
+  for (var m = 1; m <= 12; m++) cab.push(MESES[m-1]);
+  cab.push("Deuda acumulada");
+  var filas = [cab];
+
+  Object.keys(ESTADO.clientes).forEach(function(id){
+    var cli = ESTADO.clientes[id];
+    var tiene = cli.honorarioMensual > 0 || (ESTADO.honorarios[id] && Object.keys(ESTADO.honorarios[id]).length);
+    if (!tiene) return;
+    var f = [cli.razonSocial, cli.nombreFantasia || "", formatCuit(cli.cuit),
+             (cli.honorarioMensual || 0).toFixed(2),
+             cli.honorarioModalidad === "vencido" ? "mes vencido" : "mes en curso"];
+    for (var mm = 1; mm <= 12; mm++){
+      var e = estadoHonorario(id, anio + String(mm).padStart(2,"0"));
+      f.push(e.estado === "nada" ? "" :
+             e.estado === "pago" ? "PAGADO" :
+             e.saldo.toFixed(2) + (e.estado === "debe" ? " (debe)" : e.estado === "parcial" ? " (parcial)" : " (por venir)"));
+    }
+    f.push(deudaCliente(id).toFixed(2));
+    filas.push(f);
+  });
+  bajarCSV(filas, "honorarios-" + anio + ".csv");
+};
+
+/* ==========================================================================
+   22. CAJA — ingresos, egresos y saldo
+   ========================================================================== */
+
+function saldoCuenta(cuentaId){
+  var c = ESTADO.cuentas[cuentaId] || {};
+  var s = c.saldoInicial || 0;
+  Object.keys(ESTADO.caja).forEach(function(k){
+    var m = ESTADO.caja[k];
+    if (m.cuentaId !== cuentaId) return;
+    s += m.tipo === "ingreso" ? m.monto : -m.monto;
+  });
+  return s;
+}
+
+function opcionesProveedores(sel){
+  var ids = Object.keys(ESTADO.proveedores).filter(function(id){ return ESTADO.proveedores[id].activo !== false; });
+  ids.sort(function(a,b){ return ESTADO.proveedores[a].nombre.localeCompare(ESTADO.proveedores[b].nombre); });
+  return ids.map(function(id){
+    return '<option value="' + id + '"' + (sel === id ? " selected" : "") + ">" + esc(ESTADO.proveedores[id].nombre) + "</option>";
+  }).join("");
+}
+function opcionesClientes(sel){
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+  ids.sort(function(a,b){ return nombreCliente(a).localeCompare(nombreCliente(b)); });
+  return ids.map(function(id){
+    return '<option value="' + id + '"' + (sel === id ? " selected" : "") + ">" + esc(nombreCliente(id)) + "</option>";
+  }).join("");
+}
+
+function renderCaja(){
+  if (!$("cajaPeriodo").value) $("cajaPeriodo").value = periodoAMonthInput(periodoHoy());
+
+  var selC = $("cajaCuenta"), actual = selC.value;
+  selC.innerHTML = '<option value="">Todas las cuentas</option>' + opcionesCuentas(null);
+  if (actual) selC.value = actual;
+
+  ["cajaPeriodo","cajaCuenta","cajaTipo"].forEach(function(id){ $(id).onchange = renderCaja; });
+  $("cajaBuscar").oninput = renderCaja;
+
+  /* Tarjetas de saldo por cuenta */
+  var ids = Object.keys(ESTADO.cuentas).filter(function(id){ return ESTADO.cuentas[id].activa !== false; });
+  ids.sort(function(a,b){ return (ESTADO.cuentas[a].orden || 99) - (ESTADO.cuentas[b].orden || 99); });
+  var totalGeneral = 0;
+  var kpis = ids.map(function(id){
+    var s = saldoCuenta(id);
+    totalGeneral += s;
+    return '<div class="kpi' + (s < 0 ? " bad" : "") + '"><div class="lbl">' + esc(ESTADO.cuentas[id].nombre) + "</div>" +
+      '<div class="val">' + pesosCorto(s) + '</div><div class="pie">' + esc(ESTADO.cuentas[id].tipo) + "</div></div>";
+  }).join("");
+  kpis += '<div class="kpi ok"><div class="lbl">Saldo total</div><div class="val">' + pesosCorto(totalGeneral) +
+          '</div><div class="pie">todas las cuentas</div></div>';
+  $("kpisCuentas").innerHTML = kpis;
+
+  /* Movimientos filtrados */
+  var per   = monthInputAPeriodo($("cajaPeriodo").value);
+  var fCta  = $("cajaCuenta").value;
+  var fTipo = $("cajaTipo").value;
+  var q     = ($("cajaBuscar").value || "").toLowerCase().trim();
+
+  var lista = Object.keys(ESTADO.caja).map(function(k){
+    return Object.assign({ _id:k }, ESTADO.caja[k]);
+  }).filter(function(m){
+    if (!m.fecha) return false;
+    if (m.fecha.slice(0,4) + m.fecha.slice(5,7) !== per) return false;
+    if (fCta && m.cuentaId !== fCta) return false;
+    if (fTipo && m.tipo !== fTipo) return false;
+    if (q && ((m.concepto || "") + " " + (m.contraparteNombre || "")).toLowerCase().indexOf(q) === -1) return false;
+    return true;
+  });
+  lista.sort(function(a,b){ return a.fecha.localeCompare(b.fecha) || (a.creado || "").localeCompare(b.creado || ""); });
+
+  if (!lista.length){
+    $("tablaCaja").innerHTML = '<div class="vacio"><div class="ico">💵</div><div>Sin movimientos en ' + periodoLargo(per) + ".</div></div>";
+    return;
+  }
+
+  var ing = 0, egr = 0, corriente = 0;
+  var html = '<div class="tabla-wrap"><table><thead><tr>' +
+    "<th>Fecha</th><th>Concepto</th><th>Contraparte</th><th>Medio</th><th>Cuenta</th>" +
+    "<th class=num>Ingreso</th><th class=num>Egreso</th><th class=num>Saldo del mes</th><th></th>" +
+    "</tr></thead><tbody>";
+
+  lista.forEach(function(m){
+    if (m.tipo === "ingreso"){ ing += m.monto; corriente += m.monto; }
+    else { egr += m.monto; corriente -= m.monto; }
+
+    html += "<tr><td>" + m.fecha.split("-").reverse().join("/") + "</td>" +
+      "<td><b>" + esc(m.concepto) + "</b>" +
+        (m.origen === "honorario" ? ' <span class="badge b-azul">automático</span>' : "") + "</td>" +
+      "<td>" + esc(m.contraparteNombre || "—") + "</td>" +
+      "<td>" + esc(nombreMedio(m.medio)) + "</td>" +
+      "<td>" + esc(nombreCuenta(m.cuentaId)) + "</td>" +
+      '<td class="num" style="color:#188038">' + (m.tipo === "ingreso" ? pesos(m.monto) : "") + "</td>" +
+      '<td class="num" style="color:#C5221F">' + (m.tipo === "egreso" ? pesos(m.monto) : "") + "</td>" +
+      '<td class="num">' + pesos(corriente) + "</td>" +
+      '<td style="white-space:nowrap">' +
+        (m.origen === "honorario"
+          ? '<span style="font-size:11px;color:#80868B">desde Honorarios</span>'
+          : '<button class="btn-icono" onclick="editarMovimiento(\'' + m._id + '\')" title="Editar">✏️</button>' +
+            '<button class="btn-icono" onclick="borrarMovimiento(\'' + m._id + '\')" title="Eliminar">🗑️</button>') +
+      "</td></tr>";
+  });
+
+  html += '<tr style="background:#F8F9FA"><td colspan="5"><b>Totales de ' + periodoLargo(per) + "</b></td>" +
+    '<td class="num"><b style="color:#188038">' + pesos(ing) + "</b></td>" +
+    '<td class="num"><b style="color:#C5221F">' + pesos(egr) + "</b></td>" +
+    '<td class="num"><b>' + pesos(ing - egr) + "</b></td><td></td></tr>";
+  $("tablaCaja").innerHTML = html + "</tbody></table></div>";
+}
+
+function formMovimiento(m){
+  m = m || {};
+  var hoyISO = new Date().toISOString().slice(0,10);
+  return '' +
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Tipo *</label><select id="mvTipo">' +
+        '<option value="ingreso"' + (m.tipo !== "egreso" ? " selected" : "") + ">Ingreso</option>" +
+        '<option value="egreso"'  + (m.tipo === "egreso" ? " selected" : "") + ">Egreso</option>" +
+      "</select></div>" +
+      '<div class="campo"><label>Fecha *</label><input type="date" id="mvFecha" value="' + esc(m.fecha || hoyISO) + '"></div>' +
+    "</div>" +
+    '<div class="campo"><label>Concepto *</label><input type="text" id="mvConcepto" value="' + esc(m.concepto || "") +
+      '" placeholder="Alquiler de la oficina, librería, honorarios…"></div>' +
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Contraparte</label><select id="mvContraparteTipo">' +
+        '<option value="otro"'      + (!m.contraparteTipo || m.contraparteTipo === "otro" ? " selected" : "") + ">Sin especificar</option>" +
+        '<option value="cliente"'   + (m.contraparteTipo === "cliente"   ? " selected" : "") + ">Cliente</option>" +
+        '<option value="proveedor"' + (m.contraparteTipo === "proveedor" ? " selected" : "") + ">Proveedor</option>" +
+      "</select></div>" +
+      '<div class="campo" id="wrapContraparte"><label>¿Quién?</label><select id="mvContraparteId"></select></div>' +
+    "</div>" +
+    '<div class="grid g3">' +
+      '<div class="campo"><label>Importe *</label><input type="number" step="0.01" id="mvMonto" value="' + (m.monto || "") + '"></div>' +
+      '<div class="campo"><label>Medio</label><select id="mvMedio">' +
+        MEDIOS_PAGO.map(function(x){
+          return '<option value="' + x.clave + '"' + (m.medio === x.clave ? " selected" : "") + ">" + x.nombre + "</option>";
+        }).join("") + "</select></div>" +
+      '<div class="campo"><label>Cuenta *</label><select id="mvCuenta">' + opcionesCuentas(m.cuentaId) + "</select></div>" +
+    "</div>";
+}
+
+function cablearContraparte(m){
+  function pintar(){
+    var t = $("mvContraparteTipo").value;
+    var w = $("wrapContraparte"), s = $("mvContraparteId");
+    if (t === "otro"){ w.style.display = "none"; s.innerHTML = ""; return; }
+    w.style.display = "";
+    s.innerHTML = t === "cliente" ? opcionesClientes(m && m.contraparteId) : opcionesProveedores(m && m.contraparteId);
+    if (!s.options.length) s.innerHTML = '<option value="">— no hay cargados todavía —</option>';
+  }
+  $("mvContraparteTipo").onchange = pintar;
+  pintar();
+}
+
+$("btnNuevoMovimiento").onclick = function(){
+  abrirModal("Nuevo movimiento de caja", formMovimiento(null), [
+    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Guardar", accion:function(){ guardarMovimiento(null); } }
+  ]);
+  cablearContraparte(null);
+};
+
+function editarMovimiento(id){
+  var m = ESTADO.caja[id];
+  if (!m) return;
+  abrirModal("Editar movimiento", formMovimiento(m), [
+    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Guardar", accion:function(){ guardarMovimiento(id); } }
+  ]);
+  cablearContraparte(m);
+}
+
+function guardarMovimiento(id){
+  var concepto = $("mvConcepto").value.trim();
+  var monto    = parseFloat($("mvMonto").value) || 0;
+  if (!concepto){ toast("Falta el concepto", "error"); return; }
+  if (monto <= 0){ toast("El importe tiene que ser mayor a cero", "error"); return; }
+  if (!$("mvCuenta").value){ toast("Elegí una cuenta", "error"); return; }
+
+  var tipoCp = $("mvContraparteTipo").value;
+  var cpId   = tipoCp === "otro" ? null : ($("mvContraparteId").value || null);
+  var cpNom  = "";
+  if (cpId) cpNom = tipoCp === "cliente" ? nombreCliente(cpId) : ((ESTADO.proveedores[cpId] || {}).nombre || "");
+
+  var datos = {
+    fecha: $("mvFecha").value,
+    tipo: $("mvTipo").value,
+    concepto: concepto,
+    contraparteTipo: tipoCp,
+    contraparteId: cpId,
+    contraparteNombre: cpNom,
+    medio: $("mvMedio").value,
+    cuentaId: $("mvCuenta").value,
+    monto: monto,
+    origen: "manual",
+    creado: (ESTADO.caja[id] || {}).creado || new Date().toISOString()
+  };
+
+  var p;
+  if (id){ p = ref("caja/" + id).set(datos); }
+  else { var nuevo = ref("caja").push(); id = nuevo.key; p = nuevo.set(datos); }
+
+  p.then(function(){
+    ESTADO.caja[id] = datos;
+    cerrarModal(); toast("Movimiento guardado", "ok"); renderCaja();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
+
+function borrarMovimiento(id){
+  var m = ESTADO.caja[id];
+  if (!m) return;
+  abrirModal("Eliminar movimiento",
+    '<div class="aviso bad"><span>⚠️</span><div>Esto no se puede deshacer.</div></div>' +
+    "<p>¿Eliminar <b>" + esc(m.concepto) + "</b> del " + m.fecha.split("-").reverse().join("/") +
+    " por <b>" + pesos(m.monto) + "</b>?</p>",
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Eliminar", clase:"peligro", accion:function(){
+          ref("caja/" + id).remove().then(function(){
+            delete ESTADO.caja[id];
+            cerrarModal(); toast("Movimiento eliminado", "ok"); renderCaja();
+          });
+        } }
+    ], "angosto");
+}
+
+$("btnCajaExportar").onclick = function(){
+  var per = monthInputAPeriodo($("cajaPeriodo").value);
+  var filas = [["Fecha","Tipo","Concepto","Contraparte","Medio","Cuenta","Importe"]];
+  Object.keys(ESTADO.caja).map(function(k){ return ESTADO.caja[k]; })
+    .filter(function(m){ return m.fecha && m.fecha.slice(0,4) + m.fecha.slice(5,7) === per; })
+    .sort(function(a,b){ return a.fecha.localeCompare(b.fecha); })
+    .forEach(function(m){
+      filas.push([m.fecha, m.tipo, m.concepto, m.contraparteNombre || "",
+                  nombreMedio(m.medio), nombreCuenta(m.cuentaId), m.monto.toFixed(2)]);
+    });
+  bajarCSV(filas, "caja-" + per + ".csv");
+};
+
+/* --- Cuentas --- */
+$("btnGestionCuentas").onclick = function(){
+  var ids = Object.keys(ESTADO.cuentas);
+  ids.sort(function(a,b){ return (ESTADO.cuentas[a].orden || 99) - (ESTADO.cuentas[b].orden || 99); });
+  var html = '<div class="tabla-wrap"><table><thead><tr><th>Cuenta</th><th>Tipo</th>' +
+    "<th class=num>Saldo inicial</th><th class=num>Saldo actual</th><th></th></tr></thead><tbody>" +
+    (ids.length ? ids.map(function(id){
+      var c = ESTADO.cuentas[id];
+      return "<tr" + (c.activa === false ? ' style="opacity:.5"' : "") + "><td><b>" + esc(c.nombre) + "</b></td>" +
+        "<td>" + esc(c.tipo) + "</td>" +
+        '<td class="num">' + pesos(c.saldoInicial || 0) + "</td>" +
+        '<td class="num"><b>' + pesos(saldoCuenta(id)) + "</b></td>" +
+        '<td><button class="btn sec chico" onclick="editarCuenta(\'' + id + '\')">Editar</button></td></tr>';
+    }).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px;color:#5F6368">Sin cuentas</td></tr>') +
+    "</tbody></table></div>";
+
+  abrirModal("Cuentas", html, [
+    { texto:"+ Nueva cuenta", clase:"sec", accion:function(){ editarCuenta(null); } },
+    { texto:"Cerrar", clase:"gris", accion:cerrarModal }
+  ], "ancho");
+};
+
+function editarCuenta(id){
+  var c = id ? ESTADO.cuentas[id] : {};
+  abrirModal(id ? "Editar cuenta" : "Nueva cuenta",
+    '<div class="campo"><label>Nombre *</label><input type="text" id="ctNombre" value="' + esc(c.nombre || "") +
+      '" placeholder="Banco Galicia, Mercado Pago…"></div>' +
+    '<div class="campo"><label>Tipo</label><select id="ctTipo">' +
+      ["efectivo","banco","billetera"].map(function(t){
+        return '<option value="' + t + '"' + (c.tipo === t ? " selected" : "") + ">" + t + "</option>";
+      }).join("") + "</select></div>" +
+    '<div class="campo"><label>Saldo inicial</label><input type="number" step="0.01" id="ctSaldo" value="' + (c.saldoInicial || 0) + '">' +
+      '<div class="ayuda">Lo que tenía la cuenta antes de empezar a usar el sistema.</div></div>' +
+    '<label class="check"><input type="checkbox" id="ctActiva"' + (c.activa !== false ? " checked" : "") + "> Cuenta activa</label>",
+    [
+      { texto:"Volver", clase:"gris", accion:function(){ $("btnGestionCuentas").onclick(); } },
+      { texto:"Guardar", accion:function(){
+          var nombre = $("ctNombre").value.trim();
+          if (!nombre){ toast("Falta el nombre", "error"); return; }
+          var datos = {
+            nombre: nombre, tipo: $("ctTipo").value,
+            saldoInicial: parseFloat($("ctSaldo").value) || 0,
+            activa: $("ctActiva").checked,
+            orden: c.orden || Object.keys(ESTADO.cuentas).length + 1
+          };
+          var clave = id || ref("cuentas").push().key;
+          ref("cuentas/" + clave).set(datos).then(function(){
+            ESTADO.cuentas[clave] = datos;
+            toast("Cuenta guardada", "ok");
+            renderCaja();
+            $("btnGestionCuentas").onclick();
+          }).catch(function(e){ toast(explicarError(e), "error"); });
+        } }
+    ], "angosto");
+}
+
+/* --- Proveedores --- */
+$("btnGestionProveedores").onclick = function(){
+  var ids = Object.keys(ESTADO.proveedores);
+  ids.sort(function(a,b){ return ESTADO.proveedores[a].nombre.localeCompare(ESTADO.proveedores[b].nombre); });
+
+  var gastado = {};
+  Object.keys(ESTADO.caja).forEach(function(k){
+    var m = ESTADO.caja[k];
+    if (m.contraparteTipo === "proveedor" && m.contraparteId && m.tipo === "egreso"){
+      gastado[m.contraparteId] = (gastado[m.contraparteId] || 0) + m.monto;
+    }
+  });
+
+  var html = '<div class="tabla-wrap"><table><thead><tr><th>Proveedor</th><th>CUIT</th><th>Rubro</th>' +
+    "<th class=num>Total pagado</th><th></th></tr></thead><tbody>" +
+    (ids.length ? ids.map(function(id){
+      var p = ESTADO.proveedores[id];
+      return "<tr" + (p.activo === false ? ' style="opacity:.5"' : "") + "><td><b>" + esc(p.nombre) + "</b></td>" +
+        '<td class="mono">' + esc(p.cuit ? formatCuit(p.cuit) : "—") + "</td>" +
+        "<td>" + esc(p.rubro || "—") + "</td>" +
+        '<td class="num">' + pesos(gastado[id] || 0) + "</td>" +
+        '<td><button class="btn sec chico" onclick="editarProveedor(\'' + id + '\')">Editar</button></td></tr>';
+    }).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px;color:#5F6368">Sin proveedores cargados</td></tr>') +
+    "</tbody></table></div>";
+
+  abrirModal("Proveedores", html, [
+    { texto:"+ Nuevo proveedor", clase:"sec", accion:function(){ editarProveedor(null); } },
+    { texto:"Cerrar", clase:"gris", accion:cerrarModal }
+  ], "ancho");
+};
+
+function editarProveedor(id){
+  var p = id ? ESTADO.proveedores[id] : {};
+  abrirModal(id ? "Editar proveedor" : "Nuevo proveedor",
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Nombre *</label><input type="text" id="pvNombre" value="' + esc(p.nombre || "") + '"></div>' +
+      '<div class="campo"><label>CUIT</label><input type="text" id="pvCuit" value="' + esc(p.cuit || "") + '"></div>' +
+      '<div class="campo"><label>Rubro</label><input type="text" id="pvRubro" value="' + esc(p.rubro || "") +
+        '" placeholder="Alquiler, librería, servicios…"></div>' +
+      '<div class="campo"><label>Teléfono</label><input type="text" id="pvTel" value="' + esc(p.telefono || "") + '"></div>' +
+      '<div class="campo"><label>Correo</label><input type="email" id="pvMail" value="' + esc(p.email || "") + '"></div>' +
+    "</div>" +
+    '<label class="check"><input type="checkbox" id="pvActivo"' + (p.activo !== false ? " checked" : "") + "> Proveedor activo</label>",
+    [
+      { texto:"Volver", clase:"gris", accion:function(){ $("btnGestionProveedores").onclick(); } },
+      { texto:"Guardar", accion:function(){
+          var nombre = $("pvNombre").value.trim();
+          if (!nombre){ toast("Falta el nombre", "error"); return; }
+          var cuit = $("pvCuit").value.replace(/\D/g,"");
+          if (cuit && !cuitValido(cuit)){ toast("El CUIT no es válido", "error"); return; }
+          var datos = {
+            nombre: nombre, cuit: cuit, rubro: $("pvRubro").value.trim(),
+            telefono: $("pvTel").value.trim(), email: $("pvMail").value.trim(),
+            activo: $("pvActivo").checked
+          };
+          var clave = id || ref("proveedores").push().key;
+          ref("proveedores/" + clave).set(datos).then(function(){
+            ESTADO.proveedores[clave] = datos;
+            toast("Proveedor guardado", "ok");
+            $("btnGestionProveedores").onclick();
+          }).catch(function(e){ toast(explicarError(e), "error"); });
+        } }
+    ]);
+}
+
+/* ---------- 23. ARRANQUE ----------
    Va último: todas las funciones y los manejadores ya quedaron definidos. */
 arrancarAuth();
 </script>

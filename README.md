@@ -1,8 +1,27 @@
-# Sistema Estudio Contable — Monotributo e IIBB
+# EBD Consultores — Monotributo e IIBB
 
 Sistema de gestión para liquidar monotributo (ARCA), ingresos brutos de Provincia
 (ARBA) y de Capital (AGIP), y tasas municipales, con control automático de la
 recategorización semestral.
+
+**En línea:** <https://speranzaemiliano-rk.github.io/ebd/>
+
+## Instalarlo como app
+
+El sistema es una PWA: se instala como aplicación, con ícono propio y ventana
+sin barra del navegador.
+
+| Dónde | Cómo |
+|---|---|
+| **Android** | Abrí el link en Chrome y tocá **Instalar app** arriba a la derecha. |
+| **iPhone / iPad** | Abrilo en **Safari** (no Chrome) → botón **Compartir** → **Agregar a inicio**. |
+| **Windows / Mac** | Abrilo en Chrome o Edge y tocá **Instalar app**, o el ícono ⊕ de la barra de direcciones. |
+
+Instalado, el ícono deja además accesos directos: mantené apretado el ícono y
+saltás directo a Recategorización, Liquidación o Clientes.
+
+> Cada vez que se modifique `index.html`, hay que subir el número de `VERSION`
+> en `sw.js`. Si no, algunos navegadores siguen mostrando la versión vieja.
 
 ## Cómo está armado
 

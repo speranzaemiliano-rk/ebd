@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="512" height="512" role="img" aria-label="EBD Consultores">
+  <title>EBD Consultores</title>
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4A9AFF"/><stop offset="1" stop-color="#0B4BB8"/>
+    </linearGradient>
+    <linearGradient id="cara" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CBE0FF"/>
+    </linearGradient>
+    <linearGradient id="canto" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0A3D96"/><stop offset="1" stop-color="#05215C"/>
+    </linearGradient>
+    <linearGradient id="aro" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#FFFFFF" stop-opacity=".18"/>
+      <stop offset=".32" stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset=".70" stop-color="#B4D5FF" stop-opacity=".92"/>
+      <stop offset="1"   stop-color="#FFFFFF" stop-opacity=".18"/>
+    </linearGradient>
+    <clipPath id="delante"><rect x="0" y="63" width="120" height="57"/></clipPath>
+  </defs>
+
+  <rect width="120" height="120" rx="28" fill="url(#fondo)"/>
+
+  <g transform="rotate(-24 60 60)">
+    <ellipse cx="60" cy="60" rx="50" ry="21.5" fill="none"
+             stroke="url(#aro)" stroke-width="3.2" opacity=".5"/>
+  </g>
+
+  <g font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+     font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">
+    <g fill="url(#canto)">
+      <text x="60.28" y="72.28">EBD</text><text x="60.56" y="72.56">EBD</text>
+      <text x="60.84" y="72.84">EBD</text><text x="61.12" y="73.12">EBD</text>
+      <text x="61.40" y="73.40">EBD</text><text x="61.68" y="73.68">EBD</text>
+      <text x="61.96" y="73.96">EBD</text><text x="62.24" y="74.24">EBD</text>
+      <text x="62.52" y="74.52">EBD</text><text x="62.80" y="74.80">EBD</text>
+      <text x="63.08" y="75.08">EBD</text><text x="63.36" y="75.36">EBD</text>
+      <text x="63.64" y="75.64">EBD</text><text x="63.92" y="75.92">EBD</text>
+      <text x="64.20" y="76.20">EBD</text><text x="64.48" y="76.48">EBD</text>
+      <text x="64.76" y="76.76">EBD</text><text x="65.04" y="77.04">EBD</text>
+    </g>
+    <text x="60" y="72" fill="url(#cara)">EBD</text>
+  </g>
+
+  <g transform="rotate(-24 60 60)" clip-path="url(#delante)">
+    <ellipse cx="60" cy="60" rx="50" ry="21.5" fill="none"
+             stroke="url(#aro)" stroke-width="3.2"/>
+  </g>
+</svg>
