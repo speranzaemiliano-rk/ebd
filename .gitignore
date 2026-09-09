@@ -1,0 +1,23 @@
+# Dependencias de Cloud Functions (se instalan solas con npm install)
+functions/node_modules/
+node_modules/
+
+# Certificado digital de ARCA y claves privadas — NUNCA subir esto a GitHub
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+functions/certificados/
+functions/.env
+.env
+.env.*
+
+# Credenciales de servicio de Firebase
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+
+# Basura del sistema
+Thumbs.db
+desktop.ini
+.DS_Store

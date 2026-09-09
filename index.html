@@ -1,0 +1,2609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EBD Consultores — Monotributo e Ingresos Brutos</title>
+
+<!-- ============================================================
+     CSS PRINCIPAL — va SIEMPRE en el <head>.
+     Nunca mover dentro de un div con display:none (rompe los tabs).
+     ============================================================ -->
+<style>
+:root{
+  --azul:#1A73E8; --azul-h:#1765CC; --azul-bg:#E8F0FE;
+  --borde:#DADCE0; --texto:#202124; --gris:#5F6368; --gris2:#80868B;
+  --fondo:#F1F3F4; --blanco:#FFFFFF;
+  --verde:#188038; --verde-bg:#E6F4EA;
+  --amar:#B06000;  --amar-bg:#FEF7E0;
+  --rojo:#C5221F;  --rojo-bg:#FCE8E6;
+  --violeta:#8430CE; --violeta-bg:#F3E8FD;
+  --r:16px; --r2:10px;
+  --sombra:0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:"Google Sans",Roboto,-apple-system,"Segoe UI",Arial,sans-serif;
+  background:var(--fondo); color:var(--texto); font-size:14px; line-height:1.5;
+}
+h1,h2,h3{font-weight:500;letter-spacing:-.2px}
+button{font-family:inherit;font-size:14px;cursor:pointer;border:none;background:none}
+input,select,textarea{font-family:inherit;font-size:14px}
+a{color:var(--azul);text-decoration:none}
+.oculto{display:none !important}
+
+/* ---------- LOGIN ---------- */
+#pantallaLogin{
+  position:fixed;inset:0;background:var(--fondo);
+  display:flex;align-items:center;justify-content:center;z-index:9000;padding:20px;
+}
+.login-card{
+  background:var(--blanco);border:1px solid var(--borde);border-radius:var(--r);
+  padding:44px 40px;width:100%;max-width:420px;box-shadow:var(--sombra);
+}
+.login-card .marca{font-size:26px;font-weight:500;margin-bottom:4px}
+.login-card .sub{color:var(--gris);margin-bottom:28px;font-size:14px}
+
+/* ---------- LAYOUT ---------- */
+#app{display:none;min-height:100vh}
+#app.visible{display:block}
+header.top{
+  background:var(--blanco);border-bottom:1px solid var(--borde);
+  padding:0 24px;height:64px;display:flex;align-items:center;gap:16px;
+  position:sticky;top:0;z-index:100;
+}
+header.top .marca{font-size:19px;font-weight:500;white-space:nowrap}
+header.top .marca span{color:var(--azul)}
+header.top .sep{flex:1}
+.chip-user{
+  display:flex;align-items:center;gap:10px;background:var(--fondo);
+  border-radius:999px;padding:6px 14px 6px 6px;font-size:13px;
+}
+.avatar{
+  width:30px;height:30px;border-radius:50%;background:var(--azul);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;
+}
+
+/* ---------- TABS ---------- */
+nav.tabs{
+  background:var(--blanco);border-bottom:1px solid var(--borde);
+  padding:0 24px;display:flex;gap:2px;overflow-x:auto;position:sticky;top:64px;z-index:99;
+}
+nav.tabs button{
+  padding:14px 18px;color:var(--gris);font-weight:500;font-size:14px;
+  border-bottom:3px solid transparent;white-space:nowrap;border-radius:8px 8px 0 0;
+}
+nav.tabs button:hover{background:var(--fondo)}
+nav.tabs button.activo{color:var(--azul);border-bottom-color:var(--azul)}
+main{padding:24px;max-width:1500px;margin:0 auto}
+.panel{display:none}
+.panel.activo{display:block}
+
+/* ---------- CARDS ---------- */
+.card{
+  background:var(--blanco);border:1px solid var(--borde);border-radius:var(--r);
+  padding:22px;margin-bottom:18px;
+}
+.card > h2{font-size:17px;margin-bottom:4px}
+.card > .desc{color:var(--gris);font-size:13px;margin-bottom:18px}
+.card-head{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.card-head h2{font-size:17px;flex:1;min-width:200px}
+
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+
+/* ---------- KPI ---------- */
+.kpi{
+  background:var(--blanco);border:1px solid var(--borde);border-radius:var(--r);padding:20px;
+}
+.kpi .lbl{color:var(--gris);font-size:12px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+.kpi .val{font-size:30px;font-weight:500;line-height:1.1}
+.kpi .pie{color:var(--gris2);font-size:12px;margin-top:6px}
+.kpi.ok .val{color:var(--verde)} .kpi.warn .val{color:var(--amar)} .kpi.bad .val{color:var(--rojo)}
+
+/* ---------- BOTONES ---------- */
+.btn{
+  background:var(--azul);color:#fff;border-radius:999px;padding:10px 22px;font-weight:500;
+  transition:background .15s, box-shadow .15s;
+}
+.btn:hover{background:var(--azul-h);box-shadow:var(--sombra)}
+.btn:disabled{background:#C4C7C5;cursor:not-allowed;box-shadow:none}
+.btn.sec{background:var(--blanco);color:var(--azul);border:1px solid var(--borde)}
+.btn.sec:hover{background:var(--azul-bg)}
+.btn.gris{background:var(--blanco);color:var(--gris);border:1px solid var(--borde)}
+.btn.gris:hover{background:var(--fondo)}
+.btn.peligro{background:var(--rojo)} .btn.peligro:hover{background:#A50E0E}
+.btn.chico{padding:7px 16px;font-size:13px}
+.btn-icono{
+  width:34px;height:34px;border-radius:50%;color:var(--gris);
+  display:inline-flex;align-items:center;justify-content:center;font-size:16px;
+}
+.btn-icono:hover{background:var(--fondo);color:var(--texto)}
+
+/* ---------- FORMULARIOS ---------- */
+.campo{margin-bottom:16px}
+.campo label{display:block;font-size:12px;color:var(--gris);margin-bottom:6px;font-weight:500}
+.campo input[type=text],.campo input[type=email],.campo input[type=number],
+.campo input[type=password],.campo input[type=date],.campo input[type=month],
+.campo select,.campo textarea{
+  width:100%;padding:11px 13px;border:1px solid var(--borde);border-radius:var(--r2);
+  background:var(--blanco);color:var(--texto);outline:none;transition:border-color .15s;
+}
+.campo input:focus,.campo select:focus,.campo textarea:focus{border-color:var(--azul);box-shadow:0 0 0 1px var(--azul)}
+.campo textarea{resize:vertical;min-height:110px;font-family:inherit;line-height:1.6}
+.campo .ayuda{font-size:12px;color:var(--gris2);margin-top:5px}
+.check{display:flex;align-items:center;gap:9px;padding:8px 0;cursor:pointer;font-size:14px}
+.check input{width:17px;height:17px;accent-color:var(--azul);cursor:pointer}
+
+/* ---------- TABLAS ---------- */
+.tabla-wrap{overflow-x:auto;border:1px solid var(--borde);border-radius:var(--r2)}
+table{width:100%;border-collapse:collapse;font-size:13px;background:var(--blanco)}
+th{
+  text-align:left;padding:12px 14px;background:#F8F9FA;color:var(--gris);
+  font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.5px;
+  border-bottom:1px solid var(--borde);white-space:nowrap;
+}
+td{padding:12px 14px;border-bottom:1px solid #EDEEF0;vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#FAFBFC}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mono{font-family:"Roboto Mono",ui-monospace,Consolas,monospace;font-size:12.5px}
+
+/* ---------- BADGES / SEMAFORO ---------- */
+.badge{
+  display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;
+  font-size:12px;font-weight:500;white-space:nowrap;
+}
+.b-verde{background:var(--verde-bg);color:var(--verde)}
+.b-amar{background:var(--amar-bg);color:var(--amar)}
+.b-rojo{background:var(--rojo-bg);color:var(--rojo)}
+.b-azul{background:var(--azul-bg);color:var(--azul)}
+.b-viol{background:var(--violeta-bg);color:var(--violeta)}
+.b-gris{background:var(--fondo);color:var(--gris)}
+.punto{width:8px;height:8px;border-radius:50%;display:inline-block}
+.p-verde{background:var(--verde)} .p-amar{background:var(--amar)} .p-rojo{background:var(--rojo)}
+
+.cat-chip{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:30px;height:30px;border-radius:8px;font-weight:500;font-size:14px;
+  background:var(--azul-bg);color:var(--azul);
+}
+.cat-chip.sube{background:var(--rojo-bg);color:var(--rojo)}
+.cat-chip.baja{background:var(--verde-bg);color:var(--verde)}
+.cat-chip.fuera{background:#3C4043;color:#fff}
+
+/* barra de avance hacia el tope de la categoria */
+.barra{height:6px;background:var(--fondo);border-radius:999px;overflow:hidden;min-width:90px}
+.barra i{display:block;height:100%;border-radius:999px;transition:width .4s}
+.barra i.ok{background:var(--verde)} .barra i.warn{background:var(--amar)} .barra i.bad{background:var(--rojo)}
+
+/* ---------- MODAL ---------- */
+.modal-fondo{
+  position:fixed;inset:0;background:rgba(32,33,36,.55);z-index:8000;
+  display:none;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto;
+}
+.modal-fondo.abierto{display:flex}
+.modal{
+  background:var(--blanco);border-radius:var(--r);width:100%;max-width:760px;
+  box-shadow:0 8px 28px rgba(0,0,0,.28);animation:sube .18s ease-out;
+}
+.modal.ancho{max-width:1000px}
+.modal.angosto{max-width:460px}
+@keyframes sube{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.modal-head{padding:22px 26px 0;display:flex;align-items:flex-start;gap:12px}
+.modal-head h3{font-size:19px;flex:1}
+.modal-body{padding:20px 26px}
+.modal-pie{
+  padding:16px 26px 22px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;
+  border-top:1px solid var(--borde);margin-top:6px;
+}
+
+/* ---------- VARIOS ---------- */
+.vacio{text-align:center;padding:56px 20px;color:var(--gris)}
+.vacio .ico{font-size:44px;margin-bottom:12px;opacity:.35}
+.aviso{
+  padding:14px 16px;border-radius:var(--r2);font-size:13px;margin-bottom:16px;
+  display:flex;gap:11px;align-items:flex-start;line-height:1.55;
+}
+.aviso.info{background:var(--azul-bg);color:#174EA6}
+.aviso.warn{background:var(--amar-bg);color:var(--amar)}
+.aviso.bad{background:var(--rojo-bg);color:var(--rojo)}
+.aviso.ok{background:var(--verde-bg);color:var(--verde)}
+.aviso b{font-weight:500}
+
+#toast{
+  position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(120px);
+  background:#3C4043;color:#fff;padding:14px 22px;border-radius:var(--r2);
+  font-size:14px;z-index:9500;transition:transform .25s;max-width:88vw;box-shadow:var(--sombra);
+}
+#toast.ver{transform:translateX(-50%) translateY(0)}
+#toast.error{background:var(--rojo)}
+#toast.ok{background:var(--verde)}
+
+.filtros{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.filtros input[type=text],.filtros select{
+  padding:9px 13px;border:1px solid var(--borde);border-radius:999px;background:var(--blanco);outline:none;
+}
+.filtros input[type=text]{min-width:230px}
+.filtros input:focus,.filtros select:focus{border-color:var(--azul)}
+
+.dropzone{
+  border:2px dashed var(--borde);border-radius:var(--r);padding:40px 20px;text-align:center;
+  color:var(--gris);transition:.15s;cursor:pointer;background:#FAFBFC;
+}
+.dropzone:hover,.dropzone.encima{border-color:var(--azul);background:var(--azul-bg);color:var(--azul)}
+.dropzone .ico{font-size:40px;margin-bottom:10px;opacity:.5}
+
+.lista-simple{list-style:none}
+.lista-simple li{
+  display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #EDEEF0;font-size:13px;
+}
+.lista-simple li:last-child{border-bottom:none}
+.lista-simple .crece{flex:1;min-width:0}
+.lista-simple .tit{font-weight:500}
+.lista-simple .sub{color:var(--gris);font-size:12px}
+
+.seccion-tit{
+  font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:var(--gris);
+  font-weight:500;margin:22px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--borde);
+}
+.seccion-tit:first-child{margin-top:0}
+
+@media(max-width:640px){
+  main{padding:14px} .card{padding:16px} header.top{padding:0 14px} nav.tabs{padding:0 8px}
+  .modal-body,.modal-head,.modal-pie{padding-left:16px;padding-right:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== LOGIN ==================== -->
+<div id="pantallaLogin">
+  <div class="login-card">
+    <div class="marca">EBD <span style="color:#1A73E8">Consultores</span></div>
+    <div class="sub">Liquidación de monotributo e ingresos brutos</div>
+    <div id="avisoLogin"></div>
+    <div class="campo">
+      <label>Correo electrónico</label>
+      <input type="email" id="loginMail" autocomplete="username" placeholder="usuario@estudio.com">
+    </div>
+    <div class="campo">
+      <label>Contraseña</label>
+      <input type="password" id="loginPass" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button class="btn" id="btnLogin" style="width:100%;margin-top:6px">Ingresar</button>
+  </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="app">
+  <header class="top">
+    <div class="marca">EBD <span>Consultores</span></div>
+    <div class="sep"></div>
+    <button class="btn-icono" id="btnBoveda" title="Bóveda de claves">🔒</button>
+    <div class="chip-user">
+      <div class="avatar" id="avatarUser">?</div>
+      <span id="nombreUser">—</span>
+    </div>
+    <button class="btn gris chico" id="btnSalir">Salir</button>
+  </header>
+
+  <nav class="tabs" id="navTabs">
+    <button data-tab="tabHome" class="activo">Inicio</button>
+    <button data-tab="tabClientes">Clientes</button>
+    <button data-tab="tabComprobantes">Comprobantes</button>
+    <button data-tab="tabRecat">Recategorización</button>
+    <button data-tab="tabLiquidacion">Liquidación</button>
+    <button data-tab="tabMails">Mails</button>
+    <button data-tab="tabEscalas">Escalas ARCA</button>
+    <button data-tab="tabConfig">Configuración</button>
+  </nav>
+
+  <main>
+
+    <!-- ---------- INICIO ---------- -->
+    <section class="panel activo" id="tabHome">
+      <div class="grid g4" style="margin-bottom:18px">
+        <div class="kpi"><div class="lbl">Clientes activos</div><div class="val" id="kpiClientes">—</div><div class="pie" id="kpiClientesPie">&nbsp;</div></div>
+        <div class="kpi bad"><div class="lbl">Deben recategorizar</div><div class="val" id="kpiRecat">—</div><div class="pie">al corte vigente</div></div>
+        <div class="kpi warn"><div class="lbl">Cerca del tope</div><div class="val" id="kpiCerca">—</div><div class="pie">más del 85% del tope</div></div>
+        <div class="kpi"><div class="lbl">Sin liquidar este mes</div><div class="val" id="kpiSinLiq">—</div><div class="pie" id="kpiPeriodo">&nbsp;</div></div>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <div class="card-head"><h2>Situación por cliente</h2></div>
+          <div id="homeSemaforo"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Próximos vencimientos</h2></div>
+          <div id="homeVtos"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- CLIENTES ---------- -->
+    <section class="panel" id="tabClientes">
+      <div class="card">
+        <div class="card-head">
+          <h2>Clientes</h2>
+          <button class="btn sec chico" id="btnExportClientes">Exportar CSV</button>
+          <button class="btn" id="btnNuevoCliente">+ Nuevo cliente</button>
+        </div>
+        <div class="filtros">
+          <input type="text" id="filtroCliente" placeholder="Buscar por nombre o CUIT…">
+          <select id="filtroImpuesto">
+            <option value="">Todos los impuestos</option>
+            <option value="arca">ARCA (monotributo)</option>
+            <option value="arba">IIBB Provincia (ARBA)</option>
+            <option value="agip">IIBB CABA (AGIP)</option>
+            <option value="municipal">Tasa municipal</option>
+          </select>
+          <select id="filtroActividad">
+            <option value="">Toda actividad</option>
+            <option value="servicios">Servicios</option>
+            <option value="bienes">Venta de bienes</option>
+            <option value="mixto">Mixto</option>
+          </select>
+          <label class="check"><input type="checkbox" id="filtroInactivos"> Ver inactivos</label>
+        </div>
+        <div id="tablaClientes"></div>
+      </div>
+    </section>
+
+    <!-- ---------- COMPROBANTES ---------- -->
+    <section class="panel" id="tabComprobantes">
+      <div class="card">
+        <h2>Importar comprobantes</h2>
+        <p class="desc">Arrastrá el CSV exportado desde <b>Mis Comprobantes</b> de ARCA. Sirve tanto para emitidos como para recibidos — el sistema detecta cuál es por las columnas del archivo.</p>
+        <div class="grid g2" style="margin-bottom:16px">
+          <div class="campo">
+            <label>Cliente</label>
+            <select id="impCliente"></select>
+          </div>
+          <div class="campo">
+            <label>Tipo de comprobante</label>
+            <select id="impTipo">
+              <option value="auto">Detectar automáticamente</option>
+              <option value="emitido">Emitidos</option>
+              <option value="recibido">Recibidos</option>
+            </select>
+          </div>
+        </div>
+        <div class="dropzone" id="dropzone">
+          <div class="ico">📄</div>
+          <div><b>Arrastrá el archivo acá</b> o hacé clic para elegirlo</div>
+          <div style="font-size:12px;margin-top:6px">Acepta .csv y .txt separados por coma, punto y coma o tabulación</div>
+          <input type="file" id="fileInput" accept=".csv,.txt" style="display:none">
+        </div>
+        <div id="impResultado" style="margin-top:16px"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Comprobantes cargados</h2>
+          <button class="btn sec chico" id="btnCargaManual">+ Carga manual</button>
+        </div>
+        <div class="filtros">
+          <select id="verCompCliente"></select>
+          <select id="verCompAnio"></select>
+          <select id="verCompTipo">
+            <option value="">Emitidos y recibidos</option>
+            <option value="emitido">Solo emitidos</option>
+            <option value="recibido">Solo recibidos</option>
+          </select>
+        </div>
+        <div id="tablaComprobantes"></div>
+      </div>
+    </section>
+
+    <!-- ---------- RECATEGORIZACIÓN ---------- -->
+    <section class="panel" id="tabRecat">
+      <div class="card">
+        <div class="card-head">
+          <h2>Control de recategorización</h2>
+          <select id="recatCorte" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:999px"></select>
+          <button class="btn sec chico" id="btnExportRecat">Exportar CSV</button>
+        </div>
+        <div class="aviso info">
+          <span>ℹ️</span>
+          <div id="recatExplica"></div>
+        </div>
+        <div id="tablaRecat"></div>
+      </div>
+    </section>
+
+    <!-- ---------- LIQUIDACIÓN ---------- -->
+    <section class="panel" id="tabLiquidacion">
+      <div class="card">
+        <div class="card-head">
+          <h2>Liquidación mensual</h2>
+          <input type="month" id="liqPeriodo" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:var(--r2)">
+          <button class="btn sec chico" id="btnRecalcularLiq">Recalcular cuotas ARCA</button>
+        </div>
+        <div id="tablaLiquidacion"></div>
+      </div>
+    </section>
+
+    <!-- ---------- MAILS ---------- -->
+    <section class="panel" id="tabMails">
+      <div class="card">
+        <div class="card-head">
+          <h2>Envío de avisos de pago</h2>
+          <input type="month" id="mailPeriodo" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:var(--r2)">
+          <button class="btn sec chico" id="btnPreviewMail">Ver previsualización</button>
+          <button class="btn" id="btnEnviarMails">Enviar seleccionados</button>
+        </div>
+        <div id="avisoEmailjs"></div>
+        <div id="tablaMails"></div>
+      </div>
+
+      <div class="card">
+        <h2>Plantilla del mail</h2>
+        <p class="desc">Usá las variables entre llaves. Se reemplazan por los datos de cada cliente al enviar.</p>
+        <div class="campo">
+          <label>Asunto</label>
+          <input type="text" id="plantillaAsunto">
+        </div>
+        <div class="campo">
+          <label>Cuerpo</label>
+          <textarea id="plantillaCuerpo" style="min-height:260px"></textarea>
+          <div class="ayuda" id="ayudaVariables"></div>
+        </div>
+        <button class="btn" id="btnGuardarPlantilla">Guardar plantilla</button>
+      </div>
+    </section>
+
+    <!-- ---------- ESCALAS ---------- -->
+    <section class="panel" id="tabEscalas">
+      <div class="card">
+        <div class="card-head">
+          <h2>Escalas del monotributo</h2>
+          <select id="selEscala" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:999px"></select>
+          <button class="btn sec chico" id="btnNuevaEscala">+ Nueva vigencia</button>
+          <button class="btn" id="btnGuardarEscala">Guardar cambios</button>
+        </div>
+        <div class="aviso info">
+          <span>ℹ️</span>
+          <div>Las escalas se actualizan cada semestre por IPC. Cuando ARCA publique la nueva tabla, creá una <b>nueva vigencia</b> en vez de editar la existente: así los cálculos históricos siguen dando bien.</div>
+        </div>
+        <div class="grid g2" style="margin-bottom:16px">
+          <div class="campo">
+            <label>Vigente desde</label>
+            <input type="date" id="escalaVigencia">
+          </div>
+          <div class="campo">
+            <label>Tope de alquileres devengados (anual, todas las categorías)</label>
+            <input type="number" id="escalaAlquileres" step="0.01">
+          </div>
+        </div>
+        <div id="tablaEscala"></div>
+      </div>
+    </section>
+
+    <!-- ---------- CONFIGURACIÓN ---------- -->
+    <section class="panel" id="tabConfig">
+      <div class="grid g2">
+        <div class="card">
+          <h2>Datos del estudio</h2>
+          <p class="desc">Se usan en el pie de los mails que se envían a los clientes.</p>
+          <div class="campo"><label>Nombre del estudio</label><input type="text" id="cfgNombre"></div>
+          <div class="campo"><label>CUIT del estudio</label><input type="text" id="cfgCuit"></div>
+          <div class="campo"><label>Correo de contacto</label><input type="email" id="cfgMail"></div>
+          <div class="campo"><label>Teléfono</label><input type="text" id="cfgTel"></div>
+          <button class="btn" id="btnGuardarEstudio">Guardar</button>
+        </div>
+
+        <div class="card">
+          <h2>EmailJS</h2>
+          <p class="desc">Servicio que permite mandar los mails desde el sistema sin backend. Creá una cuenta en emailjs.com, conectá la casilla del estudio y pegá acá las tres claves.</p>
+          <div class="campo"><label>Service ID</label><input type="text" id="cfgEjsService" placeholder="service_xxxxxxx"></div>
+          <div class="campo"><label>Template ID</label><input type="text" id="cfgEjsTemplate" placeholder="template_xxxxxxx"></div>
+          <div class="campo"><label>Public Key</label><input type="text" id="cfgEjsKey" placeholder="xxxxxxxxxxxxxxx"></div>
+          <button class="btn" id="btnGuardarEjs">Guardar</button>
+        </div>
+
+        <div class="card">
+          <h2>Bóveda de claves</h2>
+          <p class="desc">Las claves fiscales se guardan cifradas con AES-256-GCM. La contraseña maestra nunca se guarda en ningún lado: se escribe al abrir la bóveda y vive solo en la memoria del navegador.</p>
+          <div id="estadoBoveda"></div>
+          <button class="btn sec" id="btnConfigBoveda" style="margin-top:12px">Configurar / abrir bóveda</button>
+        </div>
+
+        <div class="card">
+          <h2>Usuarios del sistema</h2>
+          <p class="desc">Quién puede entrar y qué puede hacer. Los usuarios se crean primero en Firebase Authentication y después se les asigna el rol acá.</p>
+          <div id="listaUsuarios"></div>
+          <button class="btn sec" id="btnNuevoUsuario" style="margin-top:12px">+ Asignar rol a un usuario</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ==================== MODALES ==================== -->
+<div class="modal-fondo" id="modalFondo">
+  <div class="modal" id="modalCaja">
+    <div class="modal-head"><h3 id="modalTitulo">Título</h3><button class="btn-icono" id="modalCerrar">✕</button></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-pie" id="modalPie"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Firebase compat SDK (no ES modules: evita problemas de scope con onclick) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js"></script>
+
+<!-- ============ INICIO SCRIPT PRINCIPAL — NO BORRAR ESTA MARCA ============ -->
+<script>
+/* ==========================================================================
+   SISTEMA ESTUDIO CONTABLE — Monotributo / IIBB
+   Arquitectura: un solo index.html + Firebase compat + Realtime Database.
+   Path raíz en la base: estudioContable
+   ========================================================================== */
+
+/* ---------- 1. CONFIGURACIÓN DE FIREBASE ----------
+   Reemplazá estos valores por los de tu proyecto:
+   Firebase Console > Configuración del proyecto > Tus apps > Configuración del SDK.
+*/
+var firebaseConfig = {
+  apiKey:            "AIzaSyAA5-fe7v5JQd0CbfvKF0eViRViSjoyLhY",
+  authDomain:        "ebd-consultores.firebaseapp.com",
+  /* OJO: verificá esta línea contra lo que dice la consola de Firebase, arriba de
+     la tabla de Realtime Database. Si creaste la base en una región de Sudamérica,
+     termina en .firebasedatabase.app en vez de .firebaseio.com y hay que cambiarla. */
+  databaseURL:       "https://ebd-consultores-default-rtdb.firebaseio.com",
+  projectId:         "ebd-consultores",
+  storageBucket:     "ebd-consultores.firebasestorage.app",
+  messagingSenderId: "766506374673",
+  appId:             "1:766506374673:web:97bac48439ee1e5853c3b0"
+};
+
+var ADMIN_INICIAL = "speranza.emiliano@gmail.com"; // siempre entra como admin
+var RAIZ = "estudioContable";
+
+/* El arranque de Firebase va protegido: si todavía no pegaste las credenciales
+   (o el archivo se abre con doble clic desde el disco, donde el navegador
+   bloquea el almacenamiento local), el sistema muestra un aviso claro en vez
+   de quedar en pantalla blanca. */
+var auth = null, db = null, FIREBASE_OK = false, FIREBASE_ERROR = "";
+try {
+  if (String(firebaseConfig.apiKey).indexOf("PEGAR_") === 0) throw new Error("sin-configurar");
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db   = firebase.database();
+  FIREBASE_OK = true;
+} catch (e) {
+  FIREBASE_ERROR = (e && e.message === "sin-configurar")
+    ? "Todavía no pegaste las credenciales de tu proyecto en la variable <b>firebaseConfig</b>, arriba de todo del script."
+    : "No se pudo conectar con Firebase: " + ((e && e.message) || e) +
+      "<br><br>Si abriste el archivo con doble clic desde el disco, subilo a GitHub Pages o serví la carpeta por HTTP: los navegadores bloquean el almacenamiento local en las URLs <span class=mono>file://</span>.";
+}
+function ref(p){ return db.ref(RAIZ + "/" + p); }
+
+/* ---------- 2. ESTADO EN MEMORIA ---------- */
+var ESTADO = {
+  usuario: null,
+  rol: "lector",
+  clientes: {},      // id -> cliente
+  totales: {},       // clienteId -> { "202601": {emitido, recibido, ...} }
+  liquidaciones: {}, // clienteId -> { "202601": {...} }
+  escalas: {},       // "20260801" -> {vigencia, alquileres, categorias:{A:{...}}}
+  config: {},
+  claveMaestra: null // CryptoKey en memoria, nunca se persiste
+};
+
+/* Todos los IDs de panel. Si agregás un tab nuevo, sumalo acá o se rompe la navegación. */
+var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
+                "tabLiquidacion","tabMails","tabEscalas","tabConfig"];
+
+/* ---------- 3. ESCALA OFICIAL ARCA — vigencia 01/08/2026 ----------
+   Fuente: arca.gob.ar/monotributo/categorias.asp (ajuste 16,8% por IPC 1er semestre 2026).
+   Se siembra en la base la primera vez que arranca el sistema.
+   Después se edita desde el tab "Escalas ARCA".
+*/
+var ESCALA_SEMILLA = {
+  vigencia: "2026-08-01",
+  alquileres: 716840.77,
+  categorias: {
+    A: { ingresos: 12009410.45,  sup: 30,  kw: 3330,  cuotaServicios: 49527.18,   cuotaBienes: 49527.18  },
+    B: { ingresos: 17595182.74,  sup: 45,  kw: 5000,  cuotaServicios: 56379.08,   cuotaBienes: 56379.08  },
+    C: { ingresos: 24670494.31,  sup: 60,  kw: 6700,  cuotaServicios: 66020.12,   cuotaBienes: 64530.58  },
+    D: { ingresos: 30628651.43,  sup: 85,  kw: 10000, cuotaServicios: 84612.93,   cuotaBienes: 82564.81  },
+    E: { ingresos: 36028231.33,  sup: 110, kw: 13000, cuotaServicios: 119811.45,  cuotaBienes: 108267.51 },
+    F: { ingresos: 45151659.41,  sup: 150, kw: 16500, cuotaServicios: 150784.21,  cuotaBienes: 129930.65 },
+    G: { ingresos: 53995798.87,  sup: 200, kw: 20000, cuotaServicios: 230312.94,  cuotaBienes: 158815.05 },
+    H: { ingresos: 81924660.37,  sup: 200, kw: 20000, cuotaServicios: 522706.68,  cuotaBienes: 317895.01 },
+    I: { ingresos: 91699761.90,  sup: 200, kw: 20000, cuotaServicios: 963747.86,  cuotaBienes: 474992.78 },
+    J: { ingresos: 105012519.20, sup: 200, kw: 20000, cuotaServicios: 1167299.76, cuotaBienes: 580793.69 },
+    K: { ingresos: 126610838.75, sup: 200, kw: 20000, cuotaServicios: 1614446.04, cuotaBienes: 702103.24 }
+  }
+};
+var LETRAS = ["A","B","C","D","E","F","G","H","I","J","K"];
+
+var PLANTILLA_DEFECTO = {
+  asunto: "{estudio} — Vencimientos de {periodoLargo}",
+  cuerpo:
+"Estimado/a {cliente}:\n\n" +
+"Le informamos los importes a abonar correspondientes a {periodoLargo}:\n\n" +
+"{detalleImpuestos}\n" +
+"TOTAL A PAGAR: {total}\n\n" +
+"{bloqueVep}" +
+"{bloqueRecategorizacion}" +
+"Ante cualquier duda quedamos a disposición.\n\n" +
+"Saludos cordiales,\n" +
+"{estudio}\n" +
+"CUIT {cuitEstudio} · {mailEstudio} · {telEstudio}"
+};
+
+/* ---------- 4. UTILIDADES ---------- */
+function $(id){ return document.getElementById(id); }
+
+function pesos(n){
+  if (n === null || n === undefined || isNaN(n)) return "$ 0,00";
+  return "$ " + Number(n).toLocaleString("es-AR", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function pesosCorto(n){
+  if (!n) return "$ 0";
+  var a = Math.abs(n);
+  if (a >= 1e6) return "$ " + (n/1e6).toLocaleString("es-AR",{maximumFractionDigits:1}) + " M";
+  if (a >= 1e3) return "$ " + (n/1e3).toLocaleString("es-AR",{maximumFractionDigits:0}) + " k";
+  return "$ " + Math.round(n).toLocaleString("es-AR");
+}
+function esc(s){
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function toast(msg, tipo){
+  var t = $("toast");
+  t.textContent = msg;
+  t.className = "ver" + (tipo ? " " + tipo : "");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function(){ t.className = ""; }, 3600);
+}
+
+/* CUIT: formato y validación por dígito verificador */
+function formatCuit(c){
+  var d = String(c || "").replace(/\D/g,"");
+  if (d.length !== 11) return c || "";
+  return d.slice(0,2) + "-" + d.slice(2,10) + "-" + d.slice(10);
+}
+function cuitValido(c){
+  var d = String(c || "").replace(/\D/g,"");
+  if (d.length !== 11) return false;
+  var mult = [5,4,3,2,7,6,5,4,3,2], suma = 0;
+  for (var i = 0; i < 10; i++) suma += parseInt(d[i],10) * mult[i];
+  var resto = suma % 11, ver = 11 - resto;
+  if (ver === 11) ver = 0;
+  if (ver === 10) ver = 9;
+  return ver === parseInt(d[10],10);
+}
+
+/* Períodos: se manejan siempre como string "AAAAMM" */
+var MESES = ["enero","febrero","marzo","abril","mayo","junio",
+             "julio","agosto","septiembre","octubre","noviembre","diciembre"];
+function periodoHoy(){
+  var d = new Date();
+  return d.getFullYear() + String(d.getMonth()+1).padStart(2,"0");
+}
+function periodoLargo(p){
+  if (!p || p.length !== 6) return p || "";
+  return MESES[parseInt(p.slice(4),10)-1] + " de " + p.slice(0,4);
+}
+function periodoCorto(p){
+  if (!p || p.length !== 6) return p || "";
+  return p.slice(4) + "/" + p.slice(0,4);
+}
+/* Devuelve los 12 períodos "AAAAMM" que terminan en `hasta` (inclusive) */
+function ventana12(hasta){
+  var a = parseInt(hasta.slice(0,4),10), m = parseInt(hasta.slice(4),10), out = [];
+  for (var i = 0; i < 12; i++){
+    out.unshift(a + String(m).padStart(2,"0"));
+    m--; if (m === 0){ m = 12; a--; }
+  }
+  return out;
+}
+function periodoAMonthInput(p){ return p.slice(0,4) + "-" + p.slice(4); }
+function monthInputAPeriodo(v){ return v ? v.replace("-","") : periodoHoy(); }
+
+/* ---------- 5. CRIPTOGRAFÍA DE LA BÓVEDA ----------
+   AES-256-GCM. La clave se deriva de la contraseña maestra con PBKDF2
+   (250.000 iteraciones, SHA-256). En Firebase solo queda texto cifrado.
+*/
+function bufAB64(buf){
+  var bytes = new Uint8Array(buf), s = "";
+  for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function b64ABuf(b64){
+  var bin = atob(b64), arr = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+function derivarClave(pass, saltB64){
+  var enc = new TextEncoder();
+  return crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"])
+    .then(function(km){
+      return crypto.subtle.deriveKey(
+        { name:"PBKDF2", salt:b64ABuf(saltB64), iterations:250000, hash:"SHA-256" },
+        km, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]
+      );
+    });
+}
+function cifrar(clave, texto){
+  var iv = crypto.getRandomValues(new Uint8Array(12));
+  return crypto.subtle.encrypt({name:"AES-GCM", iv:iv}, clave, new TextEncoder().encode(texto))
+    .then(function(ct){ return { iv: bufAB64(iv), ct: bufAB64(ct) }; });
+}
+function descifrar(clave, obj){
+  return crypto.subtle.decrypt({name:"AES-GCM", iv:b64ABuf(obj.iv)}, clave, b64ABuf(obj.ct))
+    .then(function(pt){ return new TextDecoder().decode(pt); });
+}
+var VERIFICADOR = "boveda-ok-estudio-contable";
+
+/* ---------- 6. MOTOR DE CATEGORIZACIÓN ---------- */
+
+/* Escala vigente a una fecha dada (string "AAAA-MM-DD"). */
+function escalaVigenteA(fechaISO){
+  var claves = Object.keys(ESTADO.escalas).sort();
+  var elegida = null;
+  for (var i = 0; i < claves.length; i++){
+    if (ESTADO.escalas[claves[i]].vigencia <= fechaISO) elegida = ESTADO.escalas[claves[i]];
+  }
+  return elegida || ESTADO.escalas[claves[claves.length-1]] || ESCALA_SEMILLA;
+}
+
+/* Cuál es el campo de cuota según la actividad del cliente.
+   "mixto" paga como servicios (criterio conservador: es la cuota más alta). */
+function campoCuota(actividad){
+  return actividad === "bienes" ? "cuotaBienes" : "cuotaServicios";
+}
+
+/* Categoría que corresponde según ingresos + parámetros físicos.
+   Devuelve {letra, excluido, motivo}. */
+function categorizar(escala, ingresos, sup, kw, alquileres){
+  var idxIng = -1, idxFis = -1, i, c;
+
+  for (i = 0; i < LETRAS.length; i++){
+    c = escala.categorias[LETRAS[i]];
+    if (ingresos <= c.ingresos){ idxIng = i; break; }
+  }
+  if (idxIng === -1) return { letra:null, excluido:true, motivo:"Los ingresos superan el tope de la categoría K" };
+
+  /* Superficie y energía: si están cargados, la categoría no puede ser menor
+     a la que corresponde por esos parámetros. Si no están cargados, se ignoran. */
+  for (i = 0; i < LETRAS.length; i++){
+    c = escala.categorias[LETRAS[i]];
+    var okSup = !sup || sup <= c.sup;
+    var okKw  = !kw  || kw  <= c.kw;
+    if (okSup && okKw){ idxFis = i; break; }
+  }
+  if (idxFis === -1) return { letra:null, excluido:true, motivo:"Superficie o energía por encima del máximo del régimen" };
+
+  if (alquileres && alquileres > escala.alquileres){
+    return { letra:null, excluido:true, motivo:"Los alquileres devengados superan el tope de $" +
+             escala.alquileres.toLocaleString("es-AR") };
+  }
+
+  var idx = Math.max(idxIng, idxFis);
+  return { letra: LETRAS[idx], excluido:false, motivo:"" };
+}
+
+/* Suma de facturación emitida en una ventana de períodos. */
+function facturadoEn(clienteId, periodos){
+  var t = ESTADO.totales[clienteId] || {}, s = 0;
+  for (var i = 0; i < periodos.length; i++){
+    var reg = t[periodos[i]];
+    if (reg && reg.emitido) s += reg.emitido;
+  }
+  return s;
+}
+
+/* Cortes de recategorización disponibles: siempre junio y diciembre. */
+function cortesDisponibles(){
+  var hoy = new Date(), out = [], a = hoy.getFullYear();
+  for (var i = 0; i < 4; i++){
+    out.push({ valor: (a-i) + "12", etiqueta: "Corte diciembre " + (a-i) + " (recat. de enero " + (a-i+1) + ")" });
+    out.push({ valor: (a-i) + "06", etiqueta: "Corte junio " + (a-i)     + " (recat. de julio " + (a-i) + ")" });
+  }
+  return out.filter(function(o){ return o.valor <= periodoHoy(); });
+}
+
+/* Análisis completo de un cliente a un corte dado. */
+function analizar(clienteId, corte){
+  var cli = ESTADO.clientes[clienteId];
+  var periodos = ventana12(corte);
+  var ingresos = facturadoEn(clienteId, periodos);
+
+  /* La escala aplicable es la vigente al mes siguiente del corte,
+     que es cuando entra a regir la nueva categoría. */
+  var a = parseInt(corte.slice(0,4),10), m = parseInt(corte.slice(4),10) + 1;
+  if (m > 12){ m = 1; a++; }
+  var escala = escalaVigenteA(a + "-" + String(m).padStart(2,"0") + "-01");
+
+  var r = categorizar(escala, ingresos, cli.superficie, cli.energiaKw, cli.alquileresAnuales);
+  var actual = cli.categoriaActual || null;
+
+  var topeActual = (actual && escala.categorias[actual]) ? escala.categorias[actual].ingresos : 0;
+  var pct = topeActual ? (ingresos / topeActual) * 100 : 0;
+
+  var estado, accion;
+  if (r.excluido){
+    estado = "excluido"; accion = r.motivo;
+  } else if (!actual){
+    estado = "sincat";   accion = "Falta cargar la categoría actual";
+  } else if (r.letra === actual){
+    estado = pct >= 85 ? "cerca" : "ok";
+    accion = pct >= 85 ? "Se mantiene en " + actual + ", pero está al " + pct.toFixed(0) + "% del tope" : "Se mantiene en " + actual;
+  } else if (LETRAS.indexOf(r.letra) > LETRAS.indexOf(actual)){
+    estado = "sube";     accion = "Debe recategorizar de " + actual + " a " + r.letra;
+  } else {
+    estado = "baja";     accion = "Puede bajar de " + actual + " a " + r.letra;
+  }
+
+  var cuota = (!r.excluido && r.letra)
+    ? escala.categorias[r.letra][campoCuota(cli.actividad)]
+    : 0;
+
+  return {
+    clienteId: clienteId, corte: corte, periodos: periodos,
+    ingresos: ingresos, categoriaSugerida: r.letra, categoriaActual: actual,
+    excluido: r.excluido, motivo: r.motivo, estado: estado, accion: accion,
+    porcentaje: pct, escala: escala, cuotaSugerida: cuota,
+    mesesConDatos: periodos.filter(function(p){
+      var t = ESTADO.totales[clienteId] || {};
+      return t[p] && t[p].emitido;
+    }).length
+  };
+}
+
+/* Cuota ARCA que le corresponde pagar hoy a un cliente, según su categoría actual. */
+function cuotaActual(cli, fechaISO){
+  if (!cli.categoriaActual) return 0;
+  var escala = escalaVigenteA(fechaISO || new Date().toISOString().slice(0,10));
+  var c = escala.categorias[cli.categoriaActual];
+  if (!c) return 0;
+  var total = c[campoCuota(cli.actividad)];
+  /* Si aporta como empleado en relación de dependencia o como autónomo,
+     solo ingresa el impuesto integrado. Como la escala guarda el total,
+     se usa el importe cargado a mano en la ficha del cliente. */
+  if (cli.soloImpuestoIntegrado && cli.impuestoIntegradoManual) return cli.impuestoIntegradoManual;
+  return total;
+}
+/* ---------- 7. MODALES ---------- */
+function abrirModal(titulo, html, botones, ancho){
+  $("modalTitulo").textContent = titulo;
+  $("modalBody").innerHTML = html;
+  $("modalCaja").className = "modal" + (ancho ? " " + ancho : "");
+  var pie = $("modalPie");
+  pie.innerHTML = "";
+  (botones || []).forEach(function(b){
+    var el = document.createElement("button");
+    el.className = "btn " + (b.clase || "");
+    el.textContent = b.texto;
+    el.onclick = b.accion;
+    if (b.id) el.id = b.id;
+    pie.appendChild(el);
+  });
+  $("modalFondo").classList.add("abierto");
+}
+function cerrarModal(){ $("modalFondo").classList.remove("abierto"); }
+
+/* ---------- 8. AUTENTICACIÓN Y ARRANQUE ---------- */
+$("btnLogin").onclick = function(){
+  var mail = $("loginMail").value.trim(), pass = $("loginPass").value;
+  if (!mail || !pass){ $("avisoLogin").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>Completá correo y contraseña.</div></div>'; return; }
+  this.disabled = true; this.textContent = "Ingresando…";
+  var btn = this;
+  auth.signInWithEmailAndPassword(mail, pass).catch(function(e){
+    var msg = "No se pudo ingresar.";
+    if (e.code === "auth/invalid-credential" || e.code === "auth/wrong-password" || e.code === "auth/user-not-found")
+      msg = "Correo o contraseña incorrectos.";
+    if (e.code === "auth/too-many-requests") msg = "Demasiados intentos. Esperá unos minutos.";
+    if (e.code === "auth/invalid-api-key" || e.code === "auth/configuration-not-found")
+      msg = "Falta configurar Firebase en el archivo (variable firebaseConfig).";
+    $("avisoLogin").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(msg) + "</div></div>";
+    btn.disabled = false; btn.textContent = "Ingresar";
+  });
+};
+$("loginPass").onkeydown = function(e){ if (e.key === "Enter") $("btnLogin").click(); };
+$("btnSalir").onclick = function(){
+  ESTADO.claveMaestra = null;
+  auth.signOut();
+};
+
+function arrancarAuth(){
+if (!FIREBASE_OK){
+  $("avisoLogin").innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>Falta configurar Firebase.</b><br>' + FIREBASE_ERROR + "</div></div>";
+  $("btnLogin").disabled = true;
+  return;
+}
+auth.onAuthStateChanged(function(u){
+  if (!u){
+    ESTADO.usuario = null;
+    $("pantallaLogin").style.display = "flex";
+    $("app").classList.remove("visible");
+    $("btnLogin").disabled = false;
+    $("btnLogin").textContent = "Ingresar";
+    return;
+  }
+  ESTADO.usuario = u;
+  ref("usuarios/" + u.uid).once("value").then(function(s){
+    var perfil = s.val() || {};
+    ESTADO.rol = (u.email === ADMIN_INICIAL) ? "admin" : (perfil.rol || "lector");
+    if (!s.exists()){
+      ref("usuarios/" + u.uid).set({
+        email: u.email,
+        nombre: perfil.nombre || u.email.split("@")[0],
+        rol: ESTADO.rol,
+        alta: new Date().toISOString()
+      });
+    }
+    var nom = perfil.nombre || u.email.split("@")[0];
+    $("nombreUser").textContent = nom + " · " + ESTADO.rol;
+    $("avatarUser").textContent = nom.charAt(0).toUpperCase();
+    $("pantallaLogin").style.display = "none";
+    $("app").classList.add("visible");
+    cargarTodo();
+  });
+});
+} /* fin arrancarAuth */
+
+/* ---------- 9. CARGA DE DATOS ---------- */
+function cargarTodo(){
+  Promise.all([
+    ref("clientes").once("value"),
+    ref("totales").once("value"),
+    ref("liquidaciones").once("value"),
+    ref("escalas").once("value"),
+    ref("config").once("value")
+  ]).then(function(s){
+    ESTADO.clientes      = s[0].val() || {};
+    ESTADO.totales       = s[1].val() || {};
+    ESTADO.liquidaciones = s[2].val() || {};
+    ESTADO.escalas       = s[3].val() || {};
+    ESTADO.config        = s[4].val() || {};
+
+    /* Primera vez: sembramos la escala oficial vigente desde el 01/08/2026 */
+    if (!Object.keys(ESTADO.escalas).length){
+      var k = ESCALA_SEMILLA.vigencia.replace(/-/g,"");
+      ESTADO.escalas[k] = JSON.parse(JSON.stringify(ESCALA_SEMILLA));
+      ref("escalas/" + k).set(ESTADO.escalas[k]);
+    }
+    if (!ESTADO.config.plantilla){
+      ESTADO.config.plantilla = PLANTILLA_DEFECTO;
+      ref("config/plantilla").set(PLANTILLA_DEFECTO);
+    }
+    inicializarUI();
+  }).catch(function(e){
+    toast("Error al leer la base: " + e.message, "error");
+  });
+}
+
+function guardarCliente(id, datos){ return ref("clientes/" + id).update(datos); }
+
+/* ---------- 10. NAVEGACIÓN POR TABS ---------- */
+function irA(tabId){
+  if (ALL_TABS.indexOf(tabId) === -1) return;
+  ALL_TABS.forEach(function(t){
+    var el = $(t);
+    if (el) el.classList.toggle("activo", t === tabId);
+  });
+  Array.prototype.forEach.call($("navTabs").children, function(b){
+    b.classList.toggle("activo", b.dataset.tab === tabId);
+  });
+  if (tabId === "tabHome")         renderHome();
+  if (tabId === "tabClientes")     renderClientes();
+  if (tabId === "tabComprobantes") renderComprobantes();
+  if (tabId === "tabRecat")        renderRecat();
+  if (tabId === "tabLiquidacion")  renderLiquidacion();
+  if (tabId === "tabMails")        renderMails();
+  if (tabId === "tabEscalas")      renderEscala();
+  if (tabId === "tabConfig")       renderConfig();
+}
+Array.prototype.forEach.call($("navTabs").children, function(b){
+  b.onclick = function(){ irA(b.dataset.tab); };
+});
+$("modalCerrar").onclick = cerrarModal;
+$("modalFondo").onclick = function(e){ if (e.target === this) cerrarModal(); };
+document.addEventListener("keydown", function(e){ if (e.key === "Escape") cerrarModal(); });
+
+function inicializarUI(){
+  /* selects de corte y períodos */
+  var sc = $("recatCorte");
+  sc.innerHTML = cortesDisponibles().map(function(o){
+    return '<option value="' + o.valor + '">' + esc(o.etiqueta) + "</option>";
+  }).join("");
+  sc.onchange = renderRecat;
+
+  $("liqPeriodo").value  = periodoAMonthInput(periodoHoy());
+  $("mailPeriodo").value = periodoAMonthInput(periodoHoy());
+  $("liqPeriodo").onchange  = renderLiquidacion;
+  $("mailPeriodo").onchange = renderMails;
+
+  llenarSelectClientes($("impCliente"), false);
+  llenarSelectClientes($("verCompCliente"), false);
+  llenarAnios();
+
+  $("filtroCliente").oninput      = renderClientes;
+  $("filtroImpuesto").onchange    = renderClientes;
+  $("filtroActividad").onchange   = renderClientes;
+  $("filtroInactivos").onchange   = renderClientes;
+  $("verCompCliente").onchange    = renderTablaComprobantes;
+  $("verCompAnio").onchange       = renderTablaComprobantes;
+  $("verCompTipo").onchange       = renderTablaComprobantes;
+
+  renderHome();
+}
+
+function llenarSelectClientes(sel, incluirTodos){
+  if (!sel) return;
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+  ids.sort(function(a,b){ return (ESTADO.clientes[a].razonSocial||"").localeCompare(ESTADO.clientes[b].razonSocial||""); });
+  var actual = sel.value;
+  sel.innerHTML = (incluirTodos ? '<option value="">Todos los clientes</option>' : "") +
+    ids.map(function(id){
+      return '<option value="' + id + '">' + esc(ESTADO.clientes[id].razonSocial) + "</option>";
+    }).join("");
+  if (actual && ids.indexOf(actual) !== -1) sel.value = actual;
+}
+function llenarAnios(){
+  var sel = $("verCompAnio"), hoy = new Date().getFullYear(), out = "";
+  for (var a = hoy; a >= hoy - 5; a--) out += '<option value="' + a + '">Año ' + a + "</option>";
+  sel.innerHTML = out;
+}
+
+/* ---------- 11. INICIO ---------- */
+function renderHome(){
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+  var corte = cortesDisponibles()[0];
+  var per = periodoHoy();
+
+  var suben = 0, cerca = 0, sinLiq = 0, filas = [];
+  ids.forEach(function(id){
+    var cli = ESTADO.clientes[id];
+    if (cli.impuestos && cli.impuestos.arca === false) return;
+    var an = analizar(id, corte ? corte.valor : per);
+    if (an.estado === "sube" || an.estado === "excluido") suben++;
+    if (an.estado === "cerca") cerca++;
+    var liq = (ESTADO.liquidaciones[id] || {})[per];
+    if (!liq || !liq.cerrada) sinLiq++;
+    filas.push({ id:id, cli:cli, an:an });
+  });
+
+  $("kpiClientes").textContent    = ids.length;
+  $("kpiClientesPie").textContent = Object.keys(ESTADO.clientes).length + " en total";
+  $("kpiRecat").textContent       = suben;
+  $("kpiCerca").textContent       = cerca;
+  $("kpiSinLiq").textContent      = sinLiq;
+  $("kpiPeriodo").textContent     = periodoLargo(per);
+
+  filas.sort(function(a,b){ return b.an.porcentaje - a.an.porcentaje; });
+
+  if (!filas.length){
+    $("homeSemaforo").innerHTML = '<div class="vacio"><div class="ico">👥</div><div>Todavía no hay clientes cargados.</div>' +
+      '<button class="btn sec chico" style="margin-top:14px" onclick="irA(\'tabClientes\')">Ir a Clientes</button></div>';
+  } else {
+    $("homeSemaforo").innerHTML = '<ul class="lista-simple">' + filas.slice(0,12).map(function(f){
+      var b = badgeEstado(f.an);
+      return '<li><span class="punto ' + puntoDe(f.an.estado) + '"></span>' +
+        '<div class="crece"><div class="tit">' + esc(f.cli.razonSocial) + "</div>" +
+        '<div class="sub">' + pesosCorto(f.an.ingresos) + " en 12 meses · " + esc(f.an.accion) + "</div></div>" +
+        b + "</li>";
+    }).join("") + "</ul>";
+  }
+
+  /* vencimientos: día de vencimiento del monotributo por terminación de CUIT */
+  var hoyD = new Date();
+  var vtos = [
+    { que:"Monotributo (cuota mensual)", cuando:"día 20 de cada mes", quien:"ARCA" },
+    { que:"IIBB Provincia — anticipo",   cuando:"según calendario ARBA", quien:"ARBA" },
+    { que:"IIBB CABA — anticipo",        cuando:"según calendario AGIP", quien:"AGIP" }
+  ];
+  if (hoyD.getMonth() === 6 || hoyD.getMonth() === 0){
+    vtos.unshift({ que:"Recategorización semestral", cuando:"hasta el día 5 del mes siguiente", quien:"ARCA" });
+  }
+  $("homeVtos").innerHTML = '<ul class="lista-simple">' + vtos.map(function(v){
+    return '<li><div class="crece"><div class="tit">' + esc(v.que) + '</div><div class="sub">' + esc(v.cuando) + "</div></div>" +
+      '<span class="badge b-gris">' + esc(v.quien) + "</span></li>";
+  }).join("") + "</ul>";
+}
+
+function puntoDe(estado){
+  if (estado === "ok" || estado === "baja") return "p-verde";
+  if (estado === "cerca" || estado === "sincat") return "p-amar";
+  return "p-rojo";
+}
+function badgeEstado(an){
+  if (an.estado === "excluido") return '<span class="badge b-rojo">Excluido</span>';
+  if (an.estado === "sube")     return '<span class="badge b-rojo">Recategorizar → ' + an.categoriaSugerida + "</span>";
+  if (an.estado === "baja")     return '<span class="badge b-verde">Puede bajar → ' + an.categoriaSugerida + "</span>";
+  if (an.estado === "cerca")    return '<span class="badge b-amar">' + an.porcentaje.toFixed(0) + "% del tope</span>";
+  if (an.estado === "sincat")   return '<span class="badge b-gris">Sin categoría</span>';
+  return '<span class="badge b-verde">Al día</span>';
+}
+
+/* ---------- 12. CLIENTES ---------- */
+function renderClientes(){
+  var q    = ($("filtroCliente").value || "").toLowerCase().trim();
+  var imp  = $("filtroImpuesto").value;
+  var act  = $("filtroActividad").value;
+  var verInact = $("filtroInactivos").checked;
+
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){
+    var c = ESTADO.clientes[id];
+    if (!verInact && c.activo === false) return false;
+    if (imp && !(c.impuestos && c.impuestos[imp])) return false;
+    if (act && c.actividad !== act) return false;
+    if (q){
+      var txt = (c.razonSocial + " " + c.cuit).toLowerCase();
+      if (txt.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+  ids.sort(function(a,b){ return (ESTADO.clientes[a].razonSocial||"").localeCompare(ESTADO.clientes[b].razonSocial||""); });
+
+  if (!ids.length){
+    $("tablaClientes").innerHTML = '<div class="vacio"><div class="ico">👥</div><div>' +
+      (Object.keys(ESTADO.clientes).length ? "Ningún cliente coincide con el filtro." : "Todavía no cargaste clientes.") + "</div></div>";
+    return;
+  }
+
+  var html = '<div class="tabla-wrap"><table><thead><tr>' +
+    "<th>Razón social</th><th>CUIT</th><th>Actividad</th><th>Cat.</th>" +
+    "<th>Impuestos</th><th class=num>Facturado 12m</th><th>Situación</th><th></th>" +
+    "</tr></thead><tbody>";
+
+  var corte = cortesDisponibles()[0];
+  ids.forEach(function(id){
+    var c = ESTADO.clientes[id];
+    var an = analizar(id, corte ? corte.valor : periodoHoy());
+    var tags = [];
+    if (c.impuestos){
+      if (c.impuestos.arca)      tags.push('<span class="badge b-azul">ARCA</span>');
+      if (c.impuestos.arba)      tags.push('<span class="badge b-viol">ARBA</span>');
+      if (c.impuestos.agip)      tags.push('<span class="badge b-amar">AGIP</span>');
+      if (c.impuestos.municipal) tags.push('<span class="badge b-gris">' + esc(c.municipio || "Municipal") + "</span>");
+    }
+    var actTxt = c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios");
+
+    html += "<tr" + (c.activo === false ? ' style="opacity:.5"' : "") + ">" +
+      "<td><b>" + esc(c.razonSocial) + "</b>" + (c.email ? '<div class="sub" style="color:#5F6368;font-size:12px">' + esc(c.email) + "</div>" : "") + "</td>" +
+      '<td class="mono">' + esc(formatCuit(c.cuit)) + "</td>" +
+      "<td>" + actTxt + "</td>" +
+      "<td>" + (c.categoriaActual ? '<span class="cat-chip">' + c.categoriaActual + "</span>" : '<span class="badge b-gris">—</span>') + "</td>" +
+      '<td><div style="display:flex;gap:4px;flex-wrap:wrap">' + (tags.join("") || "—") + "</div></td>" +
+      '<td class="num">' + pesos(an.ingresos) + "</td>" +
+      "<td>" + badgeEstado(an) + "</td>" +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn-icono" onclick="editarCliente(\'' + id + '\')" title="Editar">✏️</button>' +
+        '<button class="btn-icono" onclick="verFichaCliente(\'' + id + '\')" title="Ver ficha">📊</button>' +
+      "</td></tr>";
+  });
+  $("tablaClientes").innerHTML = html + "</tbody></table></div>";
+}
+
+function formCliente(c){
+  c = c || {};
+  var imp = c.impuestos || {};
+  var opcCat = '<option value="">— sin categoría —</option>' + LETRAS.map(function(l){
+    return '<option value="' + l + '"' + (c.categoriaActual === l ? " selected" : "") + ">" + l + "</option>";
+  }).join("");
+
+  return '' +
+  '<div class="seccion-tit">Datos del contribuyente</div>' +
+  '<div class="grid g2">' +
+    '<div class="campo"><label>Razón social / Nombre *</label><input type="text" id="fcNombre" value="' + esc(c.razonSocial || "") + '"></div>' +
+    '<div class="campo"><label>CUIT *</label><input type="text" id="fcCuit" value="' + esc(c.cuit || "") + '" placeholder="20-12345678-9"></div>' +
+    '<div class="campo"><label>Correo electrónico</label><input type="email" id="fcMail" value="' + esc(c.email || "") + '"></div>' +
+    '<div class="campo"><label>Teléfono</label><input type="text" id="fcTel" value="' + esc(c.telefono || "") + '"></div>' +
+  '</div>' +
+
+  '<div class="seccion-tit">Monotributo</div>' +
+  '<div class="grid g3">' +
+    '<div class="campo"><label>Actividad *</label><select id="fcActividad">' +
+      '<option value="servicios"' + (c.actividad === "servicios" || !c.actividad ? " selected" : "") + '>Locación / prestación de servicios</option>' +
+      '<option value="bienes"'    + (c.actividad === "bienes"    ? " selected" : "") + '>Venta de cosas muebles</option>' +
+      '<option value="mixto"'     + (c.actividad === "mixto"     ? " selected" : "") + '>Mixto (paga como servicios)</option>' +
+    '</select></div>' +
+    '<div class="campo"><label>Categoría actual</label><select id="fcCategoria">' + opcCat + "</select></div>" +
+    '<div class="campo"><label>Obra social</label><input type="text" id="fcObraSocial" value="' + esc(c.obraSocial || "") + '"></div>' +
+  '</div>' +
+  '<label class="check"><input type="checkbox" id="fcSoloIntegrado"' + (c.soloImpuestoIntegrado ? " checked" : "") + '> ' +
+    'Aporta también en relación de dependencia o como autónomo (ingresa solo el impuesto integrado)</label>' +
+  '<div class="campo" id="wrapIntegrado"' + (c.soloImpuestoIntegrado ? "" : ' style="display:none"') + '>' +
+    '<label>Importe del impuesto integrado a pagar</label>' +
+    '<input type="number" step="0.01" id="fcIntegrado" value="' + (c.impuestoIntegradoManual || "") + '">' +
+    '<div class="ayuda">Como la escala guarda el importe total de la cuota, este valor se carga a mano.</div>' +
+  "</div>" +
+
+  '<div class="seccion-tit">Parámetros físicos (opcionales)</div>' +
+  '<div class="grid g3">' +
+    '<div class="campo"><label>Superficie afectada (m²)</label><input type="number" id="fcSup" value="' + (c.superficie || "") + '"></div>' +
+    '<div class="campo"><label>Energía eléctrica anual (Kw)</label><input type="number" id="fcKw" value="' + (c.energiaKw || "") + '"></div>' +
+    '<div class="campo"><label>Alquileres devengados anuales</label><input type="number" step="0.01" id="fcAlq" value="' + (c.alquileresAnuales || "") + '"></div>' +
+  '</div>' +
+  '<div class="ayuda" style="margin-top:-6px">Si los dejás vacíos, el sistema categoriza solo por ingresos brutos.</div>' +
+
+  '<div class="seccion-tit">Impuestos que liquida</div>' +
+  '<div class="grid g2">' +
+    '<label class="check"><input type="checkbox" id="fcArca"' + (imp.arca !== false ? " checked" : "") + '> ARCA — Monotributo (nacional)</label>' +
+    '<label class="check"><input type="checkbox" id="fcArba"' + (imp.arba ? " checked" : "") + '> ARBA — IIBB Provincia de Buenos Aires</label>' +
+    '<label class="check"><input type="checkbox" id="fcAgip"' + (imp.agip ? " checked" : "") + '> AGIP — IIBB Ciudad de Buenos Aires</label>' +
+    '<label class="check"><input type="checkbox" id="fcMuni"' + (imp.municipal ? " checked" : "") + '> Tasa municipal</label>' +
+  '</div>' +
+  '<div class="campo" id="wrapMuni"' + (imp.municipal ? "" : ' style="display:none"') + '>' +
+    '<label>Municipio</label><input type="text" id="fcMunicipio" value="' + esc(c.municipio || "") + '" placeholder="Avellaneda">' +
+  "</div>" +
+
+  '<div class="seccion-tit">Delegación de servicios</div>' +
+  '<div class="grid g2">' +
+    '<div class="campo"><label>Estado de la delegación al CUIT del estudio</label><select id="fcDelegacion">' +
+      '<option value="pendiente"' + (c.estadoDelegacion === "pendiente" || !c.estadoDelegacion ? " selected" : "") + '>Pendiente</option>' +
+      '<option value="ok"'        + (c.estadoDelegacion === "ok"        ? " selected" : "") + '>Activa</option>' +
+      '<option value="vencida"'   + (c.estadoDelegacion === "vencida"   ? " selected" : "") + '>Vencida</option>' +
+    "</select></div>" +
+    '<div class="campo"><label>Puntos de venta (separados por coma)</label>' +
+      '<input type="text" id="fcPtosVenta" value="' + esc((c.ptosVenta || []).join(", ")) + '" placeholder="1, 2">' +
+      '<div class="ayuda">Los usa el web service WSFE para traer los comprobantes emitidos.</div>' +
+    "</div>" +
+  "</div>" +
+  '<label class="check"><input type="checkbox" id="fcActivo"' + (c.activo !== false ? " checked" : "") + "> Cliente activo</label>";
+}
+
+function abrirFormCliente(id){
+  var c = id ? ESTADO.clientes[id] : null;
+  abrirModal(id ? "Editar cliente" : "Nuevo cliente", formCliente(c), [
+    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Guardar",  accion:function(){ guardarFormCliente(id); } }
+  ], "ancho");
+
+  $("fcMuni").onchange = function(){ $("wrapMuni").style.display = this.checked ? "" : "none"; };
+  $("fcSoloIntegrado").onchange = function(){ $("wrapIntegrado").style.display = this.checked ? "" : "none"; };
+  $("fcCuit").onblur = function(){
+    var v = this.value.replace(/\D/g,"");
+    if (v.length === 11) this.value = formatCuit(v);
+  };
+}
+function editarCliente(id){ abrirFormCliente(id); }
+
+function guardarFormCliente(id){
+  var nombre = $("fcNombre").value.trim();
+  var cuit   = $("fcCuit").value.replace(/\D/g,"");
+  if (!nombre){ toast("Falta la razón social", "error"); return; }
+  if (!cuitValido(cuit)){ toast("El CUIT no es válido (revisá el dígito verificador)", "error"); return; }
+
+  var dup = Object.keys(ESTADO.clientes).filter(function(k){
+    return k !== id && String(ESTADO.clientes[k].cuit).replace(/\D/g,"") === cuit;
+  });
+  if (dup.length){ toast("Ya existe un cliente con ese CUIT", "error"); return; }
+
+  var datos = {
+    razonSocial: nombre,
+    cuit: cuit,
+    email: $("fcMail").value.trim(),
+    telefono: $("fcTel").value.trim(),
+    actividad: $("fcActividad").value,
+    categoriaActual: $("fcCategoria").value || null,
+    obraSocial: $("fcObraSocial").value.trim(),
+    soloImpuestoIntegrado: $("fcSoloIntegrado").checked,
+    impuestoIntegradoManual: parseFloat($("fcIntegrado").value) || null,
+    superficie: parseFloat($("fcSup").value) || null,
+    energiaKw: parseFloat($("fcKw").value) || null,
+    alquileresAnuales: parseFloat($("fcAlq").value) || null,
+    impuestos: {
+      arca: $("fcArca").checked,
+      arba: $("fcArba").checked,
+      agip: $("fcAgip").checked,
+      municipal: $("fcMuni").checked
+    },
+    municipio: $("fcMunicipio") ? $("fcMunicipio").value.trim() : "",
+    estadoDelegacion: $("fcDelegacion").value,
+    ptosVenta: $("fcPtosVenta").value.split(",").map(function(s){ return parseInt(s.trim(),10); }).filter(function(n){ return !isNaN(n); }),
+    activo: $("fcActivo").checked,
+    modificado: new Date().toISOString()
+  };
+
+  var p;
+  if (id){
+    p = guardarCliente(id, datos);
+  } else {
+    datos.alta = new Date().toISOString();
+    var nuevo = ref("clientes").push();
+    id = nuevo.key;
+    p = nuevo.set(datos);
+  }
+  p.then(function(){
+    ESTADO.clientes[id] = Object.assign(ESTADO.clientes[id] || {}, datos);
+    cerrarModal();
+    toast("Cliente guardado", "ok");
+    renderClientes(); renderHome();
+    llenarSelectClientes($("impCliente"), false);
+    llenarSelectClientes($("verCompCliente"), false);
+  }).catch(function(e){ toast("Error al guardar: " + e.message, "error"); });
+}
+
+/* Ficha con el detalle mes a mes y el análisis de los dos cortes */
+function verFichaCliente(id){
+  var c = ESTADO.clientes[id];
+  var cortes = cortesDisponibles().slice(0,2);
+  var t = ESTADO.totales[id] || {};
+
+  var html = '<div class="grid g2" style="margin-bottom:6px">';
+  cortes.forEach(function(co){
+    var an = analizar(id, co.valor);
+    var pct = Math.min(an.porcentaje, 100);
+    var clase = an.porcentaje >= 100 ? "bad" : (an.porcentaje >= 85 ? "warn" : "ok");
+    html += '<div class="card" style="margin:0">' +
+      '<div style="font-size:12px;color:#5F6368;margin-bottom:8px">' + esc(co.etiqueta) + "</div>" +
+      '<div style="font-size:24px;font-weight:500">' + pesos(an.ingresos) + "</div>" +
+      '<div style="color:#5F6368;font-size:12px;margin-bottom:10px">' + an.mesesConDatos + " de 12 meses con datos cargados</div>" +
+      '<div class="barra" style="margin-bottom:10px"><i class="' + clase + '" style="width:' + pct + '%"></i></div>' +
+      '<div style="display:flex;align-items:center;gap:8px">' + badgeEstado(an) +
+        (an.categoriaSugerida ? '<span style="color:#5F6368;font-size:12px">Cuota: ' + pesos(an.cuotaSugerida) + "</span>" : "") +
+      "</div></div>";
+  });
+  html += "</div>";
+
+  html += '<div class="seccion-tit">Facturación mes a mes</div><div class="tabla-wrap"><table><thead><tr>' +
+    "<th>Período</th><th class=num>Emitido</th><th class=num>Recibido</th><th class=num>Comprobantes</th></tr></thead><tbody>";
+  var pers = Object.keys(t).sort().reverse().slice(0,24);
+  if (!pers.length){
+    html += '<tr><td colspan="4" style="text-align:center;color:#5F6368;padding:26px">Sin comprobantes cargados</td></tr>';
+  } else {
+    pers.forEach(function(p){
+      var r = t[p];
+      html += "<tr><td>" + periodoLargo(p) + "</td>" +
+        '<td class="num">' + pesos(r.emitido || 0) + "</td>" +
+        '<td class="num">' + pesos(r.recibido || 0) + "</td>" +
+        '<td class="num">' + ((r.cantEmitidos || 0) + (r.cantRecibidos || 0)) + "</td></tr>";
+    });
+  }
+  html += "</tbody></table></div>";
+
+  abrirModal(c.razonSocial + " · " + formatCuit(c.cuit), html, [
+    { texto:"Editar cliente", clase:"sec", accion:function(){ cerrarModal(); setTimeout(function(){ editarCliente(id); }, 180); } },
+    { texto:"Cerrar", clase:"gris", accion:cerrarModal }
+  ], "ancho");
+}
+
+$("btnNuevoCliente").onclick = function(){ abrirFormCliente(null); };
+$("btnExportClientes").onclick = function(){
+  var filas = [["Razon social","CUIT","Actividad","Categoria","Email","ARCA","ARBA","AGIP","Municipal","Municipio","Activo"]];
+  Object.keys(ESTADO.clientes).forEach(function(id){
+    var c = ESTADO.clientes[id], i = c.impuestos || {};
+    filas.push([c.razonSocial, formatCuit(c.cuit), c.actividad, c.categoriaActual || "", c.email || "",
+      i.arca?"SI":"NO", i.arba?"SI":"NO", i.agip?"SI":"NO", i.municipal?"SI":"NO", c.municipio || "", c.activo===false?"NO":"SI"]);
+  });
+  bajarCSV(filas, "clientes.csv");
+};
+
+function bajarCSV(filas, nombre){
+  var csv = filas.map(function(f){
+    return f.map(function(v){ return '"' + String(v === null || v === undefined ? "" : v).replace(/"/g,'""') + '"'; }).join(";");
+  }).join("\r\n");
+  var blob = new Blob(["﻿" + csv], {type:"text/csv;charset=utf-8;"});
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = nombre;
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+}
+/* ---------- 13. COMPROBANTES: IMPORTADOR CSV DE "MIS COMPROBANTES" ---------- */
+
+/* Normaliza un encabezado: minúsculas, sin acentos, sin puntuación. */
+function normHeader(s){
+  return String(s || "").toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]/g,"");
+}
+/* Número en formato argentino: 1.234.567,89 → 1234567.89
+   También tolera formato inglés 1,234,567.89 */
+function numAR(s){
+  if (typeof s === "number") return s;
+  var t = String(s || "").trim().replace(/\s/g,"").replace(/\$/g,"");
+  if (!t) return 0;
+  var tieneComa = t.indexOf(",") !== -1, tienePunto = t.indexOf(".") !== -1;
+  if (tieneComa && tienePunto){
+    if (t.lastIndexOf(",") > t.lastIndexOf(".")) t = t.replace(/\./g,"").replace(",",".");
+    else t = t.replace(/,/g,"");
+  } else if (tieneComa){
+    t = t.replace(/\./g,"").replace(",",".");
+  }
+  var n = parseFloat(t);
+  return isNaN(n) ? 0 : n;
+}
+/* Fecha: acepta dd/mm/aaaa, aaaa-mm-dd, dd-mm-aaaa. Devuelve "AAAA-MM-DD". */
+function fechaISO(s){
+  var t = String(s || "").trim();
+  var m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (m) return m[3] + "-" + m[2].padStart(2,"0") + "-" + m[1].padStart(2,"0");
+  m = t.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (m) return m[1] + "-" + m[2].padStart(2,"0") + "-" + m[3].padStart(2,"0");
+  return null;
+}
+/* Parser CSV con soporte de comillas y detección de separador. */
+function parseCSV(texto){
+  texto = texto.replace(/^﻿/, "");
+  var primera = texto.split(/\r?\n/)[0] || "";
+  var cands = [";", ",", "\t", "|"], sep = ";", mejor = -1;
+  cands.forEach(function(c){
+    var n = primera.split(c).length;
+    if (n > mejor){ mejor = n; sep = c; }
+  });
+
+  var filas = [], campo = "", fila = [], enComillas = false;
+  for (var i = 0; i < texto.length; i++){
+    var ch = texto[i];
+    if (enComillas){
+      if (ch === '"'){
+        if (texto[i+1] === '"'){ campo += '"'; i++; }
+        else enComillas = false;
+      } else campo += ch;
+    } else {
+      if (ch === '"') enComillas = true;
+      else if (ch === sep){ fila.push(campo); campo = ""; }
+      else if (ch === "\n"){ fila.push(campo); filas.push(fila); fila = []; campo = ""; }
+      else if (ch === "\r"){ /* se ignora */ }
+      else campo += ch;
+    }
+  }
+  if (campo !== "" || fila.length){ fila.push(campo); filas.push(fila); }
+  return filas.filter(function(f){ return f.some(function(v){ return String(v).trim() !== ""; }); });
+}
+
+/* Mapa de alias por columna. Se busca por coincidencia parcial del header normalizado. */
+var ALIAS = {
+  fecha:      ["fecha","fechadeemision","fechaemision","fechacomprobante"],
+  tipo:       ["tipo","tipodecomprobante","tipocomprobante","tipodecomp"],
+  ptoVta:     ["puntodeventa","ptovta","puntoventa"],
+  nroDesde:   ["numerodesde","nrodesde","numero","nro","comprobantenrodesde"],
+  nroHasta:   ["numerohasta","nrohasta"],
+  cae:        ["codautorizacion","codigodeautorizacion","cae","caea"],
+  docNro:     ["nrodocreceptor","nrodocemisor","nrodocidentificacion","numerodedocumento","documentoreceptor","documentoemisor","nrodoc"],
+  denom:      ["denominacionreceptor","denominacionemisor","denominacion","razonsocial","receptor","emisor"],
+  moneda:     ["moneda","monedaoriginal"],
+  tipoCambio: ["tipocambio","tipodecambio"],
+  neto:       ["impnetogravado","netogravado","importenetogravado","neto"],
+  noGravado:  ["impnetonogravado","netonogravado"],
+  exento:     ["impopexentas","operacionesexentas","exento","impexento"],
+  iva:        ["iva","impiva","importeiva"],
+  total:      ["imptotal","importetotal","total","totalcomprobante"]
+};
+function mapearColumnas(headers){
+  var norm = headers.map(normHeader), mapa = {};
+  Object.keys(ALIAS).forEach(function(campo){
+    var alias = ALIAS[campo], idx = -1, j, k;
+    for (j = 0; j < alias.length && idx === -1; j++){
+      for (k = 0; k < norm.length; k++){ if (norm[k] === alias[j]){ idx = k; break; } }
+    }
+    if (idx === -1){
+      for (j = 0; j < alias.length && idx === -1; j++){
+        for (k = 0; k < norm.length; k++){
+          if (norm[k].indexOf(alias[j]) !== -1 && alias[j].length > 4){ idx = k; break; }
+        }
+      }
+    }
+    if (idx !== -1) mapa[campo] = idx;
+  });
+  return { mapa: mapa, norm: norm };
+}
+
+/* Detecta si el archivo es de emitidos o recibidos mirando el encabezado.
+   En Mis Comprobantes, emitidos trae "Receptor" y recibidos trae "Emisor". */
+function detectarTipo(headers){
+  var txt = headers.map(normHeader).join("|");
+  if (txt.indexOf("emisor") !== -1)   return "recibido";
+  if (txt.indexOf("receptor") !== -1) return "emitido";
+  return null;
+}
+
+/* Los comprobantes de crédito (notas de crédito) restan. Códigos ARCA. */
+var TIPOS_CREDITO = [3,8,13,20,21,38,43,48,53,110,112,113,114,115,116,117,119,120];
+function esNotaCredito(tipoTexto){
+  var t = String(tipoTexto || "").toLowerCase();
+  if (t.indexOf("crédito") !== -1 || t.indexOf("credito") !== -1) return true;
+  var m = t.match(/^\s*(\d+)/);
+  if (m && TIPOS_CREDITO.indexOf(parseInt(m[1],10)) !== -1) return true;
+  return false;
+}
+
+function procesarArchivo(file){
+  var clienteId = $("impCliente").value;
+  if (!clienteId){ toast("Elegí primero el cliente", "error"); return; }
+
+  var lector = new FileReader();
+  lector.onload = function(e){
+    var filas;
+    try { filas = parseCSV(e.target.result); }
+    catch (err){ toast("No pude leer el archivo: " + err.message, "error"); return; }
+    if (filas.length < 2){ toast("El archivo no tiene filas de datos", "error"); return; }
+
+    /* La fila de encabezados puede no ser la primera (Mis Comprobantes a veces
+       pone un título arriba). Buscamos la que contenga "fecha". */
+    var idxHead = 0;
+    for (var i = 0; i < Math.min(filas.length, 8); i++){
+      if (filas[i].map(normHeader).some(function(h){ return h.indexOf("fecha") !== -1; })){ idxHead = i; break; }
+    }
+    var headers = filas[idxHead];
+    var m = mapearColumnas(headers).mapa;
+
+    if (m.fecha === undefined || m.total === undefined){
+      $("impResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>No reconozco las columnas del archivo.</b><br>' +
+        'Necesito al menos una columna de fecha y una de importe total. Encabezados encontrados:<br>' +
+        '<span class="mono">' + esc(headers.join(" | ")) + "</span></div></div>";
+      return;
+    }
+
+    var tipoSel = $("impTipo").value;
+    var tipo = tipoSel === "auto" ? (detectarTipo(headers) || "emitido") : tipoSel;
+
+    var registros = [], errores = 0;
+    for (var r = idxHead + 1; r < filas.length; r++){
+      var f = filas[r];
+      var fISO = fechaISO(f[m.fecha]);
+      if (!fISO){ errores++; continue; }
+      var total = numAR(f[m.total]);
+      if (esNotaCredito(m.tipo !== undefined ? f[m.tipo] : "")) total = -Math.abs(total);
+
+      registros.push({
+        fecha: fISO,
+        periodo: fISO.slice(0,4) + fISO.slice(5,7),
+        tipo: tipo,
+        cbteTipo: m.tipo    !== undefined ? String(f[m.tipo] || "").trim() : "",
+        ptoVta:   m.ptoVta  !== undefined ? parseInt(f[m.ptoVta],10) || 0 : 0,
+        nro:      m.nroDesde!== undefined ? parseInt(f[m.nroDesde],10) || 0 : 0,
+        cae:      m.cae     !== undefined ? String(f[m.cae] || "").trim() : "",
+        docNro:   m.docNro  !== undefined ? String(f[m.docNro] || "").replace(/\D/g,"") : "",
+        denom:    m.denom   !== undefined ? String(f[m.denom] || "").trim() : "",
+        moneda:   m.moneda  !== undefined ? String(f[m.moneda] || "PES").trim() : "PES",
+        neto:     m.neto    !== undefined ? numAR(f[m.neto]) : 0,
+        iva:      m.iva     !== undefined ? numAR(f[m.iva]) : 0,
+        total:    total,
+        origen:   "csv"
+      });
+    }
+
+    if (!registros.length){
+      $("impResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>No se pudo leer ninguna fila válida.</div></div>';
+      return;
+    }
+    mostrarPreviewImportacion(clienteId, tipo, registros, errores, file.name);
+  };
+  lector.readAsText(file, "UTF-8");
+}
+
+function mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreArchivo){
+  var porPeriodo = {};
+  registros.forEach(function(reg){
+    if (!porPeriodo[reg.periodo]) porPeriodo[reg.periodo] = { cant:0, monto:0 };
+    porPeriodo[reg.periodo].cant++;
+    porPeriodo[reg.periodo].monto += reg.total;
+  });
+  var pers = Object.keys(porPeriodo).sort();
+  var totalGeneral = registros.reduce(function(a,b){ return a + b.total; }, 0);
+  var cli = ESTADO.clientes[clienteId];
+
+  /* Aviso si los CUIT no coinciden: en emitidos el emisor es el cliente,
+     así que el doc de la fila es la contraparte. Solo chequeamos en recibidos
+     que no se haya mezclado el archivo de otro contribuyente. */
+  var html = '<div class="aviso ok"><span>✅</span><div><b>' + registros.length + " comprobantes " + tipo + "s</b> leídos de <span class=mono>" +
+    esc(nombreArchivo) + "</span> para <b>" + esc(cli.razonSocial) + "</b>." +
+    (errores ? " Se saltearon " + errores + " filas sin fecha válida." : "") + "</div></div>";
+
+  html += '<div class="tabla-wrap" style="max-height:300px;overflow-y:auto"><table><thead><tr>' +
+    "<th>Período</th><th class=num>Comprobantes</th><th class=num>Importe</th><th class=num>Ya cargado</th></tr></thead><tbody>";
+  pers.forEach(function(p){
+    var yaT = (ESTADO.totales[clienteId] || {})[p];
+    var ya = yaT ? (tipo === "emitido" ? yaT.emitido : yaT.recibido) : 0;
+    html += "<tr><td>" + periodoLargo(p) + "</td>" +
+      '<td class="num">' + porPeriodo[p].cant + "</td>" +
+      '<td class="num"><b>' + pesos(porPeriodo[p].monto) + "</b></td>" +
+      '<td class="num" style="color:#5F6368">' + (ya ? pesos(ya) : "—") + "</td></tr>";
+  });
+  html += '<tr style="background:#F8F9FA"><td><b>Total</b></td><td class="num"><b>' + registros.length +
+    '</b></td><td class="num"><b>' + pesos(totalGeneral) + "</b></td><td></td></tr>";
+  html += "</tbody></table></div>";
+
+  html += '<div class="aviso warn" style="margin-top:14px"><span>⚠️</span><div>Al confirmar, los períodos listados se <b>reemplazan</b> con estos comprobantes ' +
+    "(los importes de la columna “Ya cargado” se pisan). Los períodos que no aparecen acá no se tocan.</div></div>";
+
+  abrirModal("Confirmar importación", html, [
+    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Importar " + registros.length + " comprobantes", accion:function(){
+        confirmarImportacion(clienteId, tipo, registros, porPeriodo);
+      } }
+  ], "ancho");
+}
+
+function confirmarImportacion(clienteId, tipo, registros, porPeriodo){
+  var updates = {};
+  var pers = Object.keys(porPeriodo);
+
+  /* Se borra el período completo de ese tipo y se vuelve a escribir. */
+  pers.forEach(function(p){
+    updates["comprobantes/" + clienteId + "/" + p + "/" + tipo] = null;
+  });
+
+  registros.forEach(function(reg, i){
+    var clave = reg.ptoVta + "-" + reg.nro + "-" + i;
+    updates["comprobantes/" + clienteId + "/" + reg.periodo + "/" + tipo + "/" + clave] = reg;
+  });
+
+  pers.forEach(function(p){
+    var prev = (ESTADO.totales[clienteId] || {})[p] || {};
+    var nuevo = {
+      emitido:       tipo === "emitido"  ? porPeriodo[p].monto : (prev.emitido || 0),
+      recibido:      tipo === "recibido" ? porPeriodo[p].monto : (prev.recibido || 0),
+      cantEmitidos:  tipo === "emitido"  ? porPeriodo[p].cant  : (prev.cantEmitidos || 0),
+      cantRecibidos: tipo === "recibido" ? porPeriodo[p].cant  : (prev.cantRecibidos || 0),
+      actualizado:   new Date().toISOString()
+    };
+    updates["totales/" + clienteId + "/" + p] = nuevo;
+    if (!ESTADO.totales[clienteId]) ESTADO.totales[clienteId] = {};
+    ESTADO.totales[clienteId][p] = nuevo;
+  });
+
+  ref("").update(updates).then(function(){
+    cerrarModal();
+    toast(registros.length + " comprobantes importados", "ok");
+    $("impResultado").innerHTML = '<div class="aviso ok"><span>✅</span><div>Importación completada. ' +
+      "Ya podés ver el resultado en <b>Recategorización</b>.</div></div>";
+    renderHome();
+    renderTablaComprobantes();
+  }).catch(function(e){ toast("Error al guardar: " + e.message, "error"); });
+}
+
+/* Dropzone */
+(function(){
+  var dz = $("dropzone"), fi = $("fileInput");
+  dz.onclick = function(){ fi.click(); };
+  fi.onchange = function(){ if (this.files[0]){ procesarArchivo(this.files[0]); this.value = ""; } };
+  ["dragenter","dragover"].forEach(function(ev){
+    dz.addEventListener(ev, function(e){ e.preventDefault(); dz.classList.add("encima"); });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    dz.addEventListener(ev, function(e){ e.preventDefault(); dz.classList.remove("encima"); });
+  });
+  dz.addEventListener("drop", function(e){
+    if (e.dataTransfer.files[0]) procesarArchivo(e.dataTransfer.files[0]);
+  });
+})();
+
+function renderComprobantes(){
+  llenarSelectClientes($("impCliente"), false);
+  llenarSelectClientes($("verCompCliente"), false);
+  renderTablaComprobantes();
+}
+
+function renderTablaComprobantes(){
+  var id = $("verCompCliente").value;
+  var anio = $("verCompAnio").value;
+  var tipoF = $("verCompTipo").value;
+  var cont = $("tablaComprobantes");
+  if (!id){ cont.innerHTML = '<div class="vacio"><div class="ico">📄</div><div>Elegí un cliente.</div></div>'; return; }
+
+  var t = ESTADO.totales[id] || {};
+  var pers = Object.keys(t).filter(function(p){ return p.slice(0,4) === anio; }).sort().reverse();
+  if (!pers.length){
+    cont.innerHTML = '<div class="vacio"><div class="ico">📄</div><div>No hay comprobantes de ' + anio + " para este cliente.</div></div>";
+    return;
+  }
+
+  var html = '<div class="tabla-wrap"><table><thead><tr><th>Período</th>';
+  if (tipoF !== "recibido") html += "<th class=num>Emitido</th><th class=num>Cant.</th>";
+  if (tipoF !== "emitido")  html += "<th class=num>Recibido</th><th class=num>Cant.</th>";
+  html += "<th></th></tr></thead><tbody>";
+
+  var sumE = 0, sumR = 0;
+  pers.forEach(function(p){
+    var r = t[p];
+    sumE += r.emitido || 0; sumR += r.recibido || 0;
+    html += "<tr><td><b>" + periodoLargo(p) + "</b></td>";
+    if (tipoF !== "recibido") html += '<td class="num">' + pesos(r.emitido || 0) + '</td><td class="num">' + (r.cantEmitidos || 0) + "</td>";
+    if (tipoF !== "emitido")  html += '<td class="num">' + pesos(r.recibido || 0) + '</td><td class="num">' + (r.cantRecibidos || 0) + "</td>";
+    html += '<td style="text-align:right"><button class="btn-icono" onclick="verDetallePeriodo(\'' + id + "','" + p + '\')" title="Ver detalle">🔍</button></td></tr>';
+  });
+  html += '<tr style="background:#F8F9FA"><td><b>Total ' + anio + "</b></td>";
+  if (tipoF !== "recibido") html += '<td class="num"><b>' + pesos(sumE) + "</b></td><td></td>";
+  if (tipoF !== "emitido")  html += '<td class="num"><b>' + pesos(sumR) + "</b></td><td></td>";
+  html += "<td></td></tr></tbody></table></div>";
+  cont.innerHTML = html;
+}
+
+function verDetallePeriodo(clienteId, periodo){
+  ref("comprobantes/" + clienteId + "/" + periodo).once("value").then(function(s){
+    var d = s.val() || {};
+    var lista = [];
+    ["emitido","recibido"].forEach(function(tp){
+      Object.keys(d[tp] || {}).forEach(function(k){ lista.push(d[tp][k]); });
+    });
+    lista.sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
+
+    var html;
+    if (!lista.length){
+      html = '<div class="vacio"><div class="ico">📄</div><div>Sin comprobantes en este período.</div></div>';
+    } else {
+      html = '<div class="tabla-wrap" style="max-height:460px;overflow-y:auto"><table><thead><tr>' +
+        "<th>Fecha</th><th>Tipo</th><th>Nº</th><th>Contraparte</th><th>E/R</th><th class=num>Total</th>" +
+        "</tr></thead><tbody>" + lista.map(function(c){
+          return "<tr><td>" + c.fecha.split("-").reverse().join("/") + "</td>" +
+            "<td>" + esc(c.cbteTipo || "—") + "</td>" +
+            '<td class="mono">' + (c.ptoVta ? String(c.ptoVta).padStart(5,"0") + "-" + String(c.nro).padStart(8,"0") : "—") + "</td>" +
+            "<td>" + esc(c.denom || formatCuit(c.docNro) || "—") + "</td>" +
+            '<td><span class="badge ' + (c.tipo === "emitido" ? "b-azul" : "b-gris") + '">' + (c.tipo === "emitido" ? "Emitido" : "Recibido") + "</span></td>" +
+            '<td class="num">' + pesos(c.total) + "</td></tr>";
+        }).join("") + "</tbody></table></div>";
+    }
+    abrirModal(ESTADO.clientes[clienteId].razonSocial + " · " + periodoLargo(periodo), html,
+      [{ texto:"Cerrar", clase:"gris", accion:cerrarModal }], "ancho");
+  });
+}
+
+$("btnCargaManual").onclick = function(){
+  var opc = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; })
+    .sort(function(a,b){ return ESTADO.clientes[a].razonSocial.localeCompare(ESTADO.clientes[b].razonSocial); })
+    .map(function(id){ return '<option value="' + id + '">' + esc(ESTADO.clientes[id].razonSocial) + "</option>"; }).join("");
+
+  abrirModal("Carga manual de totales",
+    '<div class="aviso info"><span>ℹ️</span><div>Sirve para cargar meses viejos de los que no tenés el CSV. Escribí el total facturado del período.</div></div>' +
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Cliente</label><select id="cmCliente">' + opc + "</select></div>" +
+      '<div class="campo"><label>Período</label><input type="month" id="cmPeriodo" value="' + periodoAMonthInput(periodoHoy()) + '"></div>' +
+      '<div class="campo"><label>Total emitido (facturado)</label><input type="number" step="0.01" id="cmEmitido"></div>' +
+      '<div class="campo"><label>Total recibido (compras)</label><input type="number" step="0.01" id="cmRecibido"></div>' +
+    "</div>",
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Guardar", accion:function(){
+          var id = $("cmCliente").value;
+          var p  = monthInputAPeriodo($("cmPeriodo").value);
+          var prev = (ESTADO.totales[id] || {})[p] || {};
+          var nuevo = {
+            emitido:  parseFloat($("cmEmitido").value)  || 0,
+            recibido: parseFloat($("cmRecibido").value) || 0,
+            cantEmitidos: prev.cantEmitidos || 0,
+            cantRecibidos: prev.cantRecibidos || 0,
+            origen: "manual",
+            actualizado: new Date().toISOString()
+          };
+          ref("totales/" + id + "/" + p).set(nuevo).then(function(){
+            if (!ESTADO.totales[id]) ESTADO.totales[id] = {};
+            ESTADO.totales[id][p] = nuevo;
+            cerrarModal(); toast("Período guardado", "ok");
+            renderTablaComprobantes(); renderHome();
+          });
+        } }
+    ]);
+};
+
+/* ---------- 14. RECATEGORIZACIÓN ---------- */
+function renderRecat(){
+  var corte = $("recatCorte").value;
+  if (!corte){ return; }
+  var pers = ventana12(corte);
+  var desde = pers[0], hasta = pers[11];
+  var mesRecat = corte.slice(4) === "06" ? "julio" : "enero";
+  var anioRecat = corte.slice(4) === "06" ? corte.slice(0,4) : String(parseInt(corte.slice(0,4),10)+1);
+
+  $("recatExplica").innerHTML =
+    "Se suma todo lo <b>facturado (emitido)</b> entre <b>" + periodoLargo(desde) + "</b> y <b>" + periodoLargo(hasta) + "</b>. " +
+    "Con ese total se determina la categoría para la recategorización de <b>" + mesRecat + " " + anioRecat + "</b>, " +
+    "que se declara hasta el día 5 y se paga desde el mes siguiente.";
+
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){
+    var c = ESTADO.clientes[id];
+    return c.activo !== false && (!c.impuestos || c.impuestos.arca !== false);
+  });
+  if (!ids.length){
+    $("tablaRecat").innerHTML = '<div class="vacio"><div class="ico">📊</div><div>No hay clientes de monotributo cargados.</div></div>';
+    return;
+  }
+
+  var analisis = ids.map(function(id){ return analizar(id, corte); });
+  var orden = { excluido:0, sube:1, cerca:2, sincat:3, ok:4, baja:5 };
+  analisis.sort(function(a,b){
+    var d = orden[a.estado] - orden[b.estado];
+    return d !== 0 ? d : b.ingresos - a.ingresos;
+  });
+
+  var html = '<div class="tabla-wrap"><table><thead><tr>' +
+    "<th>Cliente</th><th>Actividad</th><th class=num>Facturado 12 meses</th><th>Datos</th>" +
+    "<th>Avance al tope</th><th>Actual</th><th>Corresponde</th><th class=num>Cuota nueva</th><th>Acción</th>" +
+    "</tr></thead><tbody>";
+
+  analisis.forEach(function(an){
+    var c = ESTADO.clientes[an.clienteId];
+    var pct = Math.min(an.porcentaje, 100);
+    var clase = an.porcentaje >= 100 ? "bad" : (an.porcentaje >= 85 ? "warn" : "ok");
+    var chipSug = an.excluido
+      ? '<span class="cat-chip fuera">✕</span>'
+      : '<span class="cat-chip ' + (an.estado === "sube" ? "sube" : (an.estado === "baja" ? "baja" : "")) + '">' + an.categoriaSugerida + "</span>";
+
+    var avisoDatos = an.mesesConDatos < 12
+      ? '<span class="badge b-amar" title="Faltan meses cargados">' + an.mesesConDatos + "/12</span>"
+      : '<span class="badge b-verde">12/12</span>';
+
+    html += "<tr>" +
+      "<td><b>" + esc(c.razonSocial) + '</b><div style="color:#5F6368;font-size:12px" class="mono">' + formatCuit(c.cuit) + "</div></td>" +
+      "<td>" + (c.actividad === "bienes" ? "Bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios")) + "</td>" +
+      '<td class="num"><b>' + pesos(an.ingresos) + "</b></td>" +
+      "<td>" + avisoDatos + "</td>" +
+      '<td><div style="display:flex;align-items:center;gap:8px">' +
+        '<div class="barra"><i class="' + clase + '" style="width:' + pct + '%"></i></div>' +
+        '<span style="font-size:12px;color:#5F6368;min-width:38px">' + (an.categoriaActual ? an.porcentaje.toFixed(0) + "%" : "—") + "</span></div></td>" +
+      "<td>" + (an.categoriaActual ? '<span class="cat-chip">' + an.categoriaActual + "</span>" : "—") + "</td>" +
+      "<td>" + chipSug + "</td>" +
+      '<td class="num">' + (an.excluido ? "—" : pesos(an.cuotaSugerida)) + "</td>" +
+      "<td>" + (an.estado === "sube" || an.estado === "baja"
+        ? '<button class="btn sec chico" onclick="aplicarRecat(\'' + an.clienteId + "','" + an.categoriaSugerida + '\')">Aplicar ' + an.categoriaSugerida + "</button>"
+        : '<span style="font-size:12px;color:#5F6368">' + esc(an.accion) + "</span>") + "</td>" +
+      "</tr>";
+  });
+
+  var totalFact = analisis.reduce(function(a,b){ return a + b.ingresos; }, 0);
+  html += '<tr style="background:#F8F9FA"><td><b>' + analisis.length + " clientes</b></td><td></td>" +
+    '<td class="num"><b>' + pesos(totalFact) + "</b></td><td colspan=6></td></tr>";
+  $("tablaRecat").innerHTML = html + "</tbody></table></div>";
+}
+
+function aplicarRecat(clienteId, categoria){
+  var c = ESTADO.clientes[clienteId];
+  abrirModal("Confirmar recategorización",
+    '<div class="aviso warn"><span>⚠️</span><div>Esto cambia la categoría <b>en el sistema</b>. La recategorización real la tenés que hacer igual en el portal de ARCA.</div></div>' +
+    "<p>Cambiar a <b>" + esc(c.razonSocial) + "</b> de la categoría <b>" + (c.categoriaActual || "—") +
+    "</b> a la categoría <b>" + categoria + "</b>?</p>",
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Sí, aplicar", accion:function(){
+          guardarCliente(clienteId, { categoriaActual: categoria, recatAplicada: new Date().toISOString() }).then(function(){
+            ESTADO.clientes[clienteId].categoriaActual = categoria;
+            cerrarModal(); toast("Categoría actualizada a " + categoria, "ok");
+            renderRecat(); renderHome();
+          });
+        } }
+    ], "angosto");
+}
+
+$("btnExportRecat").onclick = function(){
+  var corte = $("recatCorte").value;
+  var filas = [["Cliente","CUIT","Actividad","Facturado 12m","Meses con datos","Cat. actual","Cat. corresponde","Cuota","Situacion"]];
+  Object.keys(ESTADO.clientes).forEach(function(id){
+    var c = ESTADO.clientes[id];
+    if (c.activo === false) return;
+    var an = analizar(id, corte);
+    filas.push([c.razonSocial, formatCuit(c.cuit), c.actividad, an.ingresos.toFixed(2), an.mesesConDatos,
+      an.categoriaActual || "", an.categoriaSugerida || "EXCLUIDO", an.cuotaSugerida.toFixed(2), an.accion]);
+  });
+  bajarCSV(filas, "recategorizacion-" + corte + ".csv");
+};
+/* ---------- 15. LIQUIDACIÓN MENSUAL ---------- */
+var IMPUESTOS = [
+  { clave:"arca", nombre:"Monotributo (ARCA)",   corto:"ARCA" },
+  { clave:"arba", nombre:"IIBB Provincia (ARBA)", corto:"ARBA" },
+  { clave:"agip", nombre:"IIBB CABA (AGIP)",      corto:"AGIP" },
+  { clave:"municipal", nombre:"Tasa municipal",   corto:"Municipal" }
+];
+
+function liqDe(clienteId, periodo){
+  return (ESTADO.liquidaciones[clienteId] || {})[periodo] || {};
+}
+function totalLiq(cli, liq){
+  var s = 0;
+  IMPUESTOS.forEach(function(i){
+    if (cli.impuestos && cli.impuestos[i.clave] && liq[i.clave] && liq[i.clave].monto) s += liq[i.clave].monto;
+  });
+  return s;
+}
+
+function renderLiquidacion(){
+  var periodo = monthInputAPeriodo($("liqPeriodo").value);
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+  ids.sort(function(a,b){ return ESTADO.clientes[a].razonSocial.localeCompare(ESTADO.clientes[b].razonSocial); });
+
+  if (!ids.length){
+    $("tablaLiquidacion").innerHTML = '<div class="vacio"><div class="ico">💰</div><div>No hay clientes cargados.</div></div>';
+    return;
+  }
+
+  var html = '<div class="tabla-wrap"><table><thead><tr><th>Cliente</th>' +
+    IMPUESTOS.map(function(i){ return '<th class="num">' + i.corto + "</th>"; }).join("") +
+    "<th class=num>Total</th><th>VEP</th><th>Estado</th><th></th></tr></thead><tbody>";
+
+  var totales = { arca:0, arba:0, agip:0, municipal:0, general:0 };
+  ids.forEach(function(id){
+    var c = ESTADO.clientes[id], liq = liqDe(id, periodo);
+    var tot = totalLiq(c, liq);
+    totales.general += tot;
+
+    html += "<tr><td><b>" + esc(c.razonSocial) + "</b>" +
+      (c.categoriaActual ? ' <span class="cat-chip" style="width:22px;height:22px;font-size:12px;vertical-align:middle">' + c.categoriaActual + "</span>" : "") + "</td>";
+
+    IMPUESTOS.forEach(function(i){
+      if (!(c.impuestos && c.impuestos[i.clave])){
+        html += '<td class="num" style="color:#C4C7C5">—</td>';
+      } else {
+        var m = (liq[i.clave] && liq[i.clave].monto) || 0;
+        totales[i.clave] += m;
+        html += '<td class="num"' + (m ? "" : ' style="color:#B06000"') + ">" + (m ? pesos(m) : "falta") + "</td>";
+      }
+    });
+
+    var veps = IMPUESTOS.filter(function(i){ return liq[i.clave] && liq[i.clave].vep; }).length;
+    var pedidos = IMPUESTOS.filter(function(i){ return c.impuestos && c.impuestos[i.clave]; }).length;
+
+    html += '<td class="num"><b>' + pesos(tot) + "</b></td>" +
+      "<td>" + (veps ? '<span class="badge b-verde">' + veps + "/" + pedidos + "</span>" : '<span class="badge b-gris">0/' + pedidos + "</span>") + "</td>" +
+      "<td>" + (liq.enviado ? '<span class="badge b-verde">Enviado</span>'
+                : (tot ? '<span class="badge b-azul">Listo</span>' : '<span class="badge b-amar">Pendiente</span>')) + "</td>" +
+      '<td><button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + periodo + '\')">Cargar</button></td></tr>';
+  });
+
+  html += '<tr style="background:#F8F9FA"><td><b>Totales</b></td>' +
+    IMPUESTOS.map(function(i){ return '<td class="num"><b>' + pesos(totales[i.clave]) + "</b></td>"; }).join("") +
+    '<td class="num"><b>' + pesos(totales.general) + "</b></td><td colspan=3></td></tr>";
+  $("tablaLiquidacion").innerHTML = html + "</tbody></table></div>";
+}
+
+function editarLiquidacion(clienteId, periodo){
+  var c = ESTADO.clientes[clienteId], liq = liqDe(clienteId, periodo);
+  var html = "";
+
+  IMPUESTOS.forEach(function(i){
+    if (!(c.impuestos && c.impuestos[i.clave])) return;
+    var d = liq[i.clave] || {};
+    var nombre = i.clave === "municipal" ? "Tasa municipal — " + (c.municipio || "sin municipio") : i.nombre;
+    html += '<div class="seccion-tit">' + esc(nombre) + "</div>" +
+      '<div class="grid g3">' +
+        '<div class="campo"><label>Importe a pagar</label>' +
+          '<input type="number" step="0.01" id="lq_' + i.clave + '_monto" value="' + (d.monto || "") + '"></div>' +
+        '<div class="campo"><label>Nº de VEP</label>' +
+          '<input type="text" id="lq_' + i.clave + '_vep" value="' + esc(d.vep || "") + '"></div>' +
+        '<div class="campo"><label>Vence el</label>' +
+          '<input type="date" id="lq_' + i.clave + '_vto" value="' + esc(d.vencimiento || "") + '"></div>' +
+      "</div>" +
+      '<div class="campo"><label>Link al VEP (opcional)</label>' +
+        '<input type="text" id="lq_' + i.clave + '_link" value="' + esc(d.link || "") + '" placeholder="https://…"></div>';
+  });
+
+  if (!html) html = '<div class="aviso warn"><span>⚠️</span><div>Este cliente no tiene ningún impuesto tildado en su ficha.</div></div>';
+
+  html += '<div class="seccion-tit">Observaciones para el mail</div>' +
+    '<div class="campo"><textarea id="lqObs" style="min-height:80px" placeholder="Texto opcional que se agrega al mail de este cliente…">' + esc(liq.observaciones || "") + "</textarea></div>";
+
+  /* Sugerencia de cuota ARCA según la categoría vigente */
+  if (c.impuestos && c.impuestos.arca && c.categoriaActual){
+    var sug = cuotaActual(c, periodo.slice(0,4) + "-" + periodo.slice(4) + "-01");
+    html = '<div class="aviso info"><span>ℹ️</span><div>Según la categoría <b>' + c.categoriaActual +
+      "</b> y la escala vigente, la cuota de monotributo de este período es <b>" + pesos(sug) + "</b>. " +
+      '<a href="#" onclick="document.getElementById(\'lq_arca_monto\').value=' + sug + ';return false;">Usar este importe</a></div></div>' + html;
+  }
+
+  abrirModal(c.razonSocial + " · " + periodoLargo(periodo), html, [
+    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Guardar", accion:function(){ guardarLiquidacion(clienteId, periodo); } }
+  ], "ancho");
+}
+
+function guardarLiquidacion(clienteId, periodo){
+  var c = ESTADO.clientes[clienteId];
+  var datos = { observaciones: $("lqObs").value.trim(), actualizado: new Date().toISOString() };
+
+  IMPUESTOS.forEach(function(i){
+    if (!(c.impuestos && c.impuestos[i.clave])) return;
+    var m = $("lq_" + i.clave + "_monto");
+    if (!m) return;
+    datos[i.clave] = {
+      monto: parseFloat(m.value) || 0,
+      vep: $("lq_" + i.clave + "_vep").value.trim(),
+      vencimiento: $("lq_" + i.clave + "_vto").value,
+      link: $("lq_" + i.clave + "_link").value.trim()
+    };
+  });
+
+  ref("liquidaciones/" + clienteId + "/" + periodo).update(datos).then(function(){
+    if (!ESTADO.liquidaciones[clienteId]) ESTADO.liquidaciones[clienteId] = {};
+    ESTADO.liquidaciones[clienteId][periodo] = Object.assign(ESTADO.liquidaciones[clienteId][periodo] || {}, datos);
+    cerrarModal(); toast("Liquidación guardada", "ok");
+    renderLiquidacion(); renderHome();
+  }).catch(function(e){ toast("Error: " + e.message, "error"); });
+}
+
+/* Rellena de una todas las cuotas ARCA del período según la categoría de cada cliente. */
+$("btnRecalcularLiq").onclick = function(){
+  var periodo = monthInputAPeriodo($("liqPeriodo").value);
+  var fecha = periodo.slice(0,4) + "-" + periodo.slice(4) + "-01";
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){
+    var c = ESTADO.clientes[id];
+    return c.activo !== false && c.impuestos && c.impuestos.arca && c.categoriaActual;
+  });
+  if (!ids.length){ toast("No hay clientes con categoría cargada", "error"); return; }
+
+  abrirModal("Recalcular cuotas de monotributo",
+    '<div class="aviso warn"><span>⚠️</span><div>Se van a <b>pisar</b> los importes de ARCA ya cargados en ' +
+    periodoLargo(periodo) + " para <b>" + ids.length + " clientes</b>. Los VEP y los otros impuestos no se tocan.</div></div>" +
+    '<div class="tabla-wrap" style="max-height:320px;overflow-y:auto"><table><thead><tr><th>Cliente</th><th>Cat.</th><th class=num>Cuota</th></tr></thead><tbody>' +
+    ids.map(function(id){
+      var c = ESTADO.clientes[id];
+      return "<tr><td>" + esc(c.razonSocial) + '</td><td><span class="cat-chip">' + c.categoriaActual + "</span></td>" +
+        '<td class="num">' + pesos(cuotaActual(c, fecha)) + "</td></tr>";
+    }).join("") + "</tbody></table></div>",
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Recalcular", accion:function(){
+          var updates = {};
+          ids.forEach(function(id){
+            var c = ESTADO.clientes[id];
+            var prev = liqDe(id, periodo).arca || {};
+            var nuevo = { monto: cuotaActual(c, fecha), vep: prev.vep || "", vencimiento: prev.vencimiento || "", link: prev.link || "" };
+            updates["liquidaciones/" + id + "/" + periodo + "/arca"] = nuevo;
+            if (!ESTADO.liquidaciones[id]) ESTADO.liquidaciones[id] = {};
+            if (!ESTADO.liquidaciones[id][periodo]) ESTADO.liquidaciones[id][periodo] = {};
+            ESTADO.liquidaciones[id][periodo].arca = nuevo;
+          });
+          ref("").update(updates).then(function(){
+            cerrarModal(); toast("Cuotas recalculadas", "ok"); renderLiquidacion();
+          });
+        } }
+    ], "ancho");
+};
+
+/* ---------- 16. MAILS ---------- */
+function armarMail(clienteId, periodo){
+  var c = ESTADO.clientes[clienteId], liq = liqDe(clienteId, periodo);
+  var cfg = ESTADO.config.estudio || {};
+  var pl = ESTADO.config.plantilla || PLANTILLA_DEFECTO;
+
+  var lineas = [], total = 0;
+  IMPUESTOS.forEach(function(i){
+    if (!(c.impuestos && c.impuestos[i.clave])) return;
+    var d = liq[i.clave] || {};
+    if (!d.monto) return;
+    total += d.monto;
+    var nombre = i.clave === "municipal" ? "Tasa municipal " + (c.municipio ? "(" + c.municipio + ")" : "") : i.nombre;
+    var linea = "  • " + nombre + ": " + pesos(d.monto);
+    if (d.vencimiento) linea += "  —  vence el " + d.vencimiento.split("-").reverse().join("/");
+    lineas.push(linea);
+  });
+
+  var veps = [];
+  IMPUESTOS.forEach(function(i){
+    var d = liq[i.clave] || {};
+    if (d.vep) veps.push("  • " + i.corto + " — VEP Nº " + d.vep + (d.link ? "  " + d.link : ""));
+  });
+  var bloqueVep = veps.length ? "Volantes electrónicos de pago (VEP):\n" + veps.join("\n") + "\n\n" : "";
+
+  /* Aviso de recategorización si el corte más reciente lo pide */
+  var bloqueRecat = "";
+  var corte = cortesDisponibles()[0];
+  if (corte && c.impuestos && c.impuestos.arca){
+    var an = analizar(clienteId, corte.valor);
+    if (an.estado === "sube"){
+      bloqueRecat = "IMPORTANTE — Recategorización: según su facturación de los últimos 12 meses (" +
+        pesos(an.ingresos) + "), corresponde recategorizar de la categoría " + an.categoriaActual +
+        " a la categoría " + an.categoriaSugerida + ".\n\n";
+    } else if (an.estado === "excluido"){
+      bloqueRecat = "IMPORTANTE: su facturación de los últimos 12 meses (" + pesos(an.ingresos) +
+        ") excede los topes del régimen simplificado. Comuníquese con el estudio para analizar la situación.\n\n";
+    }
+  }
+
+  var vars = {
+    "{cliente}":        c.razonSocial,
+    "{cuit}":           formatCuit(c.cuit),
+    "{categoria}":      c.categoriaActual || "—",
+    "{periodo}":        periodoCorto(periodo),
+    "{periodoLargo}":   periodoLargo(periodo),
+    "{detalleImpuestos}": lineas.join("\n") + "\n",
+    "{total}":          pesos(total),
+    "{bloqueVep}":      bloqueVep,
+    "{bloqueRecategorizacion}": bloqueRecat,
+    "{observaciones}":  liq.observaciones || "",
+    "{estudio}":        cfg.nombre || "EBD Consultores",
+    "{cuitEstudio}":    cfg.cuit || "",
+    "{mailEstudio}":    cfg.mail || "",
+    "{telEstudio}":     cfg.tel || ""
+  };
+
+  function reemplazar(txt){
+    Object.keys(vars).forEach(function(k){ txt = txt.split(k).join(vars[k]); });
+    return txt;
+  }
+  var cuerpo = reemplazar(pl.cuerpo);
+  if (liq.observaciones && pl.cuerpo.indexOf("{observaciones}") === -1){
+    cuerpo = cuerpo.replace("Ante cualquier duda", liq.observaciones + "\n\nAnte cualquier duda");
+  }
+  return { asunto: reemplazar(pl.asunto), cuerpo: cuerpo, total: total, para: c.email || "" };
+}
+
+function renderMails(){
+  var periodo = monthInputAPeriodo($("mailPeriodo").value);
+  var pl = ESTADO.config.plantilla || PLANTILLA_DEFECTO;
+  $("plantillaAsunto").value = pl.asunto;
+  $("plantillaCuerpo").value = pl.cuerpo;
+  $("ayudaVariables").innerHTML = "Variables: " +
+    ["{cliente}","{cuit}","{categoria}","{periodo}","{periodoLargo}","{detalleImpuestos}","{total}",
+     "{bloqueVep}","{bloqueRecategorizacion}","{observaciones}","{estudio}","{cuitEstudio}","{mailEstudio}","{telEstudio}"]
+    .map(function(v){ return '<span class="mono">' + v + "</span>"; }).join(" · ");
+
+  var ejs = ESTADO.config.emailjs || {};
+  if (!ejs.serviceId || !ejs.templateId || !ejs.publicKey){
+    $("avisoEmailjs").innerHTML = '<div class="aviso warn"><span>⚠️</span><div><b>EmailJS no está configurado.</b> ' +
+      'Podés igual abrir cada mail en Gmail con el texto ya armado. Para el envío automático, cargá las claves en ' +
+      '<a href="#" onclick="irA(\'tabConfig\');return false;">Configuración</a>.</div></div>';
+  } else {
+    $("avisoEmailjs").innerHTML = '<div class="aviso ok"><span>✅</span><div>EmailJS configurado. Los mails salen desde la casilla conectada del estudio.</div></div>';
+  }
+
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+  ids.sort(function(a,b){ return ESTADO.clientes[a].razonSocial.localeCompare(ESTADO.clientes[b].razonSocial); });
+
+  if (!ids.length){
+    $("tablaMails").innerHTML = '<div class="vacio"><div class="ico">✉️</div><div>No hay clientes cargados.</div></div>';
+    return;
+  }
+
+  var html = '<div class="tabla-wrap"><table><thead><tr>' +
+    '<th style="width:38px"><input type="checkbox" id="mailTodos"></th>' +
+    "<th>Cliente</th><th>Correo</th><th class=num>Total a pagar</th><th>Estado</th><th></th></tr></thead><tbody>";
+
+  ids.forEach(function(id){
+    var c = ESTADO.clientes[id], liq = liqDe(id, periodo);
+    var tot = totalLiq(c, liq);
+    var puede = !!c.email && tot > 0;
+    html += "<tr>" +
+      '<td><input type="checkbox" class="chkMail" value="' + id + '"' + (puede ? "" : " disabled") + (puede && !liq.enviado ? " checked" : "") + "></td>" +
+      "<td><b>" + esc(c.razonSocial) + "</b></td>" +
+      "<td>" + (c.email ? esc(c.email) : '<span class="badge b-rojo">sin correo</span>') + "</td>" +
+      '<td class="num">' + (tot ? pesos(tot) : '<span style="color:#B06000">sin liquidar</span>') + "</td>" +
+      "<td>" + (liq.enviado
+        ? '<span class="badge b-verde">Enviado ' + (liq.fechaEnvio || "").slice(0,10).split("-").reverse().join("/") + "</span>"
+        : '<span class="badge b-gris">Sin enviar</span>') + "</td>" +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn-icono" onclick="verMail(\'' + id + "','" + periodo + '\')" title="Ver el mail">👁️</button>' +
+        '<button class="btn-icono" onclick="abrirEnGmail(\'' + id + "','" + periodo + '\')" title="Abrir en Gmail">📧</button>' +
+      "</td></tr>";
+  });
+  $("tablaMails").innerHTML = html + "</tbody></table></div>";
+
+  $("mailTodos").onclick = function(){
+    var v = this.checked;
+    Array.prototype.forEach.call(document.querySelectorAll(".chkMail"), function(ch){ if (!ch.disabled) ch.checked = v; });
+  };
+}
+
+function verMail(clienteId, periodo){
+  var m = armarMail(clienteId, periodo);
+  abrirModal("Previsualización del mail",
+    '<div class="campo"><label>Para</label><input type="text" value="' + esc(m.para || "(sin correo cargado)") + '" readonly></div>' +
+    '<div class="campo"><label>Asunto</label><input type="text" value="' + esc(m.asunto) + '" readonly></div>' +
+    '<div class="campo"><label>Cuerpo</label><textarea readonly style="min-height:320px;background:#F8F9FA">' + esc(m.cuerpo) + "</textarea></div>",
+    [
+      { texto:"Abrir en Gmail", clase:"sec", accion:function(){ abrirEnGmail(clienteId, periodo); } },
+      { texto:"Cerrar", clase:"gris", accion:cerrarModal }
+    ], "ancho");
+}
+
+function abrirEnGmail(clienteId, periodo){
+  var m = armarMail(clienteId, periodo);
+  if (!m.para){ toast("Este cliente no tiene correo cargado", "error"); return; }
+  var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(m.para) +
+            "&su=" + encodeURIComponent(m.asunto) + "&body=" + encodeURIComponent(m.cuerpo);
+  window.open(url, "_blank");
+}
+
+$("btnPreviewMail").onclick = function(){
+  var sel = Array.prototype.filter.call(document.querySelectorAll(".chkMail"), function(c){ return c.checked; });
+  if (!sel.length){ toast("No hay clientes seleccionados", "error"); return; }
+  verMail(sel[0].value, monthInputAPeriodo($("mailPeriodo").value));
+};
+
+$("btnEnviarMails").onclick = function(){
+  var periodo = monthInputAPeriodo($("mailPeriodo").value);
+  var ids = Array.prototype.filter.call(document.querySelectorAll(".chkMail"), function(c){ return c.checked; })
+                 .map(function(c){ return c.value; });
+  if (!ids.length){ toast("Elegí al menos un cliente", "error"); return; }
+
+  var ejs = ESTADO.config.emailjs || {};
+  if (!ejs.serviceId || !ejs.templateId || !ejs.publicKey){
+    toast("Falta configurar EmailJS. Usá el botón de Gmail por cliente.", "error");
+    irA("tabConfig");
+    return;
+  }
+
+  abrirModal("Confirmar envío",
+    '<div class="aviso warn"><span>⚠️</span><div>Se van a enviar <b>' + ids.length + " correos</b> a los clientes seleccionados, " +
+    "con los importes cargados en " + periodoLargo(periodo) + ". Esta acción no se puede deshacer.</div></div>" +
+    '<ul class="lista-simple">' + ids.map(function(id){
+      var c = ESTADO.clientes[id], m = armarMail(id, periodo);
+      return '<li><div class="crece"><div class="tit">' + esc(c.razonSocial) + '</div><div class="sub">' + esc(c.email) + "</div></div>" +
+             "<b>" + pesos(m.total) + "</b></li>";
+    }).join("") + "</ul>",
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Enviar " + ids.length + " correos", id:"btnConfirmEnvio", accion:function(){ enviarMails(ids, periodo); } }
+    ], "ancho");
+};
+
+function enviarMails(ids, periodo){
+  var ejs = ESTADO.config.emailjs;
+  var btn = $("btnConfirmEnvio");
+  btn.disabled = true;
+  emailjs.init({ publicKey: ejs.publicKey });
+
+  var ok = 0, fallo = [], i = 0;
+  function siguiente(){
+    if (i >= ids.length){
+      cerrarModal();
+      toast(ok + " correos enviados" + (fallo.length ? " · " + fallo.length + " fallaron" : ""), fallo.length ? "error" : "ok");
+      renderMails();
+      return;
+    }
+    var id = ids[i], m = armarMail(id, periodo);
+    btn.textContent = "Enviando " + (i+1) + " de " + ids.length + "…";
+
+    emailjs.send(ejs.serviceId, ejs.templateId, {
+      to_email: m.para,
+      to_name: ESTADO.clientes[id].razonSocial,
+      subject: m.asunto,
+      message: m.cuerpo,
+      reply_to: (ESTADO.config.estudio || {}).mail || ""
+    }).then(function(){
+      ok++;
+      var datos = { enviado:true, fechaEnvio:new Date().toISOString() };
+      ref("liquidaciones/" + id + "/" + periodo).update(datos);
+      if (!ESTADO.liquidaciones[id]) ESTADO.liquidaciones[id] = {};
+      ESTADO.liquidaciones[id][periodo] = Object.assign(ESTADO.liquidaciones[id][periodo] || {}, datos);
+    }).catch(function(e){
+      fallo.push(ESTADO.clientes[id].razonSocial + ": " + (e.text || e.message || "error"));
+    }).then(function(){
+      i++; siguiente();
+    });
+  }
+  siguiente();
+}
+
+$("btnGuardarPlantilla").onclick = function(){
+  var pl = { asunto: $("plantillaAsunto").value, cuerpo: $("plantillaCuerpo").value };
+  ref("config/plantilla").set(pl).then(function(){
+    ESTADO.config.plantilla = pl;
+    toast("Plantilla guardada", "ok");
+  });
+};
+
+/* ---------- 17. ESCALAS ARCA ---------- */
+function renderEscala(){
+  var claves = Object.keys(ESTADO.escalas).sort().reverse();
+  var sel = $("selEscala");
+  sel.innerHTML = claves.map(function(k){
+    return '<option value="' + k + '">Vigente desde ' + ESTADO.escalas[k].vigencia.split("-").reverse().join("/") + "</option>";
+  }).join("");
+  sel.onchange = pintarEscala;
+  pintarEscala();
+}
+
+function pintarEscala(){
+  var k = $("selEscala").value;
+  var e = ESTADO.escalas[k];
+  if (!e) return;
+  $("escalaVigencia").value  = e.vigencia;
+  $("escalaAlquileres").value = e.alquileres;
+
+  var html = '<div class="tabla-wrap"><table><thead><tr>' +
+    "<th>Cat.</th><th class=num>Ingresos brutos anuales</th><th class=num>Sup. (m²)</th><th class=num>Energía (Kw)</th>" +
+    "<th class=num>Cuota servicios</th><th class=num>Cuota venta de bienes</th></tr></thead><tbody>";
+
+  LETRAS.forEach(function(l){
+    var c = e.categorias[l] || {};
+    html += '<tr><td><span class="cat-chip">' + l + "</span></td>" +
+      '<td class="num"><input type="number" step="0.01" data-cat="' + l + '" data-campo="ingresos" value="' + (c.ingresos || 0) + '" style="width:160px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
+      '<td class="num"><input type="number" data-cat="' + l + '" data-campo="sup" value="' + (c.sup || 0) + '" style="width:70px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
+      '<td class="num"><input type="number" data-cat="' + l + '" data-campo="kw" value="' + (c.kw || 0) + '" style="width:85px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
+      '<td class="num"><input type="number" step="0.01" data-cat="' + l + '" data-campo="cuotaServicios" value="' + (c.cuotaServicios || 0) + '" style="width:130px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
+      '<td class="num"><input type="number" step="0.01" data-cat="' + l + '" data-campo="cuotaBienes" value="' + (c.cuotaBienes || 0) + '" style="width:130px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
+      "</tr>";
+  });
+  $("tablaEscala").innerHTML = html + "</tbody></table></div>";
+}
+
+$("btnGuardarEscala").onclick = function(){
+  var k = $("selEscala").value;
+  var e = JSON.parse(JSON.stringify(ESTADO.escalas[k]));
+  e.vigencia   = $("escalaVigencia").value;
+  e.alquileres = parseFloat($("escalaAlquileres").value) || 0;
+  Array.prototype.forEach.call($("tablaEscala").querySelectorAll("input[data-cat]"), function(inp){
+    if (!e.categorias[inp.dataset.cat]) e.categorias[inp.dataset.cat] = {};
+    e.categorias[inp.dataset.cat][inp.dataset.campo] = parseFloat(inp.value) || 0;
+  });
+
+  var nuevaK = e.vigencia.replace(/-/g,"");
+  var updates = {};
+  if (nuevaK !== k) updates["escalas/" + k] = null;
+  updates["escalas/" + nuevaK] = e;
+
+  ref("").update(updates).then(function(){
+    if (nuevaK !== k) delete ESTADO.escalas[k];
+    ESTADO.escalas[nuevaK] = e;
+    toast("Escala guardada", "ok");
+    renderEscala(); renderHome();
+  }).catch(function(err){ toast("Error: " + err.message, "error"); });
+};
+
+$("btnNuevaEscala").onclick = function(){
+  abrirModal("Nueva vigencia",
+    '<div class="aviso info"><span>ℹ️</span><div>Se copia la escala actual como punto de partida. Después editás los importes con los valores nuevos que publique ARCA.</div></div>' +
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Vigente desde</label><input type="date" id="neVigencia"></div>' +
+      '<div class="campo"><label>Aumentar todo un %</label><input type="number" step="0.01" id="neAumento" placeholder="Ej: 16.8"><div class="ayuda">Opcional: aplica el % a topes y cuotas.</div></div>' +
+    "</div>",
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Crear", accion:function(){
+          var v = $("neVigencia").value;
+          if (!v){ toast("Poné la fecha de vigencia", "error"); return; }
+          var base = ESTADO.escalas[$("selEscala").value];
+          var e = JSON.parse(JSON.stringify(base));
+          e.vigencia = v;
+          var pct = parseFloat($("neAumento").value);
+          if (pct){
+            var f = 1 + pct/100;
+            e.alquileres = Math.round(e.alquileres * f * 100) / 100;
+            LETRAS.forEach(function(l){
+              ["ingresos","cuotaServicios","cuotaBienes"].forEach(function(campo){
+                e.categorias[l][campo] = Math.round(e.categorias[l][campo] * f * 100) / 100;
+              });
+            });
+          }
+          var k = v.replace(/-/g,"");
+          ref("escalas/" + k).set(e).then(function(){
+            ESTADO.escalas[k] = e;
+            cerrarModal(); toast("Nueva vigencia creada", "ok");
+            renderEscala();
+          });
+        } }
+    ]);
+};
+
+/* ---------- 18. CONFIGURACIÓN Y BÓVEDA ---------- */
+function renderConfig(){
+  var cfg = ESTADO.config.estudio || {};
+  $("cfgNombre").value = cfg.nombre || "";
+  $("cfgCuit").value   = cfg.cuit || "";
+  $("cfgMail").value   = cfg.mail || "";
+  $("cfgTel").value    = cfg.tel || "";
+
+  var ejs = ESTADO.config.emailjs || {};
+  $("cfgEjsService").value  = ejs.serviceId || "";
+  $("cfgEjsTemplate").value = ejs.templateId || "";
+  $("cfgEjsKey").value      = ejs.publicKey || "";
+
+  pintarEstadoBoveda();
+
+  ref("usuarios").once("value").then(function(s){
+    var us = s.val() || {};
+    var ks = Object.keys(us);
+    $("listaUsuarios").innerHTML = ks.length
+      ? '<ul class="lista-simple">' + ks.map(function(uid){
+          var u = us[uid];
+          return '<li><div class="crece"><div class="tit">' + esc(u.nombre || u.email) + '</div><div class="sub">' + esc(u.email) + "</div></div>" +
+            '<span class="badge ' + (u.rol === "admin" ? "b-azul" : (u.rol === "editor" ? "b-verde" : "b-gris")) + '">' + esc(u.rol) + "</span></li>";
+        }).join("") + "</ul>"
+      : '<div style="color:#5F6368;font-size:13px">Todavía no hay usuarios registrados.</div>';
+  });
+}
+
+$("btnGuardarEstudio").onclick = function(){
+  var cfg = { nombre:$("cfgNombre").value.trim(), cuit:$("cfgCuit").value.trim(),
+              mail:$("cfgMail").value.trim(), tel:$("cfgTel").value.trim() };
+  ref("config/estudio").set(cfg).then(function(){
+    ESTADO.config.estudio = cfg; toast("Datos guardados", "ok");
+  });
+};
+$("btnGuardarEjs").onclick = function(){
+  var ejs = { serviceId:$("cfgEjsService").value.trim(), templateId:$("cfgEjsTemplate").value.trim(),
+              publicKey:$("cfgEjsKey").value.trim() };
+  ref("config/emailjs").set(ejs).then(function(){
+    ESTADO.config.emailjs = ejs; toast("EmailJS configurado", "ok");
+  });
+};
+$("btnNuevoUsuario").onclick = function(){
+  abrirModal("Asignar rol",
+    '<div class="aviso info"><span>ℹ️</span><div>Primero creá el usuario en <b>Firebase Console → Authentication → Users</b>. Después entra una vez al sistema y aparece en esta lista con rol "lector"; volvé acá para cambiarle el rol.</div></div>' +
+    '<div class="campo"><label>UID del usuario (Firebase Authentication)</label><input type="text" id="nuUid"></div>' +
+    '<div class="campo"><label>Nombre</label><input type="text" id="nuNombre"></div>' +
+    '<div class="campo"><label>Correo</label><input type="email" id="nuMail"></div>' +
+    '<div class="campo"><label>Rol</label><select id="nuRol"><option value="lector">Lector</option><option value="editor">Editor</option><option value="admin">Admin</option></select></div>',
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Guardar", accion:function(){
+          var uid = $("nuUid").value.trim();
+          if (!uid){ toast("Falta el UID", "error"); return; }
+          ref("usuarios/" + uid).update({
+            nombre:$("nuNombre").value.trim(), email:$("nuMail").value.trim(), rol:$("nuRol").value
+          }).then(function(){ cerrarModal(); toast("Rol asignado", "ok"); renderConfig(); });
+        } }
+    ]);
+};
+
+/* --- Bóveda --- */
+function pintarEstadoBoveda(){
+  var cont = $("estadoBoveda");
+  var b = ESTADO.config.boveda;
+  if (!b){
+    cont.innerHTML = '<div class="aviso warn"><span>🔓</span><div>La bóveda todavía no está inicializada.</div></div>';
+  } else if (ESTADO.claveMaestra){
+    cont.innerHTML = '<div class="aviso ok"><span>🔓</span><div><b>Bóveda abierta</b> en esta sesión. Se cierra sola al salir del sistema.</div></div>';
+  } else {
+    cont.innerHTML = '<div class="aviso info"><span>🔒</span><div>Bóveda inicializada y <b>cerrada</b>. Escribí la contraseña maestra para ver o cargar claves.</div></div>';
+  }
+}
+
+$("btnBoveda").onclick = function(){ irA("tabConfig"); setTimeout(abrirDialogoBoveda, 120); };
+$("btnConfigBoveda").onclick = abrirDialogoBoveda;
+
+function abrirDialogoBoveda(){
+  var b = ESTADO.config.boveda;
+  if (!b){
+    abrirModal("Inicializar la bóveda",
+      '<div class="aviso warn"><span>⚠️</span><div>Elegí una contraseña maestra y <b>guardala en un lugar seguro</b>. ' +
+      "No se almacena en ningún lado: si la perdés, las claves guardadas quedan irrecuperables.</div></div>" +
+      '<div class="campo"><label>Contraseña maestra (mínimo 12 caracteres)</label><input type="password" id="bvPass1"></div>' +
+      '<div class="campo"><label>Repetir contraseña</label><input type="password" id="bvPass2"></div>',
+      [
+        { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+        { texto:"Inicializar", accion:inicializarBoveda }
+      ], "angosto");
+  } else if (ESTADO.claveMaestra){
+    listarCredenciales();
+  } else {
+    abrirModal("Abrir la bóveda",
+      '<div class="campo"><label>Contraseña maestra</label><input type="password" id="bvPass"></div>' +
+      '<div id="bvError"></div>',
+      [
+        { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+        { texto:"Abrir", accion:desbloquearBoveda }
+      ], "angosto");
+    setTimeout(function(){
+      $("bvPass").focus();
+      $("bvPass").onkeydown = function(e){ if (e.key === "Enter") desbloquearBoveda(); };
+    }, 100);
+  }
+}
+
+function inicializarBoveda(){
+  var p1 = $("bvPass1").value, p2 = $("bvPass2").value;
+  if (p1.length < 12){ toast("La contraseña tiene que tener al menos 12 caracteres", "error"); return; }
+  if (p1 !== p2){ toast("Las contraseñas no coinciden", "error"); return; }
+
+  var salt = bufAB64(crypto.getRandomValues(new Uint8Array(16)));
+  derivarClave(p1, salt).then(function(clave){
+    return cifrar(clave, VERIFICADOR).then(function(v){
+      var b = { salt: salt, verificador: v, creada: new Date().toISOString() };
+      return ref("config/boveda").set(b).then(function(){
+        ESTADO.config.boveda = b;
+        ESTADO.claveMaestra = clave;
+        cerrarModal(); toast("Bóveda inicializada", "ok"); pintarEstadoBoveda();
+      });
+    });
+  }).catch(function(e){ toast("Error: " + e.message, "error"); });
+}
+
+function desbloquearBoveda(){
+  var pass = $("bvPass").value;
+  var b = ESTADO.config.boveda;
+  derivarClave(pass, b.salt).then(function(clave){
+    return descifrar(clave, b.verificador).then(function(txt){
+      if (txt !== VERIFICADOR) throw new Error("mal");
+      ESTADO.claveMaestra = clave;
+      cerrarModal(); toast("Bóveda abierta", "ok");
+      pintarEstadoBoveda(); listarCredenciales();
+    });
+  }).catch(function(){
+    $("bvError").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>Contraseña incorrecta.</div></div>';
+  });
+}
+
+var ORGANISMOS = [
+  { clave:"arca", nombre:"ARCA (clave fiscal)" },
+  { clave:"arba", nombre:"ARBA (CIT)" },
+  { clave:"agip", nombre:"AGIP (clave ciudad)" },
+  { clave:"municipal", nombre:"Municipio" }
+];
+
+function listarCredenciales(){
+  ref("credenciales").once("value").then(function(s){
+    var cred = s.val() || {};
+    var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+    ids.sort(function(a,b){ return ESTADO.clientes[a].razonSocial.localeCompare(ESTADO.clientes[b].razonSocial); });
+
+    var html = '<div class="aviso info"><span>🔒</span><div>Todo lo que se guarda acá se cifra con AES-256-GCM antes de subirse. ' +
+      "En la base de Firebase solo queda texto ilegible.</div></div>" +
+      '<div class="tabla-wrap"><table><thead><tr><th>Cliente</th>' +
+      ORGANISMOS.map(function(o){ return "<th>" + o.nombre + "</th>"; }).join("") + "<th></th></tr></thead><tbody>";
+
+    ids.forEach(function(id){
+      html += "<tr><td><b>" + esc(ESTADO.clientes[id].razonSocial) + "</b></td>";
+      ORGANISMOS.forEach(function(o){
+        var tiene = cred[id] && cred[id][o.clave];
+        html += "<td>" + (tiene ? '<span class="badge b-verde">✓ guardada</span>' : '<span class="badge b-gris">—</span>') + "</td>";
+      });
+      html += '<td><button class="btn sec chico" onclick="editarCredenciales(\'' + id + '\')">Ver / editar</button></td></tr>';
+    });
+
+    abrirModal("Bóveda de claves", html + "</tbody></table></div>",
+      [{ texto:"Cerrar", clase:"gris", accion:cerrarModal }], "ancho");
+  });
+}
+
+function editarCredenciales(clienteId){
+  if (!ESTADO.claveMaestra){ toast("Abrí primero la bóveda", "error"); return; }
+  ref("credenciales/" + clienteId).once("value").then(function(s){
+    var cred = s.val() || {};
+    var pendientes = ORGANISMOS.map(function(o){
+      if (!cred[o.clave]) return Promise.resolve({ clave:o.clave, usuario:"", pass:"" });
+      return Promise.all([
+        cred[o.clave].usuario ? descifrar(ESTADO.claveMaestra, cred[o.clave].usuario) : Promise.resolve(""),
+        cred[o.clave].pass    ? descifrar(ESTADO.claveMaestra, cred[o.clave].pass)    : Promise.resolve("")
+      ]).then(function(r){ return { clave:o.clave, usuario:r[0], pass:r[1] }; });
+    });
+
+    Promise.all(pendientes).then(function(vals){
+      var mapa = {};
+      vals.forEach(function(v){ mapa[v.clave] = v; });
+      var html = ORGANISMOS.map(function(o){
+        var v = mapa[o.clave];
+        return '<div class="seccion-tit">' + esc(o.nombre) + "</div>" +
+          '<div class="grid g2">' +
+            '<div class="campo"><label>Usuario / CUIT</label><input type="text" id="cr_' + o.clave + '_u" value="' + esc(v.usuario) + '"></div>' +
+            '<div class="campo"><label>Clave</label><input type="password" id="cr_' + o.clave + '_p" value="' + esc(v.pass) + '"></div>' +
+          "</div>";
+      }).join("");
+
+      abrirModal("Claves de " + ESTADO.clientes[clienteId].razonSocial,
+        '<div class="aviso warn"><span>⚠️</span><div>Dejá los campos vacíos para no guardar nada de ese organismo.</div></div>' + html,
+        [
+          { texto:"Volver", clase:"gris", accion:listarCredenciales },
+          { texto:"Guardar cifrado", accion:function(){ guardarCredenciales(clienteId); } }
+        ], "ancho");
+    }).catch(function(){ toast("No pude descifrar: ¿la contraseña maestra es la correcta?", "error"); });
+  });
+}
+
+function guardarCredenciales(clienteId){
+  var tareas = ORGANISMOS.map(function(o){
+    var u = $("cr_" + o.clave + "_u").value.trim();
+    var p = $("cr_" + o.clave + "_p").value;
+    if (!u && !p) return Promise.resolve({ clave:o.clave, valor:null });
+    return Promise.all([
+      u ? cifrar(ESTADO.claveMaestra, u) : Promise.resolve(null),
+      p ? cifrar(ESTADO.claveMaestra, p) : Promise.resolve(null)
+    ]).then(function(r){
+      return { clave:o.clave, valor:{ usuario:r[0], pass:r[1], actualizado:new Date().toISOString() } };
+    });
+  });
+
+  Promise.all(tareas).then(function(vals){
+    var obj = {};
+    vals.forEach(function(v){ obj[v.clave] = v.valor; });
+    return ref("credenciales/" + clienteId).set(obj);
+  }).then(function(){
+    toast("Claves guardadas cifradas", "ok");
+    listarCredenciales();
+  }).catch(function(e){ toast("Error: " + e.message, "error"); });
+}
+
+/* ---------- 19. ARRANQUE ----------
+   Va último: todas las funciones y los manejadores ya quedaron definidos. */
+arrancarAuth();
+</script>
+<!-- ============ FIN SCRIPT PRINCIPAL — NO BORRAR ESTA MARCA ============ -->
+</body>
+</html>
