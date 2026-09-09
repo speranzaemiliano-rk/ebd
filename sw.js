@@ -14,7 +14,7 @@
    VERSION de acá abajo. Si no, algunos navegadores siguen mostrando la vieja.
    ========================================================================== */
 
-var VERSION = "v4";
+var VERSION = "v5";
 var CACHE   = "ebd-" + VERSION;
 
 /* Archivos propios que se guardan para que la app abra sin conexión. */
@@ -25,7 +25,8 @@ var SHELL = [
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-512.png",
-  "./apple-touch-icon.png"
+  "./apple-touch-icon.png",
+  "./mess-logo.svg"
 ];
 
 /* Dominios que NUNCA se cachean: sesiones, base de datos y envío de mails. */

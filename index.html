@@ -268,6 +268,66 @@ tbody tr:hover{background:#FAFBFC}
   .hero-txt h2{font-size:19px}
 }
 
+/* ---------- PRESENTACIÓN DE ENTRADA (dos pasos: Mess, después EBD) ----------
+   Copiada de la presentación de Mess: fondo oscuro, marca del producto en serif con
+   degradado cian→violeta→lila, y en el segundo paso el logo del estudio con el botón. */
+#ebdSplash{
+  position:fixed;inset:0;z-index:99999;background:#0A0D14;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+  opacity:1;transition:opacity .45s ease;cursor:pointer;
+}
+#ebdSplash.paso2{cursor:default}
+#ebdSplash.saliendo{opacity:0;pointer-events:none}
+#ebdSplash .sp-content{
+  position:relative;display:flex;flex-direction:column;align-items:center;
+  opacity:0;transform:translateY(8px);transition:opacity .6s ease,transform .6s ease;
+}
+#ebdSplash .sp-content.visible{opacity:1;transform:none}
+#ebdSplash .sp-logo{display:flex;align-items:center;justify-content:center}
+#ebdSplash .sp-logo img{width:clamp(120px,22vw,200px);height:auto;display:block}
+#ebdSplash .sp-logo svg{
+  width:clamp(160px,28vw,250px);height:auto;display:block;
+  filter:drop-shadow(0 8px 26px rgba(26,115,232,.38));
+}
+#ebdSplash .sp-name{
+  margin-top:18px;
+  font-family:ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  font-weight:600;font-size:clamp(1.7rem,4.4vw,2.4rem);letter-spacing:-.3px;line-height:1.1;
+  background:linear-gradient(90deg,#22D3EE,#7C5CFF 55%,#C084FC);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  max-width:90vw;text-align:center;
+}
+#ebdSplash .sp-rule{
+  width:0;height:1px;margin:14px 0 0;
+  background:linear-gradient(90deg,transparent,rgba(124,92,255,.6),transparent);
+  transition:width 1.2s cubic-bezier(.4,0,.2,1);
+}
+#ebdSplash.paso2 .sp-rule{background:linear-gradient(90deg,transparent,rgba(61,139,255,.75),transparent)}
+#ebdSplash .sp-sub{
+  margin-top:10px;font-size:.78rem;font-weight:600;letter-spacing:2.4px;text-transform:uppercase;
+  color:#6f6c8a;max-width:88vw;text-align:center;
+}
+#ebdSplash.paso2 .sp-sub{color:rgba(191,216,255,.62)}
+#ebdSplash .sp-enter{
+  margin-top:32px;padding:9px 28px;border:1px solid rgba(61,139,255,.55);background:transparent;
+  color:#BFD8FF;font-family:"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:9.5px;
+  letter-spacing:.32em;text-transform:uppercase;border-radius:3px;cursor:pointer;
+  opacity:0;pointer-events:none;transition:opacity .5s ease,border-color .2s,color .2s,background .2s;
+}
+#ebdSplash.paso2 .sp-enter{opacity:1;pointer-events:auto}
+#ebdSplash .sp-enter:hover,#ebdSplash .sp-enter:focus-visible{
+  border-color:rgba(61,139,255,.95);color:#fff;background:rgba(26,115,232,.14);outline:none;
+}
+#ebdSplash .sp-pista{
+  position:absolute;bottom:28px;left:0;right:0;text-align:center;
+  font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.28);
+  transition:opacity .3s;
+}
+#ebdSplash.paso2 .sp-pista{opacity:0}
+@media (prefers-reduced-motion:reduce){
+  #ebdSplash,#ebdSplash .sp-content,#ebdSplash .sp-rule,#ebdSplash .sp-enter{transition:none}
+}
+
 /* ---------- CUADRO DE DOBLE ENTRADA (honorarios) ---------- */
 .dobleentrada{min-width:920px}
 .dobleentrada th.cli,.dobleentrada td.cli{
@@ -400,6 +460,116 @@ tbody tr:hover{background:#FAFBFC}
 </style>
 </head>
 <body>
+
+<!-- ==================== PRESENTACIÓN DE ENTRADA ====================
+     Dos momentos, igual que en Mess: primero la marca del producto (5 segundos,
+     o un clic para saltearla) y después el logo del estudio con el botón para
+     entrar. Va antes que todo en el HTML para que aparezca desde el primer frame. -->
+<div id="ebdSplash" role="dialog" aria-label="Presentación de entrada">
+  <div class="sp-content" id="spContent">
+    <div class="sp-logo" id="spLogo">
+      <img src="mess-logo.svg" alt="Mess" width="200" height="200">
+    </div>
+    <div class="sp-name" id="spName">Mess</div>
+    <div class="sp-rule" id="spRule"></div>
+    <div class="sp-sub" id="spSub">Sistema de Gestión</div>
+    <button class="sp-enter" id="spEnter" type="button">Entrar al sistema</button>
+  </div>
+  <div class="sp-pista">Clic para continuar</div>
+</div>
+<script>
+/* Presentación de entrada. Es un bloque autónomo, sin Firebase ni nada del
+   sistema: tiene que correr aunque el resto tarde en cargar. */
+(function(){
+  var splash  = document.getElementById("ebdSplash");
+  var content = document.getElementById("spContent");
+  var btn     = document.getElementById("spEnter");
+  var rule    = document.getElementById("spRule");
+  if (!splash || !content) return;
+
+  /* Logo del estudio para el paso 2: el EBD en volumen con la órbita, en blanco
+     sobre el fondo oscuro. Es el mismo dibujo de la pantalla de ingreso; los ids
+     de los degradados llevan sufijo S para no chocar con los de las otras copias. */
+  var LOGO_EBD =
+    '<svg viewBox="10 28 100 64" role="img" aria-label="EBD Consultores">' +
+      '<defs>' +
+        '<linearGradient id="caraS" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CBE0FF"/></linearGradient>' +
+        '<linearGradient id="cantoS" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#0A3D96"/><stop offset="1" stop-color="#05215C"/></linearGradient>' +
+        '<linearGradient id="aroS" x1="0" y1="0" x2="1" y2="0">' +
+          '<stop offset="0" stop-color="#FFFFFF" stop-opacity=".18"/>' +
+          '<stop offset=".32" stop-color="#FFFFFF" stop-opacity="1"/>' +
+          '<stop offset=".70" stop-color="#B4D5FF" stop-opacity=".92"/>' +
+          '<stop offset="1" stop-color="#FFFFFF" stop-opacity=".18"/></linearGradient>' +
+        '<clipPath id="delanteS"><rect x="0" y="63" width="120" height="57"/></clipPath>' +
+      '</defs>' +
+      '<ellipse class="orbita" cx="60" cy="60" rx="50" ry="21.5" fill="none" stroke="url(#aroS)" stroke-width="3.2" opacity=".5"/>' +
+      '<g font-family="Google Sans, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">' +
+        '<g fill="url(#cantoS)">' +
+          '<text x="60.4" y="72.4">EBD</text><text x="60.8" y="72.8">EBD</text>' +
+          '<text x="61.2" y="73.2">EBD</text><text x="61.6" y="73.6">EBD</text>' +
+          '<text x="62.0" y="74.0">EBD</text><text x="62.4" y="74.4">EBD</text>' +
+          '<text x="62.8" y="74.8">EBD</text><text x="63.2" y="75.2">EBD</text>' +
+          '<text x="63.6" y="75.6">EBD</text><text x="64.0" y="76.0">EBD</text>' +
+          '<text x="64.4" y="76.4">EBD</text><text x="64.8" y="76.8">EBD</text>' +
+        '</g>' +
+        '<text x="60" y="72" fill="url(#caraS)">EBD</text>' +
+      '</g>' +
+      '<g clip-path="url(#delanteS)">' +
+        '<ellipse class="orbita" cx="60" cy="60" rx="50" ry="21.5" fill="none" stroke="url(#aroS)" stroke-width="3.2"/>' +
+      '</g>' +
+    '</svg>';
+
+  var cerrado = false, paso = 1, temporizador = null;
+
+  function cerrar(){
+    if (cerrado) return;
+    cerrado = true;
+    clearTimeout(temporizador);
+    document.removeEventListener("keydown", teclas);
+    splash.classList.add("saliendo");
+    setTimeout(function(){ if (splash.parentNode) splash.parentNode.removeChild(splash); }, 500);
+  }
+
+  /* Paso 2: se desvanece la marca del producto y entra el logo del estudio. */
+  function pasoEstudio(){
+    if (cerrado || paso === 2) return;
+    paso = 2;
+    clearTimeout(temporizador);
+    content.classList.remove("visible");
+    setTimeout(function(){
+      if (cerrado) return;
+      document.getElementById("spLogo").innerHTML = LOGO_EBD;
+      document.getElementById("spName").textContent = "";
+      document.getElementById("spSub").textContent  = "Consultores";
+      splash.classList.add("paso2");
+      rule.style.width = "0";
+      content.classList.add("visible");
+      setTimeout(function(){ rule.style.width = "120px"; }, 150);
+      setTimeout(function(){ if (btn) btn.focus({ preventScroll:true }); }, 650);
+    }, 500);
+  }
+
+  /* Enter, espacio o Escape: en el paso 1 saltean la espera; en el 2 entran. */
+  function teclas(e){
+    if (e.key !== "Enter" && e.key !== " " && e.key !== "Escape") return;
+    if (paso === 1){ e.preventDefault(); pasoEstudio(); }
+    else if (e.key === "Escape"){ e.preventDefault(); cerrar(); }
+  }
+
+  temporizador = setTimeout(pasoEstudio, 5000);
+  splash.addEventListener("click", function(){ if (paso === 1) pasoEstudio(); });
+  if (btn) btn.addEventListener("click", function(e){ e.stopPropagation(); cerrar(); });
+  document.addEventListener("keydown", teclas);
+
+  /* Entrada del paso 1: el contenido sube y la línea se abre. */
+  setTimeout(function(){
+    content.classList.add("visible");
+    setTimeout(function(){ rule.style.width = "120px"; }, 150);
+  }, 250);
+})();
+</script>
 
 <!-- ==================== LOGIN ==================== -->
 <div id="pantallaLogin">
