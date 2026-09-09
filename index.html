@@ -238,6 +238,36 @@ tbody tr:hover{background:#FAFBFC}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mono{font-family:"Roboto Mono",ui-monospace,Consolas,monospace;font-size:12.5px}
 
+/* ---------- BANDA DE BIENVENIDA DEL INICIO ---------- */
+.hero-inicio{
+  position:relative;overflow:hidden;border-radius:var(--r);margin-bottom:18px;
+  padding:26px 30px;color:#fff;display:flex;align-items:center;gap:26px;flex-wrap:wrap;
+  background:linear-gradient(135deg,#0B4BB8 0%,#1A73E8 55%,#3D8BFF 100%);
+}
+.hero-inicio::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.13;
+  background-image:
+    linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px);
+  background-size:46px 46px;
+  -webkit-mask-image:radial-gradient(circle at 18% 50%, #000, transparent 78%);
+  mask-image:radial-gradient(circle at 18% 50%, #000, transparent 78%);
+}
+.hero-inicio > *{position:relative;z-index:1}
+.hero-txt{flex:1;min-width:220px}
+.hero-txt h2{font-size:23px;font-weight:500;letter-spacing:-.4px;margin-bottom:5px}
+.hero-txt p{font-size:14px;opacity:.9;line-height:1.55}
+.hero-dato{
+  background:rgba(255,255,255,.14);border-radius:var(--r2);padding:12px 18px;
+  text-align:center;min-width:118px;
+}
+.hero-dato .n{display:block;font-size:22px;font-weight:500;line-height:1.2}
+.hero-dato .l{display:block;font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.6px;margin-top:3px}
+@media(max-width:640px){
+  .hero-inicio{padding:20px;gap:16px}
+  .hero-txt h2{font-size:19px}
+}
+
 /* ---------- CUADRO DE DOBLE ENTRADA (honorarios) ---------- */
 .dobleentrada{min-width:920px}
 .dobleentrada th.cli,.dobleentrada td.cli{
@@ -447,7 +477,8 @@ tbody tr:hover{background:#FAFBFC}
       </div>
       <button class="btn" id="btnLogin" style="width:100%;margin-top:6px">Ingresar</button>
 
-      <p class="legal">El acceso queda registrado. Si no tenés usuario, pedíselo al administrador del estudio.</p>
+      <p class="legal">La sesión se cierra al cerrar el navegador: cada vez que abrís el sistema hay que ingresar de nuevo.
+        Si no tenés usuario, pedíselo al administrador del estudio.</p>
     </div>
   </div>
 
@@ -522,6 +553,51 @@ tbody tr:hover{background:#FAFBFC}
 
     <!-- ---------- INICIO ---------- -->
     <section class="panel activo" id="tabHome">
+
+      <div class="hero-inicio">
+        <svg viewBox="10 28 100 64" width="106" height="68" role="img" aria-label="EBD Consultores">
+          <defs>
+            <linearGradient id="caraI" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CBE0FF"/>
+            </linearGradient>
+            <linearGradient id="cantoI" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#0A3D96"/><stop offset="1" stop-color="#05215C"/>
+            </linearGradient>
+            <linearGradient id="aroI" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#FFFFFF" stop-opacity=".18"/>
+              <stop offset=".32" stop-color="#FFFFFF" stop-opacity="1"/>
+              <stop offset=".70" stop-color="#B4D5FF" stop-opacity=".92"/>
+              <stop offset="1" stop-color="#FFFFFF" stop-opacity=".18"/>
+            </linearGradient>
+            <clipPath id="delanteI"><rect x="0" y="63" width="120" height="57"/></clipPath>
+          </defs>
+          <ellipse class="orbita" cx="60" cy="60" rx="50" ry="21.5" fill="none"
+                   stroke="url(#aroI)" stroke-width="3.2" opacity=".5"/>
+          <g font-family="Google Sans, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+             font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">
+            <g fill="url(#cantoI)">
+              <text x="60.4" y="72.4">EBD</text><text x="60.8" y="72.8">EBD</text>
+              <text x="61.2" y="73.2">EBD</text><text x="61.6" y="73.6">EBD</text>
+              <text x="62.0" y="74.0">EBD</text><text x="62.4" y="74.4">EBD</text>
+              <text x="62.8" y="74.8">EBD</text><text x="63.2" y="75.2">EBD</text>
+              <text x="63.6" y="75.6">EBD</text><text x="64.0" y="76.0">EBD</text>
+              <text x="64.4" y="76.4">EBD</text><text x="64.8" y="76.8">EBD</text>
+            </g>
+            <text x="60" y="72" fill="url(#caraI)">EBD</text>
+          </g>
+          <g clip-path="url(#delanteI)">
+            <ellipse class="orbita" cx="60" cy="60" rx="50" ry="21.5" fill="none"
+                     stroke="url(#aroI)" stroke-width="3.2"/>
+          </g>
+        </svg>
+        <div class="hero-txt">
+          <h2 id="heroSaludo">Bienvenido</h2>
+          <p id="heroSub">&nbsp;</p>
+        </div>
+        <div class="hero-dato"><span class="n" id="heroPeriodo">—</span><span class="l">período</span></div>
+        <div class="hero-dato"><span class="n" id="heroDeuda">—</span><span class="l">por cobrar</span></div>
+      </div>
+
       <div class="grid g4" style="margin-bottom:18px">
         <div class="kpi"><div class="lbl">Clientes activos</div><div class="val" id="kpiClientes">—</div><div class="pie" id="kpiClientesPie">&nbsp;</div></div>
         <div class="kpi bad"><div class="lbl">Deben recategorizar</div><div class="val" id="kpiRecat">—</div><div class="pie">al corte vigente</div></div>
@@ -1228,6 +1304,16 @@ if (!FIREBASE_OK){
   $("btnLogin").disabled = true;
   return;
 }
+/* La sesión dura lo que dure el navegador abierto: al cerrarlo hay que volver
+   a ingresar a mano. Con la persistencia que trae Firebase de fábrica (LOCAL)
+   el sistema entraba solo para siempre, que es justo lo que no queremos
+   cuando se trabaja desde varias computadoras. */
+auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+  .catch(function(){ /* si el navegador lo bloquea, seguimos con el de fábrica */ })
+  .then(vigilarSesion);
+} /* fin arrancarAuth */
+
+function vigilarSesion(){
 auth.onAuthStateChanged(function(u){
   if (!u){
     ESTADO.usuario = null;
@@ -1297,7 +1383,7 @@ auth.onAuthStateChanged(function(u){
     auth.signOut();
   });
 });
-} /* fin arrancarAuth */
+} /* fin vigilarSesion */
 
 /* ---------- 9. CARGA DE DATOS ---------- */
 function cargarTodo(){
@@ -1445,6 +1531,25 @@ function renderHome(){
   $("kpiCerca").textContent       = cerca;
   $("kpiSinLiq").textContent      = sinLiq;
   $("kpiPeriodo").textContent     = periodoLargo(per);
+
+  /* Banda de bienvenida */
+  var d = new Date();
+  var DIAS = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+  var hora = d.getHours();
+  var saludo = hora < 13 ? "Buen día" : (hora < 20 ? "Buenas tardes" : "Buenas noches");
+  var quien = (ESTADO.usuario && ESTADO.usuario.email) ? ESTADO.usuario.email.split("@")[0] : "";
+  $("heroSaludo").textContent = saludo + (quien ? ", " + quien : "");
+
+  var pendiente = [];
+  if (suben)  pendiente.push(suben + (suben === 1 ? " cliente tiene" : " clientes tienen") + " que recategorizar");
+  if (sinLiq) pendiente.push(sinLiq + " sin liquidar");
+  $("heroSub").textContent =
+    "Hoy es " + DIAS[d.getDay()] + " " + d.getDate() + " de " + MESES[d.getMonth()] + " de " + d.getFullYear() + "." +
+    (pendiente.length ? " Pendiente: " + pendiente.join(" y ") + "." : " No hay nada pendiente.");
+
+  var deudaTotal = Object.keys(ESTADO.clientes).reduce(function(a, id){ return a + deudaCliente(id); }, 0);
+  $("heroPeriodo").textContent = periodoCorto(per);
+  $("heroDeuda").textContent   = pesosCorto(deudaTotal);
 
   filas.sort(function(a,b){ return b.an.porcentaje - a.an.porcentaje; });
 
