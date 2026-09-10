@@ -2428,14 +2428,24 @@ function confirmarImportacion(clienteId, tipo, registros, porPeriodo){
   var updates = {};
   var pers = Object.keys(porPeriodo);
 
-  /* Se borra el período completo de ese tipo y se vuelve a escribir. */
-  pers.forEach(function(p){
-    updates["comprobantes/" + clienteId + "/" + p + "/" + tipo] = null;
-  });
+  /* Cada período se escribe entero, de una sola vez. Antes se hacían dos
+     cosas en el mismo pedido: poner el nodo del período en null y, adentro,
+     escribir cada comprobante. Firebase rechaza un update donde una ruta es
+     ancestro de otra, y avisa lanzando el error en el acto en vez de fallar
+     la promesa: el .catch de abajo no se enteraba y el botón Importar no
+     hacía absolutamente nada. Armando el objeto completo hay una sola ruta
+     por período, y reemplazar ya borra lo que había. */
+  var docsPorPeriodo = {};
+  pers.forEach(function(p){ docsPorPeriodo[p] = {}; });
 
   registros.forEach(function(reg, i){
     var clave = reg.ptoVta + "-" + reg.nro + "-" + i;
-    updates["comprobantes/" + clienteId + "/" + reg.periodo + "/" + tipo + "/" + clave] = reg;
+    if (!docsPorPeriodo[reg.periodo]) docsPorPeriodo[reg.periodo] = {};
+    docsPorPeriodo[reg.periodo][clave] = reg;
+  });
+
+  Object.keys(docsPorPeriodo).forEach(function(p){
+    updates["comprobantes/" + clienteId + "/" + p + "/" + tipo] = docsPorPeriodo[p];
   });
 
   pers.forEach(function(p){
@@ -2452,7 +2462,18 @@ function confirmarImportacion(clienteId, tipo, registros, porPeriodo){
     ESTADO.totales[clienteId][p] = nuevo;
   });
 
-  ref("").update(updates).then(function(){
+  /* El try/catch no sobra: Firebase valida las rutas antes de salir a la red
+     y avisa lanzando, no rechazando la promesa. Sin esto, un error de armado
+     deja el botón sin respuesta y sin ninguna explicación en pantalla. */
+  var guardado;
+  try {
+    guardado = ref("").update(updates);
+  } catch (e) {
+    toast("No pude armar la importación: " + (e.message || e), "error");
+    return;
+  }
+
+  guardado.then(function(){
     cerrarModal();
     toast(registros.length + " comprobantes importados", "ok");
     $("impResultado").innerHTML = '<div class="aviso ok"><span>✅</span><div>Importación completada. ' +
