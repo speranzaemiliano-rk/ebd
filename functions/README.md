@@ -18,8 +18,8 @@ tu Railway, no hay cuentas de terceros, ni límites, ni costos.
 | | ¿Se puede? | Cómo |
 |---|---|---|
 | Emitidos por un cliente que factura **con un sistema conectado** (web service) | Sí | WSFE, con certificado |
-| Emitidos por un cliente que factura **desde el portal** de ARCA | **No** | Van por CSV o Excel |
-| Comprobantes **recibidos** | **No** | ARCA no tiene web service. Van por CSV o Excel |
+| Emitidos por un cliente que factura **desde el portal** de ARCA | Por el portal | Automatizando "Mis Comprobantes" con la clave fiscal del cliente |
+| Comprobantes **recibidos** | Por el portal | Ídem: ARCA no tiene web service para esto |
 | **Constancia de inscripción** | Todavía no | Otro web service, con su propia adhesión |
 
 ⚠️ **La limitación grande es la primera, y conviene entenderla antes de
@@ -34,11 +34,26 @@ backend lo marca como `sinPuntosWeb: true` en la respuesta para que el sistema
 pueda decirlo con todas las letras en vez de mostrar "no hay comprobantes".
 No es un trámite que falte: no hay forma de traerlos por acá.
 
-Para esos clientes —o sea, casi todos— el camino sigue siendo el archivo de
-Mis Comprobantes. La única alternativa sería automatizar ese portal con el
-usuario y la clave fiscal de cada cliente, mandándolos a un servicio de
-terceros. Es una decisión del estudio, no una cuestión técnica; por ahora este
-backend **no** lo hace.
+Para esos clientes —o sea, casi todos— hay dos caminos: el archivo de Mis
+Comprobantes, o `POST /portal/comprobantes`, que automatiza ese portal.
+
+### El camino del portal, y lo que cuesta
+
+`POST /portal/comprobantes` trae emitidos **y** recibidos de cualquier cliente,
+incluidos los del portal. Lo hace a través de **Afip SDK**, que entra al portal
+con el **usuario y la clave fiscal del contribuyente**.
+
+Eso hay que entenderlo antes de usarlo: una clave fiscal no abre solo los
+comprobantes, abre **toda la cuenta** de esa persona en ARCA. Al usar esta
+función, esas credenciales viajan a un tercero. Es una decisión del estudio
+frente a sus clientes, no una cuestión técnica.
+
+Por eso las credenciales **no se guardan acá**: no hay variable de entorno con
+claves de clientes, ni quedan en disco. Llegan en el cuerpo del pedido, se usan
+una vez y se descartan. El sistema las saca de la bóveda cifrada en el momento,
+con la contraseña maestra que solo vive en el navegador de quien la escribió.
+
+Necesita la variable `AFIP_SDK_TOKEN` (el token de la cuenta de Afip SDK).
 
 ---
 
@@ -115,6 +130,7 @@ base64 -w0 ebd.key
 | `AFIP_ENV` | `production` para datos reales, `testing` para probar | Sí |
 | `APP_API_TOKEN` | Una contraseña larga inventada por vos. El sistema la manda en cada pedido | Sí |
 | `ALLOWED_ORIGINS` | `https://speranzaemiliano-rk.github.io` | Recomendada |
+| `AFIP_SDK_TOKEN` | Token de la cuenta de Afip SDK. Solo hace falta para traer del portal | Para el portal |
 
 Sin `APP_API_TOKEN` el backend queda abierto a cualquiera que descubra la URL.
 Sin `ALLOWED_ORIGINS`, cualquier página puede llamarlo desde el navegador.
@@ -147,6 +163,7 @@ Si dice que no está autorizado, falta la delegación de ese cliente.
 | `GET /diag/arca?cuit=` | Prueba real contra ARCA, en tres pasos separados |
 | `GET /arca/emitidos?cuit=&desde=&hasta=` | Comprobantes emitidos del rango, más el total por período |
 | `GET /arca/constancia?cuit=` | Todavía no implementado (usa otro web service de ARCA) |
+| `POST /portal/comprobantes` | Emitidos y recibidos desde el portal, con la clave fiscal del cliente |
 
 Mirá `/diag/firma` **antes** que `/diag/arca`: si la clave y el certificado no
 son pareja, no hay nada más que probar, y esta consulta no gasta un ticket de

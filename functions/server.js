@@ -316,6 +316,109 @@ app.get('/arca/constancia', (req, res) => {
 });
 
 /* ==========================================================================
+   COMPROBANTES DEL PORTAL ("Mis Comprobantes", vía Afip SDK)
+   ==========================================================================
+
+   Esto es lo que WSFE no puede hacer: traer lo que el cliente facturó desde
+   el portal de ARCA, y también lo que recibió. No hay web service oficial,
+   así que se automatiza el portal a través de Afip SDK.
+
+   El precio es alto y hay que tenerlo presente: se usa el **usuario y la
+   clave fiscal del contribuyente**, y esas credenciales viajan a un tercero.
+   Una clave fiscal no abre solo los comprobantes: abre toda la cuenta de esa
+   persona en ARCA.
+
+   Por eso acá las credenciales NO se guardan en ninguna variable de entorno
+   ni en disco: llegan en el pedido, se usan una vez y se descartan. El
+   sistema las saca de la bóveda cifrada en el momento, con la contraseña
+   maestra que solo vive en el navegador de quien la escribió. */
+
+const AFIPSDK_BASE = 'https://app.afipsdk.com/api/v1';
+
+function esperar(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* El portal espera las fechas como DD/MM/AAAA. */
+function fechaDMY(iso) {
+  const p = String(iso || '').split('-');
+  return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : '';
+}
+
+app.post('/portal/comprobantes', async (req, res) => {
+  const token = limpiar(process.env.AFIP_SDK_TOKEN) || limpiar(process.env.AFIP_ACCESS_TOKEN);
+  if (!token) {
+    return res.status(400).json({ error: 'Falta AFIP_SDK_TOKEN en Railway. Es el token de la cuenta de Afip SDK, que es la que automatiza el portal.' });
+  }
+
+  const cuit    = String(req.body.cuit || '').replace(/\D/g, '');
+  const usuario = String(req.body.usuario || '').trim() || cuit;
+  const clave   = String(req.body.clave || '');
+  const tipo    = req.body.tipo === 'R' ? 'R' : 'E';
+  const desde   = String(req.body.desde || '');
+  const hasta   = String(req.body.hasta || desde);
+
+  if (cuit.length !== 11) return res.status(400).json({ error: 'CUIT inválido.' });
+  if (!clave)             return res.status(400).json({ error: 'Falta la clave fiscal de ese cliente. Cargala en la bóveda.' });
+  if (!fechaDMY(desde))   return res.status(400).json({ error: 'Falta el rango de fechas.' });
+
+  const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+  const filtros = { t: tipo, fechaEmision: fechaDMY(desde) + ' - ' + fechaDMY(hasta) };
+
+  try {
+    /* 1) Se crea la automatización. */
+    const crear = await fetch(AFIPSDK_BASE + '/automations', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        automation: 'mis-comprobantes',
+        params: { cuit: cuit, username: usuario, password: clave, filters: filtros }
+      })
+    });
+    const creado = await crear.json().catch(() => ({}));
+    if (!crear.ok) {
+      return res.status(crear.status).json({ error: 'Afip SDK rechazó el pedido.', detalle: JSON.stringify(creado) });
+    }
+    const id = creado.id || creado._id || (creado.data && creado.data.id);
+    if (!id) return res.status(502).json({ error: 'Afip SDK no devolvió un identificador de la tarea.' });
+
+    /* 2) Es asíncrona: hay que preguntar hasta que termine. El portal de ARCA
+       es lento, así que se espera hasta tres minutos. */
+    let resultado = null;
+    for (let intento = 0; intento < 36; intento++) {
+      await esperar(5000);
+      const r = await fetch(AFIPSDK_BASE + '/automations/' + id, { headers });
+      const j = await r.json().catch(() => ({}));
+      const estado = String(j.status || (j.data && j.data.status) || '').toLowerCase();
+      if (estado && ['in_process', 'pending', 'processing'].indexOf(estado) === -1) { resultado = j; break; }
+    }
+    if (!resultado) {
+      return res.status(504).json({ error: 'El portal de ARCA tardó demasiado. Probá con un rango de fechas más corto.' });
+    }
+
+    const estado = String(resultado.status || (resultado.data && resultado.data.status) || '').toLowerCase();
+    if (estado === 'error' || estado === 'failed') {
+      return res.status(502).json({
+        error: 'No se pudo entrar al portal con esas credenciales. Revisá el usuario y la clave fiscal de ese cliente en la bóveda.',
+        detalle: JSON.stringify(resultado).slice(0, 400)
+      });
+    }
+
+    /* 3) La forma exacta de la respuesta cambia según la versión, así que se
+       buscan las filas en los tres lugares donde suelen venir. */
+    let filas = resultado.data;
+    if (filas && !Array.isArray(filas) && Array.isArray(filas.data)) filas = filas.data;
+    if (!Array.isArray(filas)) filas = resultado.result || resultado.comprobantes || [];
+    if (!Array.isArray(filas)) filas = [];
+
+    /* Se devuelven tal como vinieron: el sistema las pasa por el mismo
+       reconocedor de columnas que usa para el archivo de Mis Comprobantes,
+       que ya tolera que ARCA les cambie el nombre a las columnas. */
+    return res.json({ cuit, tipo, desde, hasta, cantidad: filas.length, filas });
+  } catch (e) {
+    return res.status(500).json({ error: 'Falló la consulta al portal: ' + e.message });
+  }
+});
+
+/* ==========================================================================
    DIAGNÓSTICO
    ========================================================================== */
 
