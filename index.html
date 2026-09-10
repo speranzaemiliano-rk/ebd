@@ -15,6 +15,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="EBD">
 
+<!-- Lector de Excel (SheetJS). Solo se usa al importar comprobantes en .xlsx;
+     si no carga, la importación por CSV sigue funcionando igual. -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
 <!-- ============================================================
      CSS PRINCIPAL — va SIEMPRE en el <head>.
      Nunca mover dentro de un div con display:none (rompe los tabs).
@@ -822,7 +826,7 @@ tbody tr:hover{background:#FAFBFC}
     <section class="panel" id="tabComprobantes">
       <div class="card">
         <h2>Importar comprobantes</h2>
-        <p class="desc">Arrastrá el CSV exportado desde <b>Mis Comprobantes</b> de ARCA. Sirve tanto para emitidos como para recibidos — el sistema detecta cuál es por las columnas del archivo.</p>
+        <p class="desc">Arrastrá el archivo exportado desde <b>Mis Comprobantes</b> de ARCA, en CSV o en Excel. Sirve tanto para emitidos como para recibidos — el sistema detecta cuál es por las columnas del archivo.</p>
         <div class="grid g2" style="margin-bottom:16px">
           <div class="campo">
             <label>Cliente</label>
@@ -840,8 +844,8 @@ tbody tr:hover{background:#FAFBFC}
         <div class="dropzone" id="dropzone">
           <div class="ico">📄</div>
           <div><b>Arrastrá el archivo acá</b> o hacé clic para elegirlo</div>
-          <div style="font-size:12px;margin-top:6px">Acepta .csv y .txt separados por coma, punto y coma o tabulación</div>
-          <input type="file" id="fileInput" accept=".csv,.txt" style="display:none">
+          <div style="font-size:12px;margin-top:6px">Acepta Excel (.xlsx, .xls) y .csv o .txt separados por coma, punto y coma o tabulación</div>
+          <input type="file" id="fileInput" accept=".csv,.txt,.xlsx,.xlsm,.xls" style="display:none">
         </div>
         <div id="impResultado" style="margin-top:16px"></div>
       </div>
@@ -2241,15 +2245,61 @@ function esNotaCredito(tipoTexto){
   return false;
 }
 
+/* Excel y CSV terminan en el mismo lugar: una lista de filas, cada fila una
+   lista de celdas. De ahí para adelante el camino es uno solo. */
+function esExcel(file){
+  return /\.(xlsx|xlsm|xls)$/i.test(file.name || "");
+}
+
+/* SheetJS devuelve las fechas como objetos Date (cellDates) y los importes
+   como números. Los dos formatos ya los entienden fechaISO() y numAR(), pero
+   la Date hay que escribirla como texto primero. */
+function celdaATexto(v){
+  if (v instanceof Date){
+    return v.getFullYear() + "-" + String(v.getMonth()+1).padStart(2,"0") +
+           "-" + String(v.getDate()).padStart(2,"0");
+  }
+  return (v === null || v === undefined) ? "" : v;
+}
+
 function procesarArchivo(file){
   var clienteId = $("impCliente").value;
   if (!clienteId){ toast("Elegí primero el cliente", "error"); return; }
 
   var lector = new FileReader();
+
+  if (esExcel(file)){
+    if (typeof XLSX === "undefined"){
+      toast("No se pudo cargar el lector de Excel. Probá con el CSV o revisá la conexión.", "error");
+      return;
+    }
+    lector.onload = function(e){
+      var filas;
+      try {
+        var libro = XLSX.read(new Uint8Array(e.target.result), { type:"array", cellDates:true });
+        var hoja  = libro.Sheets[libro.SheetNames[0]];
+        filas = XLSX.utils.sheet_to_json(hoja, { header:1, raw:true, defval:"" })
+                  .map(function(f){ return f.map(celdaATexto); });
+      } catch (err){
+        toast("No pude leer el Excel: " + err.message, "error");
+        return;
+      }
+      seguirConLasFilas(filas, clienteId, file.name, "excel");
+    };
+    lector.readAsArrayBuffer(file);
+    return;
+  }
+
   lector.onload = function(e){
     var filas;
     try { filas = parseCSV(e.target.result); }
     catch (err){ toast("No pude leer el archivo: " + err.message, "error"); return; }
+    seguirConLasFilas(filas, clienteId, file.name, "csv");
+  };
+  lector.readAsText(file, "UTF-8");
+}
+
+function seguirConLasFilas(filas, clienteId, nombreArchivo, origen){
     if (filas.length < 2){ toast("El archivo no tiene filas de datos", "error"); return; }
 
     /* La fila de encabezados puede no ser la primera (Mis Comprobantes a veces
@@ -2293,7 +2343,7 @@ function procesarArchivo(file){
         neto:     m.neto    !== undefined ? numAR(f[m.neto]) : 0,
         iva:      m.iva     !== undefined ? numAR(f[m.iva]) : 0,
         total:    total,
-        origen:   "csv"
+        origen:   origen
       });
     }
 
@@ -2301,9 +2351,7 @@ function procesarArchivo(file){
       $("impResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>No se pudo leer ninguna fila válida.</div></div>';
       return;
     }
-    mostrarPreviewImportacion(clienteId, tipo, registros, errores, file.name);
-  };
-  lector.readAsText(file, "UTF-8");
+    mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreArchivo);
 }
 
 function mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreArchivo){
