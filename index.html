@@ -868,6 +868,7 @@ tbody tr:hover{background:#FAFBFC}
         <div class="filtros">
           <select id="verCompCliente"></select>
           <select id="verCompAnio"></select>
+          <select id="verCompMes"></select>
           <select id="verCompTipo">
             <option value="">Emitidos y recibidos</option>
             <option value="emitido">Solo emitidos</option>
@@ -1740,6 +1741,7 @@ function inicializarUI(){
   $("filtroInactivos").onchange   = renderClientes;
   $("verCompCliente").onchange    = renderTablaComprobantes;
   $("verCompAnio").onchange       = renderTablaComprobantes;
+  $("verCompMes").onchange        = renderTablaComprobantes;
   $("verCompTipo").onchange       = renderTablaComprobantes;
 
   renderHome();
@@ -1762,6 +1764,15 @@ function llenarAnios(){
   var sel = $("verCompAnio"), hoy = new Date().getFullYear(), out = "";
   for (var a = hoy; a >= hoy - 5; a--) out += '<option value="' + a + '">Año ' + a + "</option>";
   sel.innerHTML = out;
+
+  /* El mes hace falta porque ingresos brutos se liquida mes a mes. El año
+     entero queda igual: es la base de la recategorización. */
+  var selMes = $("verCompMes");
+  selMes.innerHTML = '<option value="">Todo el año</option>' +
+    MESES.map(function(m, i){
+      return '<option value="' + String(i+1).padStart(2,"0") + '">' +
+             m.charAt(0).toUpperCase() + m.slice(1) + "</option>";
+    }).join("");
 }
 
 /* ---------- 11. INICIO ---------- */
@@ -2804,10 +2815,18 @@ function renderTablaComprobantes(){
   var cont = $("tablaComprobantes");
   if (!id){ cont.innerHTML = '<div class="vacio"><div class="ico">📄</div><div>Elegí un cliente.</div></div>'; return; }
 
+  var mes = $("verCompMes").value;
   var t = ESTADO.totales[id] || {};
-  var pers = Object.keys(t).filter(function(p){ return p.slice(0,4) === anio; }).sort().reverse();
+  var delAnio = Object.keys(t).filter(function(p){ return p.slice(0,4) === anio; }).sort().reverse();
+
+  /* Se filtra por mes para ver, pero el acumulado del año se sigue calculando
+     sobre todos los meses: uno sirve para liquidar ingresos brutos y el otro
+     para la recategorización. */
+  var pers = mes ? delAnio.filter(function(p){ return p.slice(4) === mes; }) : delAnio;
+
   if (!pers.length){
-    cont.innerHTML = '<div class="vacio"><div class="ico">📄</div><div>No hay comprobantes de ' + anio + " para este cliente.</div></div>";
+    cont.innerHTML = '<div class="vacio"><div class="ico">📄</div><div>No hay comprobantes de ' +
+      (mes ? periodoLargo(anio + mes) : anio) + " para este cliente.</div></div>";
     return;
   }
 
@@ -2825,10 +2844,26 @@ function renderTablaComprobantes(){
     if (tipoF !== "emitido")  html += '<td class="num">' + pesos(r.recibido || 0) + '</td><td class="num">' + (r.cantRecibidos || 0) + "</td>";
     html += '<td style="text-align:right"><button class="btn-icono" onclick="verDetallePeriodo(\'' + id + "','" + p + '\')" title="Ver detalle">🔍</button></td></tr>';
   });
-  html += '<tr style="background:#F8F9FA"><td><b>Total ' + anio + "</b></td>";
+  /* Con un mes elegido, la suma de arriba es la de ese mes; el año entero se
+     agrega abajo para no perderlo de vista. */
+  html += '<tr style="background:#F8F9FA"><td><b>Total ' + (mes ? periodoLargo(anio + mes) : anio) + "</b></td>";
   if (tipoF !== "recibido") html += '<td class="num"><b>' + pesos(sumE) + "</b></td><td></td>";
   if (tipoF !== "emitido")  html += '<td class="num"><b>' + pesos(sumR) + "</b></td><td></td>";
-  html += "<td></td></tr></tbody></table></div>";
+  html += "<td></td></tr>";
+
+  if (mes){
+    var anualE = 0, anualR = 0, cantE = 0, cantR = 0;
+    delAnio.forEach(function(p){
+      anualE += t[p].emitido || 0;  cantE += t[p].cantEmitidos || 0;
+      anualR += t[p].recibido || 0; cantR += t[p].cantRecibidos || 0;
+    });
+    html += '<tr style="background:#F1F3F4;color:#5F6368"><td>Acumulado ' + anio + " (" + delAnio.length + " meses)</td>";
+    if (tipoF !== "recibido") html += '<td class="num">' + pesos(anualE) + '</td><td class="num">' + cantE + "</td>";
+    if (tipoF !== "emitido")  html += '<td class="num">' + pesos(anualR) + '</td><td class="num">' + cantR + "</td>";
+    html += "<td></td></tr>";
+  }
+
+  html += "</tbody></table></div>";
   cont.innerHTML = html;
 }
 
