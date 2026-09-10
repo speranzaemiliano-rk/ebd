@@ -71,6 +71,15 @@ Qué hacen estas reglas:
 | `credenciales` (bóveda) | **solo admin** | **solo admin** |
 | todo lo que esté fuera de `estudioContable` | nadie | nadie |
 
+La interfaz acompaña esas reglas: al entrar, `aplicarPermisos()` esconde los
+botones que el rol no puede usar, y los botones que se dibujan por fila
+(editar cliente, cargar liquidación, aplicar recategorización, editar o borrar
+un movimiento de caja, cuentas y proveedores) se filtran con `puedeEscribir()`.
+Un **lector** ve todo pero no le aparece ningún botón de carga; un **editor**
+carga datos pero no ve Escalas, Configuración, plantilla de mail, usuarios ni
+bóveda; el **admin** ve todo. Si agregás un botón que guarde algo, sumalo a
+`BOTONES_ESCRITURA` o a `BOTONES_ADMIN`, según quién deba poder usarlo.
+
 ## Paso 5 — Copiar las credenciales al archivo
 
 1. Rueda dentada (arriba a la izquierda) → **Configuración del proyecto**.
@@ -144,7 +153,5 @@ existente: así los cálculos de períodos anteriores siguen dando bien.
   Va en Cloud Functions (carpeta `functions/`), requiere plan Blaze y certificado
   digital del estudio. Los comprobantes **recibidos** no tienen web service en ARCA:
   esos se siguen importando por CSV.
-- **Roles en la interfaz**: hoy las reglas de la base ya bloquean lo que corresponde,
-  pero los botones se ven igual para todos. Falta ocultarlos según el rol.
 - **Cálculo de IIBB**: hoy los importes de ARBA, AGIP y municipio se cargan a mano.
 - **Adjuntar el PDF del VEP** al mail (hoy va como link).

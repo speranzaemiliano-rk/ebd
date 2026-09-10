@@ -56,15 +56,19 @@ a{color:var(--azul);text-decoration:none}
 /* Sobre el azul del panel, la marca necesita despegarse del fondo */
 .logo-marca.claro svg{filter:drop-shadow(0 2px 7px rgba(3,26,72,.4))}
 
-/* La órbita gira lento alrededor de las letras. Se frena sola si el usuario
-   pidió menos movimiento en su sistema. */
-.orbita{transform-origin:60px 60px;animation:girarOrbita 18s linear infinite}
+/* La órbita gira sobre su eje vertical, como un anillo visto de frente: se
+   angosta y se vuelve a abrir. Antes giraba en el plano (rotate) y, como el
+   recuadro del logo es bajo, el óvalo se salía por arriba y por abajo: casi
+   toda la vuelta se veía cortado en dos arcos. Así queda siempre entero
+   alrededor de las letras, y nunca llega a verse de canto.
+   Se frena sola si el usuario pidió menos movimiento en su sistema. */
+.orbita{transform-origin:60px 60px;animation:girarOrbita 12s ease-in-out infinite}
 @keyframes girarOrbita{
-  from{transform:rotate(-24deg)}
-  to{transform:rotate(336deg)}
+  0%,100%{transform:rotate(-13deg) scaleX(1)}
+  50%    {transform:rotate(-4deg)  scaleX(.74)}
 }
 @media (prefers-reduced-motion:reduce){
-  .orbita{animation:none;transform:rotate(-24deg)}
+  .orbita{animation:none;transform:rotate(-13deg)}
 }
 
 /* ---------- LOGIN: pantalla de presentación ---------- */
@@ -983,6 +987,7 @@ tbody tr:hover{background:#FAFBFC}
           <span>ℹ️</span>
           <div>Las escalas se actualizan cada semestre por IPC. Cuando ARCA publique la nueva tabla, creá una <b>nueva vigencia</b> en vez de editar la existente: así los cálculos históricos siguen dando bien.</div>
         </div>
+        <div id="avisoRolEscalas"></div>
         <div class="grid g2" style="margin-bottom:16px">
           <div class="campo">
             <label>Vigente desde</label>
@@ -999,6 +1004,7 @@ tbody tr:hover{background:#FAFBFC}
 
     <!-- ---------- CONFIGURACIÓN ---------- -->
     <section class="panel" id="tabConfig">
+      <div id="avisoRolConfig"></div>
       <div class="grid g2">
         <div class="card">
           <h2>Datos del estudio</h2>
@@ -1216,6 +1222,56 @@ function explicarError(e){
            ". Revisá que las reglas de la base estén publicadas en Firebase.";
   }
   return "Error al guardar: " + msg;
+}
+
+/* ---------- PERMISOS POR ROL ----------
+   Las reglas de la base (database.rules.json) son las que mandan; esto es
+   para que el botón no aparezca cuando de todas formas va a rebotar.
+   - lector: solo mira.
+   - editor: carga y edita datos (clientes, comprobantes, liquidaciones,
+     honorarios, caja, cuentas y proveedores).
+   - admin: además, escalas, configuración, plantilla de mail, usuarios y bóveda.
+*/
+function puedeEscribir(){ return ESTADO.rol === "admin" || ESTADO.rol === "editor"; }
+function esAdminRol(){ return ESTADO.rol === "admin"; }
+
+/* Botones fijos del HTML. Los que se arman con template strings se filtran
+   dentro de cada render con puedeEscribir(). Al agregar un botón que guarde
+   datos, sumarlo también a una de estas dos listas. */
+var BOTONES_ESCRITURA = ["btnNuevoCliente","btnCargaManual","btnRecalcularLiq",
+                         "btnEnviarMails","btnHonGenerar","btnNuevoMovimiento"];
+var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
+                         "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
+                         "btnConfigBoveda","btnBoveda"];
+
+/* Campos que solo un admin puede guardar: sin el botón al lado, dejarlos
+   editables invita a escribir algo que después se pierde. */
+var CAMPOS_ADMIN = ["cfgNombre","cfgCuit","cfgMail","cfgTel",
+                    "cfgEjsService","cfgEjsTemplate","cfgEjsKey",
+                    "escalaVigencia","escalaAlquileres",
+                    "plantillaAsunto","plantillaCuerpo"];
+
+function aplicarPermisos(){
+  BOTONES_ESCRITURA.forEach(function(id){
+    var el = $(id);
+    if (el) el.classList.toggle("oculto", !puedeEscribir());
+  });
+  BOTONES_ADMIN.forEach(function(id){
+    var el = $(id);
+    if (el) el.classList.toggle("oculto", !esAdminRol());
+  });
+  CAMPOS_ADMIN.forEach(function(id){
+    var el = $(id);
+    if (el) el.disabled = !esAdminRol();
+  });
+
+  var aviso = esAdminRol() ? "" :
+    '<div class="aviso info"><span>🔒</span><div>Entraste con rol <b>' + esc(ESTADO.rol) +
+    "</b>: podés mirar esta pantalla, pero solo un <b>admin</b> puede cambiarla.</div></div>";
+  ["avisoRolConfig","avisoRolEscalas"].forEach(function(id){
+    var el = $(id);
+    if (el) el.innerHTML = aviso;
+  });
 }
 
 /* CUIT: formato y validación por dígito verificador */
@@ -1527,6 +1583,8 @@ auth.onAuthStateChanged(function(u){
     $("pantallaLogin").style.display = "none";
     $("app").classList.add("visible");
 
+    aplicarPermisos();
+
     /* Con rol lector no se puede guardar nada. Mejor avisarlo al entrar que
        dejar que se entere cuando le rebote el primer cliente que cargue. */
     if (ESTADO.rol === "lector"){
@@ -1819,7 +1877,9 @@ function renderClientes(){
       '<td class="num">' + pesos(an.ingresos) + "</td>" +
       "<td>" + badgeEstado(an) + "</td>" +
       '<td style="white-space:nowrap">' +
-        '<button class="btn-icono" onclick="editarCliente(\'' + id + '\')" title="Editar">✏️</button>' +
+        (puedeEscribir()
+          ? '<button class="btn-icono" onclick="editarCliente(\'' + id + '\')" title="Editar">✏️</button>'
+          : "") +
         '<button class="btn-icono" onclick="verFichaCliente(\'' + id + '\')" title="Ver ficha">📊</button>' +
       "</td></tr>";
   });
@@ -2510,7 +2570,7 @@ function renderRecat(){
       "<td>" + (an.categoriaActual ? '<span class="cat-chip">' + an.categoriaActual + "</span>" : "—") + "</td>" +
       "<td>" + chipSug + "</td>" +
       '<td class="num">' + (an.excluido ? "—" : pesos(an.cuotaSugerida)) + "</td>" +
-      "<td>" + (an.estado === "sube" || an.estado === "baja"
+      "<td>" + ((an.estado === "sube" || an.estado === "baja") && puedeEscribir()
         ? '<button class="btn sec chico" onclick="aplicarRecat(\'' + an.clienteId + "','" + an.categoriaSugerida + '\')">Aplicar ' + an.categoriaSugerida + "</button>"
         : '<span style="font-size:12px;color:#5F6368">' + esc(an.accion) + "</span>") + "</td>" +
       "</tr>";
@@ -2611,7 +2671,9 @@ function renderLiquidacion(){
       "<td>" + (veps ? '<span class="badge b-verde">' + veps + "/" + pedidos + "</span>" : '<span class="badge b-gris">0/' + pedidos + "</span>") + "</td>" +
       "<td>" + (liq.enviado ? '<span class="badge b-verde">Enviado</span>'
                 : (tot ? '<span class="badge b-azul">Listo</span>' : '<span class="badge b-amar">Pendiente</span>')) + "</td>" +
-      '<td><button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + periodo + '\')">Cargar</button></td></tr>';
+      "<td>" + (puedeEscribir()
+        ? '<button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + periodo + '\')">Cargar</button>'
+        : "") + "</td></tr>";
   });
 
   html += '<tr style="background:#F8F9FA"><td><b>Totales</b></td>' +
@@ -2979,6 +3041,12 @@ function pintarEscala(){
       "</tr>";
   });
   $("tablaEscala").innerHTML = html + "</tbody></table></div>";
+
+  if (!esAdminRol()){
+    Array.prototype.forEach.call($("tablaEscala").querySelectorAll("input"), function(inp){
+      inp.disabled = true;
+    });
+  }
 }
 
 $("btnGuardarEscala").onclick = function(){
@@ -3825,8 +3893,10 @@ function renderCaja(){
       '<td style="white-space:nowrap">' +
         (m.origen === "honorario"
           ? '<span style="font-size:11px;color:#80868B">desde Honorarios</span>'
-          : '<button class="btn-icono" onclick="editarMovimiento(\'' + m._id + '\')" title="Editar">✏️</button>' +
-            '<button class="btn-icono" onclick="borrarMovimiento(\'' + m._id + '\')" title="Eliminar">🗑️</button>') +
+          : (puedeEscribir()
+            ? '<button class="btn-icono" onclick="editarMovimiento(\'' + m._id + '\')" title="Editar">✏️</button>' +
+              '<button class="btn-icono" onclick="borrarMovimiento(\'' + m._id + '\')" title="Eliminar">🗑️</button>'
+            : "")) +
       "</td></tr>";
   });
 
@@ -3978,14 +4048,17 @@ $("btnGestionCuentas").onclick = function(){
         "<td>" + esc(c.tipo) + "</td>" +
         '<td class="num">' + pesos(c.saldoInicial || 0) + "</td>" +
         '<td class="num"><b>' + pesos(saldoCuenta(id)) + "</b></td>" +
-        '<td><button class="btn sec chico" onclick="editarCuenta(\'' + id + '\')">Editar</button></td></tr>';
+        "<td>" + (puedeEscribir()
+          ? '<button class="btn sec chico" onclick="editarCuenta(\'' + id + '\')">Editar</button>'
+          : "") + "</td></tr>";
     }).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px;color:#5F6368">Sin cuentas</td></tr>') +
     "</tbody></table></div>";
 
-  abrirModal("Cuentas", html, [
-    { texto:"+ Nueva cuenta", clase:"sec", accion:function(){ editarCuenta(null); } },
-    { texto:"Cerrar", clase:"gris", accion:cerrarModal }
-  ], "ancho");
+  var botones = [];
+  if (puedeEscribir()) botones.push({ texto:"+ Nueva cuenta", clase:"sec", accion:function(){ editarCuenta(null); } });
+  botones.push({ texto:"Cerrar", clase:"gris", accion:cerrarModal });
+
+  abrirModal("Cuentas", html, botones, "ancho");
 };
 
 function editarCuenta(id){
@@ -4043,14 +4116,17 @@ $("btnGestionProveedores").onclick = function(){
         '<td class="mono">' + esc(p.cuit ? formatCuit(p.cuit) : "—") + "</td>" +
         "<td>" + esc(p.rubro || "—") + "</td>" +
         '<td class="num">' + pesos(gastado[id] || 0) + "</td>" +
-        '<td><button class="btn sec chico" onclick="editarProveedor(\'' + id + '\')">Editar</button></td></tr>';
+        "<td>" + (puedeEscribir()
+          ? '<button class="btn sec chico" onclick="editarProveedor(\'' + id + '\')">Editar</button>'
+          : "") + "</td></tr>";
     }).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px;color:#5F6368">Sin proveedores cargados</td></tr>') +
     "</tbody></table></div>";
 
-  abrirModal("Proveedores", html, [
-    { texto:"+ Nuevo proveedor", clase:"sec", accion:function(){ editarProveedor(null); } },
-    { texto:"Cerrar", clase:"gris", accion:cerrarModal }
-  ], "ancho");
+  var botones = [];
+  if (puedeEscribir()) botones.push({ texto:"+ Nuevo proveedor", clase:"sec", accion:function(){ editarProveedor(null); } });
+  botones.push({ texto:"Cerrar", clase:"gris", accion:cerrarModal });
+
+  abrirModal("Proveedores", html, botones, "ancho");
 };
 
 function editarProveedor(id){
