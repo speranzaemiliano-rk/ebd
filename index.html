@@ -56,15 +56,19 @@ a{color:var(--azul);text-decoration:none}
 /* Sobre el azul del panel, la marca necesita despegarse del fondo */
 .logo-marca.claro svg{filter:drop-shadow(0 2px 7px rgba(3,26,72,.4))}
 
-/* La órbita gira lento alrededor de las letras. Se frena sola si el usuario
-   pidió menos movimiento en su sistema. */
-.orbita{transform-origin:60px 60px;animation:girarOrbita 18s linear infinite}
+/* La órbita gira sobre su eje vertical, como un anillo visto de frente: se
+   angosta y se vuelve a abrir. Antes giraba en el plano (rotate) y, como el
+   recuadro del logo es bajo, el óvalo se salía por arriba y por abajo: casi
+   toda la vuelta se veía cortado en dos arcos. Así queda siempre entero
+   alrededor de las letras, y nunca llega a verse de canto.
+   Se frena sola si el usuario pidió menos movimiento en su sistema. */
+.orbita{transform-origin:60px 60px;animation:girarOrbita 12s ease-in-out infinite}
 @keyframes girarOrbita{
-  from{transform:rotate(-24deg)}
-  to{transform:rotate(336deg)}
+  0%,100%{transform:rotate(-13deg) scaleX(1)}
+  50%    {transform:rotate(-4deg)  scaleX(.74)}
 }
 @media (prefers-reduced-motion:reduce){
-  .orbita{animation:none;transform:rotate(-24deg)}
+  .orbita{animation:none;transform:rotate(-13deg)}
 }
 
 /* ---------- LOGIN: pantalla de presentación ---------- */
