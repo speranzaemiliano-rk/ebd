@@ -351,6 +351,19 @@ app.get('/diag/firma', (req, res) => {
   }
 });
 
+/* Pide un ticket nuevo aunque el anterior siga vigente. Es lo que hay que
+   hacer después de agregar la delegación de un cliente: el ticket lleva
+   grabadas las relaciones del momento en que se emitió. */
+app.get('/diag/ticket-nuevo', async (req, res) => {
+  try {
+    const c = credenciales();
+    const tk = await arca.renovarTicket(c.cert, c.key, entorno());
+    return res.json({ ticket: 'renovado, vence ' + new Date(tk.expira).toISOString() });
+  } catch (e) {
+    return res.status(e.faltanCreds ? 400 : 500).json({ error: e.message });
+  }
+});
+
 /* Prueba de punta a punta contra ARCA: si esto responde, el certificado y la
    delegación de ese CUIT están bien. Es el primer lugar donde mirar cuando
    "no trae nada". */
