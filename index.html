@@ -2462,9 +2462,19 @@ function confirmarImportacion(clienteId, tipo, registros, porPeriodo){
    certificado digital del estudio, que vive en el backend (carpeta
    functions/, desplegada en Railway). Acá solo se le pide a ese backend. */
 
+/* Normaliza lo que se haya escrito en Configuración. Lo del https:// no es
+   un detalle: sin eso, fetch toma la dirección como una ruta de esta misma
+   página y el pedido termina en GitHub Pages, que contesta 404 sin explicar
+   nada. Los espacios sobran siempre y rompen el token. */
+function normalizarUrlBackend(u){
+  var url = String(u || "").trim().replace(/\/+$/, "");
+  if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+  return url;
+}
+
 function backendConfig(){
   var b = (ESTADO.config && ESTADO.config.backend) || {};
-  return { url: String(b.url || "").replace(/\/+$/, ""), token: b.token || "" };
+  return { url: normalizarUrlBackend(b.url), token: String(b.token || "").trim() };
 }
 
 function pedirAlBackend(ruta){
@@ -2570,18 +2580,19 @@ function ejecutarTraerDeArca(clienteId, cuit){
 
 $("btnGuardarBackend").onclick = function(){
   var cfg = {
-    url:   $("cfgBackUrl").value.trim().replace(/\/+$/, ""),
+    url:   normalizarUrlBackend($("cfgBackUrl").value),
     token: $("cfgBackToken").value.trim()
   };
   ref("config/backend").set(cfg).then(function(){
     ESTADO.config.backend = cfg;
+    $("cfgBackUrl").value = cfg.url;   // que se vea cómo quedó guardada
     toast("Conexión guardada", "ok");
   }).catch(function(e){ toast(explicarError(e), "error"); });
 };
 
 $("btnProbarBackend").onclick = function(){
   var cont = $("cfgBackEstado");
-  var url   = $("cfgBackUrl").value.trim().replace(/\/+$/, "");
+  var url   = normalizarUrlBackend($("cfgBackUrl").value);
   var token = $("cfgBackToken").value.trim();
   if (!url){ toast("Escribí primero la URL", "error"); return; }
 
