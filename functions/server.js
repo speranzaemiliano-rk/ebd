@@ -256,14 +256,19 @@ app.get('/arca/emitidos', async (req, res) => {
     const hastaNum = hastaANumero(hasta);
 
     let puntos = [];
+    let sinPuntosWeb = false;
     try {
       const pv = await arca.puntosDeVenta(tk, cuit, entorno());
       puntos = pv.filter(p => !p.bloqueado).map(p => p.nro);
     } catch (e) {
       /* Sin delegación no hay nada que hacer: cortar acá y decirlo. */
       if ((e.codigosArca || []).indexOf('600') !== -1) throw e;
-      /* Algunos contribuyentes no exponen el padrón de puntos de venta.
-         El 1 es el habitual, así que se intenta igual en vez de fallar. */
+      /* El 602 acá significa algo muy concreto: ese contribuyente no tiene
+         ningún punto de venta de web service. Pasa con quien factura desde
+         "Comprobantes en Línea", el portal de ARCA: esos comprobantes viven
+         en otro punto de venta que WSFE no ve, y no hay trámite que lo
+         cambie. Se intenta igual con el 1 por si acaso, pero se avisa. */
+      if ((e.codigosArca || []).indexOf('602') !== -1) sinPuntosWeb = true;
       puntos = [1];
     }
     if (!puntos.length) puntos = [1];
@@ -284,6 +289,7 @@ app.get('/arca/emitidos', async (req, res) => {
     return res.json({
       cuit, desde, hasta,
       puntosDeVenta: puntos,
+      sinPuntosWeb: sinPuntosWeb,
       cantidad: comprobantes.length,
       porPeriodo: totalizarPorPeriodo(comprobantes),
       comprobantes

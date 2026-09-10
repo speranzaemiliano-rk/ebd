@@ -2538,8 +2538,17 @@ function ejecutarTraerDeArca(clienteId, cuit){
     .then(function(datos){
       var comps = datos.comprobantes || [];
       if (!comps.length){
-        $("arcaEstado").innerHTML = '<div class="aviso warn"><span>🔍</span><div>ARCA no devolvió comprobantes en ese rango. ' +
-          "Puede que el cliente no haya facturado, o que todavía no te haya delegado el servicio.</div></div>";
+        /* El caso más común no es que falte un trámite, sino que el cliente
+           factura desde el portal de ARCA. Esos comprobantes viven en un
+           punto de venta que el web service no ve, y no hay forma de
+           traerlos: van por archivo. */
+        $("arcaEstado").innerHTML = datos.sinPuntosWeb
+          ? '<div class="aviso warn"><span>📄</span><div><b>Este cliente factura desde el portal de ARCA</b> ' +
+            "(Comprobantes en Línea), y esos comprobantes no se pueden traer por web service: " +
+            "ARCA los guarda en un punto de venta aparte. Para este cliente hay que seguir usando " +
+            "el archivo de <b>Mis Comprobantes</b>, en Excel o CSV.</div></div>"
+          : '<div class="aviso warn"><span>🔍</span><div>ARCA no devolvió comprobantes en ese rango. ' +
+            "Puede que el cliente no haya facturado en esos meses.</div></div>";
         if (btn){ btn.disabled = false; btn.textContent = "Traer"; }
         return;
       }

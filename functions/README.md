@@ -17,15 +17,28 @@ tu Railway, no hay cuentas de terceros, ni límites, ni costos.
 
 | | ¿Se puede? | Cómo |
 |---|---|---|
-| Comprobantes **emitidos** por el cliente | Sí | Web service WSFE, con certificado |
-| **Constancia de inscripción** (categoría, actividad, domicilio) | Sí | Web service de padrón |
-| Comprobantes **recibidos** por el cliente | **No** | ARCA no tiene web service. Siguen por CSV o Excel |
+| Emitidos por un cliente que factura **con un sistema conectado** (web service) | Sí | WSFE, con certificado |
+| Emitidos por un cliente que factura **desde el portal** de ARCA | **No** | Van por CSV o Excel |
+| Comprobantes **recibidos** | **No** | ARCA no tiene web service. Van por CSV o Excel |
+| **Constancia de inscripción** | Todavía no | Otro web service, con su propia adhesión |
 
-Lo de los recibidos no es una limitación del sistema: ARCA directamente no
-publica un web service para eso. La única alternativa sería automatizar el
-portal "Mis Comprobantes" con el usuario y la clave fiscal de cada cliente,
-mandándolos a un servicio de terceros. Es una decisión del estudio, no una
-cuestión técnica; por ahora este backend **no** lo hace.
+⚠️ **La limitación grande es la primera, y conviene entenderla antes de
+prometerle nada a nadie.** ARCA usa un punto de venta distinto por cada
+modalidad de facturación. Los comprobantes emitidos desde **Comprobantes en
+Línea** —el portal web, que es como factura la enorme mayoría de los
+monotributistas— viven en un punto de venta que WSFE **no ve**. El web service
+solo conoce lo que autorizó el propio web service.
+
+Cuando pasa eso, `FEParamGetPtosVenta` contesta `[602] Sin Resultados`, y el
+backend lo marca como `sinPuntosWeb: true` en la respuesta para que el sistema
+pueda decirlo con todas las letras en vez de mostrar "no hay comprobantes".
+No es un trámite que falte: no hay forma de traerlos por acá.
+
+Para esos clientes —o sea, casi todos— el camino sigue siendo el archivo de
+Mis Comprobantes. La única alternativa sería automatizar ese portal con el
+usuario y la clave fiscal de cada cliente, mandándolos a un servicio de
+terceros. Es una decisión del estudio, no una cuestión técnica; por ahora este
+backend **no** lo hace.
 
 ---
 
