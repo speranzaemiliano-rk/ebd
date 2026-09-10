@@ -5,6 +5,14 @@ Este servidor existe por una sola razón: los web services de ARCA piden un
 `index.html`, porque cualquiera que abra la página lo vería. Va acá, en
 variables de entorno, y el sistema le pide los datos por HTTP.
 
+**Habla directo con ARCA, sin intermediarios.** La primera versión usaba
+`@afipsdk/afip.js`, que no se conecta a ARCA sino a los servidores de Afip
+SDK: hay que mandarles el certificado y la clave para que firmen ellos, y
+depender de una cuenta suya (sin `access_token` devuelve 401 y nada funciona).
+`arca.js` hace el trabajo completo en casa: arma el pedido de acceso, lo firma
+con el certificado y conversa con WSAA y WSFE. El certificado no sale nunca de
+tu Railway, no hay cuentas de terceros, ni límites, ni costos.
+
 ## Qué trae y qué no
 
 | | ¿Se puede? | Cómo |
@@ -94,7 +102,6 @@ base64 -w0 ebd.key
 | `AFIP_ENV` | `production` para datos reales, `testing` para probar | Sí |
 | `APP_API_TOKEN` | Una contraseña larga inventada por vos. El sistema la manda en cada pedido | Sí |
 | `ALLOWED_ORIGINS` | `https://speranzaemiliano-rk.github.io` | Recomendada |
-| `AFIP_ACCESS_TOKEN` | Token de Afip SDK, si usás su servicio | No |
 
 Sin `APP_API_TOKEN` el backend queda abierto a cualquiera que descubra la URL.
 Sin `ALLOWED_ORIGINS`, cualquier página puede llamarlo desde el navegador.
@@ -123,9 +130,20 @@ Si dice que no está autorizado, falta la delegación de ese cliente.
 |---|---|
 | `GET /` | Responde `ok`. Sirve para ver si el servicio está vivo |
 | `GET /diag` | Qué credenciales están cargadas y qué falta |
-| `GET /diag/arca?cuit=` | Prueba real contra ARCA para ese CUIT |
+| `GET /diag/firma` | Revisa el certificado **sin hablar con ARCA**: si es legible, si es pareja de la clave y hasta cuándo vale |
+| `GET /diag/arca?cuit=` | Prueba real contra ARCA, en tres pasos separados |
 | `GET /arca/emitidos?cuit=&desde=&hasta=` | Comprobantes emitidos del rango, más el total por período |
-| `GET /arca/constancia?cuit=` | Datos de la constancia de inscripción |
+| `GET /arca/constancia?cuit=` | Todavía no implementado (usa otro web service de ARCA) |
+
+Mirá `/diag/firma` **antes** que `/diag/arca`: si la clave y el certificado no
+son pareja, no hay nada más que probar, y esta consulta no gasta un ticket de
+acceso. Eso importa porque ARCA no emite un ticket nuevo mientras el anterior
+siga vigente (duran 12 horas), así que probar "a ver si anda" tiene costo.
+
+`/diag/arca` separa los tres pasos a propósito, porque cada uno falla por un
+motivo distinto: el estado de los servidores de ARCA, el ticket de acceso (que
+depende del certificado) y los puntos de venta (que dependen de la delegación
+de ese cliente).
 
 `desde` y `hasta` son períodos con formato `AAAAMM` (por ejemplo `202601`).
 
