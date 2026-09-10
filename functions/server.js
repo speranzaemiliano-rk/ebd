@@ -37,7 +37,14 @@ app.use(cors({
    Token compartido en el header X-App-Token. El sistema lo manda en cada
    pedido; se configura en Railway (APP_API_TOKEN) y en el propio sistema.
    Si no está definido, el backend queda ABIERTO y lo avisa por consola. */
-const APP_TOKEN = process.env.APP_API_TOKEN || '';
+/* Al pegar valores en Railway se cuela seguido un espacio o un tabulador
+   invisible adelante. Sin recortarlo, "production" con un tab no es
+   "production" y el backend se va al ambiente de pruebas sin decir por qué;
+   con el token pasa lo mismo y todo responde 401. */
+function limpiar(v) { return String(v || '').trim(); }
+function entorno() { return limpiar(process.env.AFIP_ENV) || 'testing'; }
+
+const APP_TOKEN = limpiar(process.env.APP_API_TOKEN);
 if (!APP_TOKEN) {
   console.warn('[seguridad] APP_API_TOKEN no está configurado: el backend acepta pedidos sin autenticar.');
 }
@@ -45,7 +52,7 @@ if (!APP_TOKEN) {
 app.use((req, res, next) => {
   if (req.path === '/') return next();
   if (!APP_TOKEN) return next();
-  if (req.get('X-App-Token') === APP_TOKEN) return next();
+  if (limpiar(req.get('X-App-Token')) === APP_TOKEN) return next();
   return res.status(401).json({ error: 'No autorizado. Falta o no coincide el X-App-Token.' });
 });
 
@@ -93,7 +100,7 @@ function crearAfip(cuit) {
   const opts = {
     CUIT: cuitConsulta,
     cert, key,
-    production: (process.env.AFIP_ENV || 'testing') === 'production'
+    production: entorno() === 'production'
   };
   const token = process.env.AFIP_ACCESS_TOKEN || '';
   if (token) opts.access_token = token;
@@ -337,7 +344,7 @@ app.get('/diag', (req, res) => {
   const avisos = [];
 
   if (!cert || !key) avisos.push('Faltan AFIP_CERT y/o AFIP_KEY: no se puede consultar nada de ARCA todavía.');
-  if ((process.env.AFIP_ENV || 'testing') !== 'production') avisos.push('ARCA en modo TESTING: las consultas van al ambiente de homologación, no a los datos reales.');
+  if (entorno() !== 'production') avisos.push('ARCA en modo TESTING: las consultas van al ambiente de homologación, no a los datos reales.');
   if (!APP_TOKEN) avisos.push('APP_API_TOKEN sin configurar: el backend acepta pedidos de cualquiera.');
   if (!ORIGENES.length) avisos.push('ALLOWED_ORIGINS sin configurar: acepta llamadas desde cualquier dominio.');
 
@@ -347,7 +354,7 @@ app.get('/diag', (req, res) => {
     certificadoEsPem:   cert.indexOf('-----BEGIN CERTIFICATE-----') === 0,
     claveEsPem:         key.indexOf('-----BEGIN') === 0,
     cuitDelEstudio:     process.env.AFIP_CUIT ? String(process.env.AFIP_CUIT).replace(/\D/g, '') : '',
-    ambiente:           process.env.AFIP_ENV || 'testing',
+    ambiente:           entorno(),
     tokenConfigurado:   !!APP_TOKEN,
     corsRestringido:    ORIGENES.length > 0,
     avisos
