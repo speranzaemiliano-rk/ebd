@@ -841,6 +841,11 @@ tbody tr:hover{background:#FAFBFC}
             </select>
           </div>
         </div>
+        <div class="aviso info" id="avisoArca" style="margin-bottom:14px">
+          <span>⚡</span>
+          <div class="crece">Si ya configuraste la conexión con ARCA, los <b>emitidos</b> se traen solos, sin bajar ningún archivo.</div>
+          <button class="btn sec chico" id="btnTraerArca">Traer de ARCA</button>
+        </div>
         <div class="dropzone" id="dropzone">
           <div class="ico">📄</div>
           <div><b>Arrastrá el archivo acá</b> o hacé clic para elegirlo</div>
@@ -1025,6 +1030,21 @@ tbody tr:hover{background:#FAFBFC}
           <div class="campo"><label>Template ID</label><input type="text" id="cfgEjsTemplate" placeholder="template_xxxxxxx"></div>
           <div class="campo"><label>Public Key</label><input type="text" id="cfgEjsKey" placeholder="xxxxxxxxxxxxxxx"></div>
           <button class="btn" id="btnGuardarEjs">Guardar</button>
+        </div>
+
+        <div class="card">
+          <h2>Conexión con ARCA</h2>
+          <p class="desc">El sistema no habla directo con ARCA: lo hace a través del backend que corre en Railway, que es el que tiene el certificado digital del estudio. Acá va su dirección y la contraseña que comparten (la misma <span class="mono">APP_API_TOKEN</span> que cargaste en Railway). El paso a paso completo está en <span class="mono">functions/README.md</span>.</p>
+          <div class="campo"><label>URL del backend</label>
+            <input type="url" id="cfgBackUrl" placeholder="https://tu-backend.up.railway.app"></div>
+          <div class="campo"><label>Token compartido</label>
+            <input type="password" id="cfgBackToken" placeholder="el mismo APP_API_TOKEN de Railway">
+            <div class="ayuda">Queda guardado en la base del sistema: cualquiera que pueda entrar al sistema puede usar el backend.</div></div>
+          <div id="cfgBackEstado" style="margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn" id="btnGuardarBackend">Guardar</button>
+            <button class="btn sec" id="btnProbarBackend">Probar conexión</button>
+          </div>
         </div>
 
         <div class="card">
@@ -1241,17 +1261,19 @@ function esAdminRol(){ return ESTADO.rol === "admin"; }
    dentro de cada render con puedeEscribir(). Al agregar un botón que guarde
    datos, sumarlo también a una de estas dos listas. */
 var BOTONES_ESCRITURA = ["btnNuevoCliente","btnCargaManual","btnRecalcularLiq",
-                         "btnEnviarMails","btnHonGenerar","btnNuevoMovimiento"];
+                         "btnEnviarMails","btnHonGenerar","btnNuevoMovimiento",
+                         "btnTraerArca"];
 var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
                          "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
-                         "btnConfigBoveda","btnBoveda"];
+                         "btnConfigBoveda","btnBoveda","btnGuardarBackend"];
 
 /* Campos que solo un admin puede guardar: sin el botón al lado, dejarlos
    editables invita a escribir algo que después se pierde. */
 var CAMPOS_ADMIN = ["cfgNombre","cfgCuit","cfgMail","cfgTel",
                     "cfgEjsService","cfgEjsTemplate","cfgEjsKey",
                     "escalaVigencia","escalaAlquileres",
-                    "plantillaAsunto","plantillaCuerpo"];
+                    "plantillaAsunto","plantillaCuerpo",
+                    "cfgBackUrl","cfgBackToken"];
 
 function aplicarPermisos(){
   BOTONES_ESCRITURA.forEach(function(id){
@@ -2435,9 +2457,164 @@ function confirmarImportacion(clienteId, tipo, registros, porPeriodo){
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
+/* ---------- TRAER LOS COMPROBANTES DE ARCA ----------
+   El navegador no puede hablar con ARCA: los web services piden el
+   certificado digital del estudio, que vive en el backend (carpeta
+   functions/, desplegada en Railway). Acá solo se le pide a ese backend. */
+
+function backendConfig(){
+  var b = (ESTADO.config && ESTADO.config.backend) || {};
+  return { url: String(b.url || "").replace(/\/+$/, ""), token: b.token || "" };
+}
+
+function pedirAlBackend(ruta){
+  var b = backendConfig();
+  if (!b.url) return Promise.reject(new Error("Falta configurar la URL del backend en Configuración."));
+  return fetch(b.url + ruta, { headers: b.token ? { "X-App-Token": b.token } : {} })
+    .then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(datos){
+        if (!r.ok) throw new Error(datos.error || ("El backend respondió " + r.status));
+        return datos;
+      });
+    });
+}
+
+/* Notas de crédito: el backend las manda con importe positivo y las resta solo
+   en el total por período. Acá el signo tiene que ir en cada comprobante,
+   porque la vista previa suma reg.total uno por uno. */
+var TIPOS_NC_ARCA = [3, 8, 13];
+
+function traerDeArca(){
+  var clienteId = $("impCliente").value;
+  if (!clienteId){ toast("Elegí primero el cliente", "error"); return; }
+  var cli = ESTADO.clientes[clienteId];
+  var cuit = String(cli.cuit || "").replace(/\D/g, "");
+  if (cuit.length !== 11){ toast("Ese cliente no tiene un CUIT válido cargado", "error"); return; }
+  if (!backendConfig().url){
+    toast("Primero configurá la conexión con ARCA", "error");
+    irA("tabConfig");
+    return;
+  }
+
+  var hoy = periodoHoy();
+  abrirModal("Traer comprobantes de ARCA",
+    '<div class="aviso info"><span>ℹ️</span><div>Se traen los comprobantes <b>emitidos</b> por ' +
+      esc(cli.razonSocial) + " en el rango elegido. Los <b>recibidos</b> no se pueden traer: " +
+      "ARCA no tiene web service para eso, siguen viniendo del archivo.</div></div>" +
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Desde</label><input type="month" id="arcaDesde" value="' + periodoAMonthInput(hoy) + '"></div>' +
+      '<div class="campo"><label>Hasta</label><input type="month" id="arcaHasta" value="' + periodoAMonthInput(hoy) + '"></div>' +
+    "</div>" +
+    '<div class="ayuda">Cuantos más meses pidas, más tarda: ARCA obliga a consultar comprobante por comprobante.</div>' +
+    '<div id="arcaEstado" style="margin-top:12px"></div>',
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Traer", id:"btnArcaTraer", accion:function(){ ejecutarTraerDeArca(clienteId, cuit); } }
+    ]);
+}
+
+function ejecutarTraerDeArca(clienteId, cuit){
+  var desde = monthInputAPeriodo($("arcaDesde").value);
+  var hasta = monthInputAPeriodo($("arcaHasta").value);
+  if (!desde || !hasta){ toast("Elegí el rango de meses", "error"); return; }
+  if (hasta < desde){ toast("El mes final no puede ser anterior al inicial", "error"); return; }
+
+  var btn = $("btnArcaTraer");
+  if (btn){ btn.disabled = true; btn.textContent = "Consultando ARCA…"; }
+  $("arcaEstado").innerHTML = '<div class="aviso info"><span>⏳</span><div>Preguntándole a ARCA. ' +
+    "Puede tardar un rato largo si el cliente factura mucho.</div></div>";
+
+  pedirAlBackend("/arca/emitidos?cuit=" + cuit + "&desde=" + desde + "&hasta=" + hasta)
+    .then(function(datos){
+      var comps = datos.comprobantes || [];
+      if (!comps.length){
+        $("arcaEstado").innerHTML = '<div class="aviso warn"><span>🔍</span><div>ARCA no devolvió comprobantes en ese rango. ' +
+          "Puede que el cliente no haya facturado, o que todavía no te haya delegado el servicio.</div></div>";
+        if (btn){ btn.disabled = false; btn.textContent = "Traer"; }
+        return;
+      }
+
+      var registros = comps.map(function(c){
+        var total = TIPOS_NC_ARCA.indexOf(c.tipo) !== -1 ? -Math.abs(c.total) : c.total;
+        return {
+          fecha:    c.fecha,
+          periodo:  c.periodo,
+          tipo:     "emitido",
+          cbteTipo: String(c.tipo),
+          ptoVta:   c.ptoVta || 0,
+          nro:      c.numero || 0,
+          cae:      c.cae || "",
+          docNro:   c.docNro || "",
+          denom:    "",
+          moneda:   c.moneda || "PES",
+          neto:     c.neto || 0,
+          iva:      c.iva || 0,
+          /* En moneda extranjera el comprobante viene en su moneda: se pasa a
+             pesos con su propia cotización, que es lo que mira la escala. */
+          total:    c.moneda === "PES" ? total : total * (c.cotiz || 1),
+          origen:   "arca"
+        };
+      });
+
+      cerrarModal();
+      mostrarPreviewImportacion(clienteId, "emitido", registros, 0, "ARCA (web service)");
+    })
+    .catch(function(e){
+      $("arcaEstado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>No se pudo traer.</b><br>' +
+        esc(e.message) + "</div></div>";
+      if (btn){ btn.disabled = false; btn.textContent = "Traer"; }
+    });
+}
+
+/* ---------- CONFIGURACIÓN DEL BACKEND ---------- */
+
+$("btnGuardarBackend").onclick = function(){
+  var cfg = {
+    url:   $("cfgBackUrl").value.trim().replace(/\/+$/, ""),
+    token: $("cfgBackToken").value.trim()
+  };
+  ref("config/backend").set(cfg).then(function(){
+    ESTADO.config.backend = cfg;
+    toast("Conexión guardada", "ok");
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+};
+
+$("btnProbarBackend").onclick = function(){
+  var cont = $("cfgBackEstado");
+  var url   = $("cfgBackUrl").value.trim().replace(/\/+$/, "");
+  var token = $("cfgBackToken").value.trim();
+  if (!url){ toast("Escribí primero la URL", "error"); return; }
+
+  cont.innerHTML = '<div class="aviso info"><span>⏳</span><div>Probando…</div></div>';
+  fetch(url + "/diag", { headers: token ? { "X-App-Token": token } : {} })
+    .then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(d){
+        if (r.status === 401){
+          cont.innerHTML = '<div class="aviso bad"><span>🔒</span><div><b>El backend contesta, pero el token no coincide.</b><br>' +
+            "Tiene que ser el mismo valor que pusiste en Railway como <span class=mono>APP_API_TOKEN</span>.</div></div>";
+          return;
+        }
+        if (!r.ok) throw new Error(d.error || ("Respondió " + r.status));
+
+        var lista = (d.avisos || []).map(function(a){ return "<li>" + esc(a) + "</li>"; }).join("");
+        var listo = d.certificadoCargado && d.claveCargada;
+        cont.innerHTML = '<div class="aviso ' + (listo ? "ok" : "warn") + '"><span>' + (listo ? "✅" : "⚠️") + "</span><div>" +
+          "<b>" + (listo ? "El backend responde y tiene el certificado cargado." : "El backend responde, pero todavía no puede consultar ARCA.") + "</b>" +
+          "<br>Ambiente: <b>" + esc(d.ambiente || "?") + "</b>" +
+          (lista ? '<ul style="margin:6px 0 0 18px">' + lista + "</ul>" : "") +
+          "</div></div>";
+      });
+    })
+    .catch(function(e){
+      cont.innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>No pude conectarme.</b><br>' + esc(e.message) +
+        "<br>Revisá que la URL sea la correcta y que en Railway esté cargada <span class=mono>ALLOWED_ORIGINS</span> con el dominio de este sistema.</div></div>";
+    });
+};
+
 /* Dropzone */
 (function(){
   var dz = $("dropzone"), fi = $("fileInput");
+  $("btnTraerArca").onclick = traerDeArca;
   dz.onclick = function(){ fi.click(); };
   fi.onchange = function(){ if (this.files[0]){ procesarArchivo(this.files[0]); this.value = ""; } };
   ["dragenter","dragover"].forEach(function(ev){
@@ -3166,6 +3343,10 @@ function renderConfig(){
   $("cfgEjsTemplate").value = ejs.templateId || "";
   $("cfgEjsKey").value      = ejs.publicKey || "";
 
+  var back = ESTADO.config.backend || {};
+  $("cfgBackUrl").value   = back.url || "";
+  $("cfgBackToken").value = back.token || "";
+
   pintarEstadoBoveda();
 
   ref("usuarios").once("value").then(function(s){
@@ -3292,12 +3473,42 @@ function desbloquearBoveda(){
   });
 }
 
+/* `url` es la página de ingreso de cada organismo, para el acceso rápido.
+   El municipio no tiene una sola: cada uno tiene la suya, así que va sin link
+   y el acceso rápido para ese caso solo copia las credenciales. */
 var ORGANISMOS = [
-  { clave:"arca", nombre:"ARCA (clave fiscal)" },
-  { clave:"arba", nombre:"ARBA (CIT)" },
-  { clave:"agip", nombre:"AGIP (clave ciudad)" },
-  { clave:"municipal", nombre:"Municipio" }
+  { clave:"arca", nombre:"ARCA (clave fiscal)", url:"https://auth.afip.gob.ar/contribuyente_/login.xhtml" },
+  { clave:"arba", nombre:"ARBA (CIT)",          url:"https://www.arba.gov.ar/" },
+  { clave:"agip", nombre:"AGIP (clave ciudad)", url:"https://www.agip.gob.ar/" },
+  { clave:"municipal", nombre:"Municipio",      url:"" }
 ];
+
+function organismoPorClave(clave){
+  var out = null;
+  ORGANISMOS.forEach(function(o){ if (o.clave === clave) out = o; });
+  return out;
+}
+
+/* Copiar al portapapeles. La API moderna necesita https (GitHub Pages lo es)
+   y un clic real del usuario; el textarea de atrás es para los navegadores
+   viejos y para cuando el permiso queda denegado. */
+function copiarAlPortapapeles(texto){
+  if (navigator.clipboard && window.isSecureContext){
+    return navigator.clipboard.writeText(texto);
+  }
+  return new Promise(function(resolve, reject){
+    var ta = document.createElement("textarea");
+    ta.value = texto;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (_) {}
+    document.body.removeChild(ta);
+    ok ? resolve() : reject(new Error("El navegador no dejó copiar"));
+  });
+}
 
 function listarCredenciales(){
   ref("credenciales").once("value").then(function(s){
@@ -3314,7 +3525,10 @@ function listarCredenciales(){
       html += "<tr><td><b>" + esc(ESTADO.clientes[id].razonSocial) + "</b></td>";
       ORGANISMOS.forEach(function(o){
         var tiene = cred[id] && cred[id][o.clave];
-        html += "<td>" + (tiene ? '<span class="badge b-verde">✓ guardada</span>' : '<span class="badge b-gris">—</span>') + "</td>";
+        html += "<td>" + (tiene
+          ? '<button class="btn sec chico" onclick="accesoRapido(\'' + id + "','" + o.clave + '\')" ' +
+            'title="Copiar las claves y abrir el sitio">🔑 Entrar</button>'
+          : '<span class="badge b-gris">—</span>') + "</td>";
       });
       html += '<td><button class="btn sec chico" onclick="editarCredenciales(\'' + id + '\')">Ver / editar</button></td></tr>';
     });
@@ -3322,6 +3536,79 @@ function listarCredenciales(){
     abrirModal("Bóveda de claves", html + "</tbody></table></div>",
       [{ texto:"Cerrar", clase:"gris", accion:cerrarModal }], "ancho");
   });
+}
+
+/* Acceso rápido a la web del organismo.
+   No hace falta aclarar por qué no entra solo: ARCA, ARBA y AGIP piden segundo
+   factor y captcha, y no publican forma de ingresar por afuera del formulario.
+   Esto hace lo único que se puede hacer sin exponer las claves de nadie:
+   descifrarlas acá, dejarlas en el portapapeles y abrir la página de ingreso.
+   Se descifra ANTES de abrir el modal para que, al tocar el botón, copiar y
+   abrir la pestaña pasen dentro del mismo clic — si no, el navegador toma la
+   pestaña nueva por un pop-up y la bloquea. */
+function accesoRapido(clienteId, organismoClave){
+  if (!ESTADO.claveMaestra){
+    toast("Abrí primero la bóveda con la contraseña maestra", "error");
+    return;
+  }
+  var org = organismoPorClave(organismoClave);
+  var cli = ESTADO.clientes[clienteId];
+  if (!org || !cli) return;
+
+  ref("credenciales/" + clienteId + "/" + organismoClave).once("value").then(function(s){
+    var c = s.val();
+    if (!c){ toast("Ese cliente no tiene claves guardadas para " + org.nombre, "error"); return; }
+    return Promise.all([
+      c.usuario ? descifrar(ESTADO.claveMaestra, c.usuario) : Promise.resolve(""),
+      c.pass    ? descifrar(ESTADO.claveMaestra, c.pass)    : Promise.resolve("")
+    ]).then(function(r){
+      mostrarAccesoRapido(cli, org, r[0], r[1]);
+    });
+  }).catch(function(){
+    toast("No pude descifrar: ¿la contraseña maestra es la correcta?", "error");
+  });
+}
+
+function mostrarAccesoRapido(cli, org, usuario, pass){
+  /* El sitio se abre con un enlace de verdad, no con window.open: una pestaña
+     abierta por código es un pop-up para el navegador y la puede bloquear. */
+  var abrir = org.url
+    ? '<a class="btn" href="' + esc(org.url) + '" target="_blank" rel="noopener" ' +
+      'style="display:inline-block;padding:10px 18px">Abrir ' + esc(org.nombre) + ' ↗</a>'
+    : '<div class="ayuda">Cada municipio tiene su propia web, así que este no tiene enlace directo.</div>';
+
+  var html =
+    '<div class="aviso info"><span>🔑</span><div>Copiás el usuario, abrís el sitio y lo pegás; ' +
+      "después volvés acá por la clave. <b>No se puede entrar solo</b>: los organismos piden " +
+      "segundo factor o captcha, y no hay forma de saltearlos sin exponer las claves.</div></div>" +
+    '<div class="campo"><label>Usuario / CUIT</label>' +
+      '<div style="display:flex;gap:8px">' +
+        '<input type="text" id="arUsuario" value="' + esc(usuario) + '" readonly style="flex:1">' +
+        '<button class="btn sec chico" onclick="arCopiar(\'arUsuario\',\'Usuario\')">Copiar</button>' +
+      "</div></div>" +
+    '<div class="campo"><label>Clave</label>' +
+      '<div style="display:flex;gap:8px">' +
+        '<input type="password" id="arPass" value="' + esc(pass) + '" readonly style="flex:1">' +
+        '<button class="btn sec chico" onclick="arVerClave()">Ver</button>' +
+        '<button class="btn sec chico" onclick="arCopiar(\'arPass\',\'Clave\')">Copiar</button>' +
+      "</div></div>" +
+    '<div style="margin:18px 0 4px">' + abrir + "</div>" +
+    '<div class="aviso warn"><span>⚠️</span><div>Lo que copies queda en el portapapeles del equipo hasta que copies otra cosa. ' +
+      "En una computadora compartida, copiá cualquier otra cosa al terminar.</div></div>";
+
+  abrirModal(org.nombre + " · " + cli.razonSocial, html,
+    [{ texto:"Cerrar", clase:"gris", accion:cerrarModal }]);
+}
+
+function arCopiar(id, que){
+  copiarAlPortapapeles($(id).value)
+    .then(function(){ toast(que + " copiado al portapapeles", "ok"); })
+    .catch(function(){ toast("No pude copiar solo: seleccionalo y copialo a mano.", "error"); });
+}
+
+function arVerClave(){
+  var i = $("arPass");
+  i.type = i.type === "password" ? "text" : "password";
 }
 
 function editarCredenciales(clienteId){

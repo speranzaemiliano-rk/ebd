@@ -149,9 +149,14 @@ existente: así los cálculos de períodos anteriores siguen dando bien.
 
 ## Traer los comprobantes de ARCA sin importar archivos
 
-El backend que consulta los web services de ARCA está escrito y probado en la
-carpeta **`functions/`** — ver `functions/README.md`, que tiene el paso a paso
-completo. Trae los comprobantes **emitidos** y la **constancia de inscripción**.
+El backend que consulta los web services de ARCA está en la carpeta
+**`functions/`** — ver `functions/README.md`, que tiene el paso a paso completo.
+Trae los comprobantes **emitidos** y la **constancia de inscripción**.
+
+Del lado del sistema ya está todo: en **Configuración → Conexión con ARCA** se
+cargan la dirección del backend y el token, con un botón **Probar conexión** que
+dice exactamente qué falta. Después, en **Comprobantes**, el botón **Traer de
+ARCA** los baja sin pasar por ningún archivo.
 
 Para que empiece a funcionar faltan tres cosas, y ninguna es código:
 
@@ -160,11 +165,19 @@ Para que empiece a funcionar faltan tres cosas, y ninguna es código:
 3. Desplegar la carpeta `functions/` en Railway con el certificado cargado.
 
 Los comprobantes **recibidos** no tienen web service en ARCA: esos se siguen
-importando desde el archivo de Mis Comprobantes.
+importando desde el archivo de Mis Comprobantes, en CSV o en Excel.
+
+## Entrar a ARCA, ARBA y AGIP desde el sistema
+
+En la **bóveda de claves**, cada cliente que tenga credenciales guardadas
+muestra un botón **🔑 Entrar** por organismo. Descifra usuario y clave en el
+momento, los deja listos para copiar de a uno y abre la página de ingreso.
+
+No entra solo, y no es un tema de programación: ARCA, ARBA y AGIP piden segundo
+factor o captcha, y la única forma de saltearlos sería mandarle las claves de
+todos los clientes a un servicio de terceros.
 
 ## Qué falta (próximos pasos)
 
-- **Botón "Traer de ARCA"** en la pantalla de Comprobantes, que llame al backend.
-  Se conecta cuando el certificado y las delegaciones estén listas.
 - **Cálculo de IIBB**: hoy los importes de ARBA, AGIP y municipio se cargan a mano.
 - **Adjuntar el PDF del VEP** al mail (hoy va como link).
