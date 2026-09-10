@@ -192,6 +192,18 @@ async function obtenerTicket(certPem, keyPem, ambiente) {
   return pedirTicket(certPem, keyPem, ambiente, 'wsfe');
 }
 
+/* Tira el ticket guardado y pide uno nuevo. Hace falta después de agregar la
+   delegación de un cliente: el ticket lleva grabadas las relaciones que
+   existían cuando se emitió, así que con el viejo ARCA sigue contestando que
+   ese CUIT no está en la lista aunque el trámite ya esté hecho.
+   ARCA puede negarse a emitir otro mientras el anterior siga vigente; en ese
+   caso no queda más que esperar a que venza. */
+async function renovarTicket(certPem, keyPem, ambiente) {
+  ticketEnMemoria = null;
+  try { fs.unlinkSync(ARCHIVO_TICKET); } catch (_) {}
+  return pedirTicket(certPem, keyPem, ambiente, 'wsfe');
+}
+
 /* ==========================================================================
    LAS CONSULTAS (WSFE)
    ========================================================================== */
@@ -303,6 +315,7 @@ function probarFirma(certPem, keyPem) {
 
 module.exports = {
   obtenerTicket,
+  renovarTicket,
   probarFirma,
   estadoServidores,
   puntosDeVenta,
