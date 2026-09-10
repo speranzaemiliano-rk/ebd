@@ -843,8 +843,13 @@ tbody tr:hover{background:#FAFBFC}
         </div>
         <div class="aviso info" id="avisoArca" style="margin-bottom:14px">
           <span>⚡</span>
-          <div class="crece">Si ya configuraste la conexión con ARCA, los <b>emitidos</b> se traen solos, sin bajar ningún archivo.</div>
+          <div class="crece"><b>Web service:</b> trae los emitidos, pero solo de clientes que facturan con un sistema conectado. Lo emitido desde el portal de ARCA no lo ve.</div>
           <button class="btn sec chico" id="btnTraerArca">Traer de ARCA</button>
+        </div>
+        <div class="aviso warn" id="avisoPortal" style="margin-bottom:14px">
+          <span>🔐</span>
+          <div class="crece"><b>Portal:</b> trae emitidos y recibidos de cualquier cliente, incluso los del portal. Entra con la clave fiscal del cliente —guardada en la bóveda— a través de un servicio externo.</div>
+          <button class="btn sec chico" id="btnTraerPortal">Traer del portal</button>
         </div>
         <div class="dropzone" id="dropzone">
           <div class="ico">📄</div>
@@ -1262,7 +1267,7 @@ function esAdminRol(){ return ESTADO.rol === "admin"; }
    datos, sumarlo también a una de estas dos listas. */
 var BOTONES_ESCRITURA = ["btnNuevoCliente","btnCargaManual","btnRecalcularLiq",
                          "btnEnviarMails","btnHonGenerar","btnNuevoMovimiento",
-                         "btnTraerArca"];
+                         "btnTraerArca","btnTraerPortal"];
 var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
                          "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
                          "btnConfigBoveda","btnBoveda","btnGuardarBackend"];
@@ -2321,7 +2326,7 @@ function procesarArchivo(file){
   lector.readAsText(file, "UTF-8");
 }
 
-function seguirConLasFilas(filas, clienteId, nombreArchivo, origen){
+function seguirConLasFilas(filas, clienteId, nombreArchivo, origen, tipoForzado){
     if (filas.length < 2){ toast("El archivo no tiene filas de datos", "error"); return; }
 
     /* La fila de encabezados puede no ser la primera (Mis Comprobantes a veces
@@ -2340,7 +2345,7 @@ function seguirConLasFilas(filas, clienteId, nombreArchivo, origen){
       return;
     }
 
-    var tipoSel = $("impTipo").value;
+    var tipoSel = tipoForzado || $("impTipo").value;
     var tipo = tipoSel === "auto" ? (detectarTipo(headers) || "emitido") : tipoSel;
 
     var registros = [], errores = 0;
@@ -2585,6 +2590,122 @@ function ejecutarTraerDeArca(clienteId, cuit){
     });
 }
 
+/* ---------- TRAER DEL PORTAL DE ARCA ("Mis Comprobantes") ----------
+   Lo que el web service no puede: lo emitido desde el portal y lo recibido.
+   Se automatiza el portal con la clave fiscal del cliente, que sale de la
+   bóveda en el momento y no se guarda en ningún lado del camino. */
+
+function traerDelPortal(){
+  var clienteId = $("impCliente").value;
+  if (!clienteId){ toast("Elegí primero el cliente", "error"); return; }
+  var cli = ESTADO.clientes[clienteId];
+  var cuit = String(cli.cuit || "").replace(/\D/g, "");
+  if (cuit.length !== 11){ toast("Ese cliente no tiene un CUIT válido cargado", "error"); return; }
+  if (!backendConfig().url){
+    toast("Primero configurá la conexión con ARCA", "error");
+    irA("tabConfig");
+    return;
+  }
+  if (!ESTADO.claveMaestra){
+    toast("Abrí primero la bóveda: la clave fiscal del cliente sale de ahí", "error");
+    abrirDialogoBoveda();
+    return;
+  }
+
+  ref("credenciales/" + clienteId + "/arca").once("value").then(function(s){
+    var c = s.val();
+    if (!c || !c.pass){
+      toast("Ese cliente no tiene la clave fiscal guardada en la bóveda", "error");
+      return;
+    }
+    return Promise.all([
+      c.usuario ? descifrar(ESTADO.claveMaestra, c.usuario) : Promise.resolve(cuit),
+      descifrar(ESTADO.claveMaestra, c.pass)
+    ]).then(function(r){
+      pedirRangoDelPortal(clienteId, cuit, r[0] || cuit, r[1]);
+    });
+  }).catch(function(){
+    toast("No pude descifrar las claves: ¿la contraseña maestra es la correcta?", "error");
+  });
+}
+
+function pedirRangoDelPortal(clienteId, cuit, usuario, clave){
+  var hoy = new Date();
+  var haceUnMes = new Date(hoy.getFullYear(), hoy.getMonth() - 1, hoy.getDate());
+  var iso = function(d){
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  };
+
+  abrirModal("Traer del portal de ARCA",
+    '<div class="aviso warn"><span>🔐</span><div>Esto entra al portal de ARCA <b>con la clave fiscal de ' +
+      esc(ESTADO.clientes[clienteId].razonSocial) + "</b> a través de un servicio externo (Afip SDK). " +
+      "Una clave fiscal da acceso a toda la cuenta, no solo a los comprobantes: usalo con clientes que estén al tanto.</div></div>" +
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Qué traer</label><select id="ptTipo">' +
+        '<option value="E">Emitidos</option><option value="R">Recibidos</option></select></div>' +
+      '<div class="campo"><label>&nbsp;</label><div class="ayuda">El portal es lento: conviene de a un mes o dos.</div></div>' +
+      '<div class="campo"><label>Desde</label><input type="date" id="ptDesde" value="' + iso(haceUnMes) + '"></div>' +
+      '<div class="campo"><label>Hasta</label><input type="date" id="ptHasta" value="' + iso(hoy) + '"></div>' +
+    "</div>" +
+    '<div id="ptEstado" style="margin-top:12px"></div>',
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Traer", id:"btnPtTraer", accion:function(){
+          ejecutarTraerDelPortal(clienteId, cuit, usuario, clave);
+        } }
+    ]);
+}
+
+function ejecutarTraerDelPortal(clienteId, cuit, usuario, clave){
+  var tipo  = $("ptTipo").value;
+  var desde = $("ptDesde").value;
+  var hasta = $("ptHasta").value;
+  if (!desde || !hasta){ toast("Elegí el rango de fechas", "error"); return; }
+
+  var btn = $("btnPtTraer");
+  if (btn){ btn.disabled = true; btn.textContent = "Entrando al portal…"; }
+  $("ptEstado").innerHTML = '<div class="aviso info"><span>⏳</span><div>Entrando al portal de ARCA y buscando los comprobantes. ' +
+    "Puede tardar varios minutos: el portal no es rápido.</div></div>";
+
+  var b = backendConfig();
+  fetch(b.url + "/portal/comprobantes", {
+    method: "POST",
+    headers: Object.assign({ "Content-Type": "application/json" }, b.token ? { "X-App-Token": b.token } : {}),
+    body: JSON.stringify({ cuit:cuit, usuario:usuario, clave:clave, tipo:tipo, desde:desde, hasta:hasta })
+  })
+  .then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(d){
+      if (!r.ok) throw new Error(d.error || ("El backend respondió " + r.status));
+      return d;
+    });
+  })
+  .then(function(datos){
+    var filas = datos.filas || [];
+    if (!filas.length){
+      $("ptEstado").innerHTML = '<div class="aviso warn"><span>🔍</span><div>El portal no devolvió comprobantes en ese rango.</div></div>';
+      if (btn){ btn.disabled = false; btn.textContent = "Traer"; }
+      return;
+    }
+
+    /* Las filas vienen como objetos. Se pasan a la misma forma que tiene un
+       archivo —encabezados y después los valores— y siguen por el camino de
+       siempre, que ya sabe reconocer las columnas de Mis Comprobantes. */
+    var columnas = Object.keys(filas[0]);
+    var comoArchivo = [columnas].concat(filas.map(function(f){
+      return columnas.map(function(c){ return f[c]; });
+    }));
+
+    cerrarModal();
+    seguirConLasFilas(comoArchivo, clienteId, "portal de ARCA",
+                      "portal", tipo === "R" ? "recibido" : "emitido");
+  })
+  .catch(function(e){
+    $("ptEstado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>No se pudo traer.</b><br>' +
+      esc(e.message) + "</div></div>";
+    if (btn){ btn.disabled = false; btn.textContent = "Traer"; }
+  });
+}
+
 /* ---------- CONFIGURACIÓN DEL BACKEND ---------- */
 
 $("btnGuardarBackend").onclick = function(){
@@ -2635,6 +2756,7 @@ $("btnProbarBackend").onclick = function(){
 (function(){
   var dz = $("dropzone"), fi = $("fileInput");
   $("btnTraerArca").onclick = traerDeArca;
+  $("btnTraerPortal").onclick = traerDelPortal;
   dz.onclick = function(){ fi.click(); };
   fi.onchange = function(){ if (this.files[0]){ procesarArchivo(this.files[0]); this.value = ""; } };
   ["dragenter","dragover"].forEach(function(ev){
