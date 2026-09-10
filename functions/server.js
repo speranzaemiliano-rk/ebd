@@ -14,7 +14,7 @@
 
 const express = require('express');
 const cors    = require('cors');
-const Afip    = require('@afipsdk/afip.js');
+const arca    = require('./arca');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -77,34 +77,33 @@ function leerPem(valor) {
   return v;
 }
 
-/* Instancia de Afip para consultar por un CUIT.
-   Ojo con esto, que es la clave de todo el asunto: el certificado es SIEMPRE
-   el del estudio, y `cuit` es el del cliente que se consulta. ARCA lo permite
-   solo si ese cliente delegó el servicio al estudio desde su clave fiscal. */
-function crearAfip(cuit) {
+/* El ticket de acceso sale SIEMPRE del certificado del estudio; el CUIT del
+   cliente va después, en cada consulta. ARCA responde solo si ese cliente
+   delegó el servicio al estudio desde su clave fiscal. */
+function credenciales() {
   const cert = leerPem(process.env.AFIP_CERT);
   const key  = leerPem(process.env.AFIP_KEY);
-  const cuitConsulta = String(cuit || process.env.AFIP_CUIT || '').replace(/\D/g, '');
-
   if (!cert || !key) {
     const err = new Error('Faltan las credenciales de ARCA. Configurá AFIP_CERT y AFIP_KEY en Railway.');
     err.faltanCreds = true;
     throw err;
   }
-  if (!cuitConsulta) {
-    const err = new Error('Falta el CUIT a consultar.');
-    err.faltanCreds = true;
-    throw err;
-  }
+  return { cert, key };
+}
 
-  const opts = {
-    CUIT: cuitConsulta,
-    cert, key,
-    production: entorno() === 'production'
-  };
-  const token = process.env.AFIP_ACCESS_TOKEN || '';
-  if (token) opts.access_token = token;
-  return new Afip(opts);
+function ticket() {
+  const c = credenciales();
+  return arca.obtenerTicket(c.cert, c.key, entorno());
+}
+
+/* Traduce los códigos con los que ARCA contesta que no. El 600 es el que se
+   ve cuando falta la delegación, y sin traducirlo parece un error del sistema. */
+function explicarArca(e) {
+  const codigos = e.codigosArca || [];
+  if (codigos.indexOf('600') !== -1) {
+    return 'ARCA no te reconoce como representante de ese CUIT. Falta la delegación del cliente, o quedó a medias: ' + e.message;
+  }
+  return e.message;
 }
 
 function detalleError(e) {
@@ -164,13 +163,18 @@ const TOPE_CONSULTAS = 1200;
    atrás, y corta apenas se pasa del rango de fechas pedido. Ir al revés es
    lo que hace la diferencia: los comprobantes del período buscado son los
    últimos, así que en general se resuelve en pocas consultas. */
-async function traerDeUnTipo(afip, ptoVta, tipo, desdeNum, hastaNum) {
+async function traerDeUnTipo(tk, cuit, ptoVta, tipo, desdeNum, hastaNum) {
+  const amb = entorno();
   const lista = [];
   let ultimo = 0;
   try {
-    ultimo = await afip.ElectronicBilling.getLastVoucher(ptoVta, tipo);
-  } catch (_) {
-    return lista;   // ese punto de venta no tiene comprobantes de este tipo
+    ultimo = await arca.ultimoComprobante(tk, cuit, ptoVta, tipo, amb);
+  } catch (e) {
+    /* Un CUIT sin ese tipo de comprobante da error de negocio, no es una
+       falla: se saltea. Pero si es un problema de permisos hay que avisarlo,
+       porque si no el resultado es "cero comprobantes" sin explicación. */
+    if ((e.codigosArca || []).indexOf('600') !== -1) throw e;
+    return lista;
   }
   if (!ultimo) return lista;
 
@@ -181,7 +185,7 @@ async function traerDeUnTipo(afip, ptoVta, tipo, desdeNum, hastaNum) {
     consultas++;
     let v = null;
     try {
-      v = await afip.ElectronicBilling.getVoucherInfo(nro, ptoVta, tipo);
+      v = await arca.consultarComprobante(tk, cuit, ptoVta, tipo, nro, amb);
     } catch (_) { continue; }
     if (!v || !v.CbteFch) continue;
 
@@ -247,15 +251,17 @@ app.get('/arca/emitidos', async (req, res) => {
     if (cuit.length !== 11) return res.status(400).json({ error: 'CUIT inválido.' });
     if (!desdeANumero(desde)) return res.status(400).json({ error: 'Falta el período desde (AAAAMM).' });
 
-    const afip = crearAfip(cuit);
+    const tk = await ticket();
     const desdeNum = desdeANumero(desde);
     const hastaNum = hastaANumero(hasta);
 
     let puntos = [];
     try {
-      const pv = await afip.ElectronicBilling.getSalesPoints();
-      puntos = (pv || []).filter(p => p.Bloqueado === 'N').map(p => p.Nro);
-    } catch (_) {
+      const pv = await arca.puntosDeVenta(tk, cuit, entorno());
+      puntos = pv.filter(p => !p.bloqueado).map(p => p.nro);
+    } catch (e) {
+      /* Sin delegación no hay nada que hacer: cortar acá y decirlo. */
+      if ((e.codigosArca || []).indexOf('600') !== -1) throw e;
       /* Algunos contribuyentes no exponen el padrón de puntos de venta.
          El 1 es el habitual, así que se intenta igual en vez de fallar. */
       puntos = [1];
@@ -268,7 +274,7 @@ app.get('/arca/emitidos', async (req, res) => {
     const comprobantes = [];
     for (const pto of puntos) {
       for (const tipo of tipos) {
-        const parcial = await traerDeUnTipo(afip, pto, tipo, desdeNum, hastaNum);
+        const parcial = await traerDeUnTipo(tk, cuit, pto, tipo, desdeNum, hastaNum);
         comprobantes.push(...parcial);
       }
     }
@@ -283,7 +289,7 @@ app.get('/arca/emitidos', async (req, res) => {
       comprobantes
     });
   } catch (e) {
-    return res.status(e.faltanCreds ? 400 : 500).json({ error: e.message, detalle: detalleError(e) });
+    return res.status(e.faltanCreds ? 400 : 500).json({ error: explicarArca(e), detalle: detalleError(e) });
   }
 });
 
@@ -292,42 +298,15 @@ app.get('/arca/emitidos', async (req, res) => {
    ========================================================================== */
 
 /* GET /arca/constancia?cuit=20123456786
-   Devuelve los datos del contribuyente: razón social, domicilio, actividades,
-   impuestos y categoría de monotributo. Sirve para llenar la ficha sola. */
-app.get('/arca/constancia', async (req, res) => {
-  try {
-    const cuit = String(req.query.cuit || '').replace(/\D/g, '');
-    if (cuit.length !== 11) return res.status(400).json({ error: 'CUIT inválido.' });
-
-    const afip = crearAfip(process.env.AFIP_CUIT || cuit);
-    const datos = await afip.RegisterScopeThirteen.getTaxpayerDetails(cuit);
-    if (!datos) return res.status(404).json({ error: 'ARCA no devolvió datos para ese CUIT.' });
-
-    const persona  = datos.datosGenerales || {};
-    const mono     = datos.datosMonotributo || {};
-    const domicilio = persona.domicilioFiscal || {};
-
-    return res.json({
-      cuit,
-      razonSocial: persona.razonSocial ||
-                   [persona.apellido, persona.nombre].filter(Boolean).join(', '),
-      estado:      persona.estadoClave || '',
-      domicilio: {
-        calle:      domicilio.direccion || '',
-        localidad:  domicilio.localidad || '',
-        provincia:  domicilio.descripcionProvincia || '',
-        cp:         domicilio.codPostal || ''
-      },
-      categoriaMonotributo: mono.categoriaMonotributo &&
-                            (mono.categoriaMonotributo.descripcionCategoria ||
-                             mono.categoriaMonotributo.idCategoria) || '',
-      actividad: (mono.actividadMonotributista &&
-                  mono.actividadMonotributista.descripcionActividad) || '',
-      crudo: datos
-    });
-  } catch (e) {
-    return res.status(e.faltanCreds ? 400 : 500).json({ error: e.message, detalle: detalleError(e) });
-  }
+   Todavía no está. El padrón es OTRO web service (ws_sr_constancia_inscripcion):
+   pide su propio ticket de acceso, su propia adhesión en el Administrador de
+   Relaciones y habla en otro dialecto. Cuando los comprobantes estén andando
+   en producción, se agrega acá con el mismo mecanismo de arca.js. */
+app.get('/arca/constancia', (req, res) => {
+  return res.status(501).json({
+    error: 'La constancia todavía no está implementada en este backend.',
+    detalle: 'Usa otro web service de ARCA (padrón), que necesita su propia adhesión. Por ahora, los datos del contribuyente se cargan a mano en la ficha del cliente.'
+  });
 });
 
 /* ==========================================================================
@@ -361,20 +340,48 @@ app.get('/diag', (req, res) => {
   });
 });
 
+/* Revisa el certificado sin hablar con ARCA. Conviene mirar esto primero:
+   si la clave y el certificado no son pareja, no hay nada más que probar. */
+app.get('/diag/firma', (req, res) => {
+  try {
+    const c = credenciales();
+    return res.json(arca.probarFirma(c.cert, c.key));
+  } catch (e) {
+    return res.status(e.faltanCreds ? 400 : 500).json({ error: e.message });
+  }
+});
+
 /* Prueba de punta a punta contra ARCA: si esto responde, el certificado y la
    delegación de ese CUIT están bien. Es el primer lugar donde mirar cuando
    "no trae nada". */
 app.get('/diag/arca', async (req, res) => {
+  const cuit = String(req.query.cuit || process.env.AFIP_CUIT || '').replace(/\D/g, '');
+  const out = { cuit, ambiente: entorno(), estadoServidores: null, ticket: null, puntosDeVenta: null };
+
+  /* Los tres pasos se prueban por separado y en orden, porque cada uno falla
+     por un motivo distinto: ARCA caído, certificado mal, o delegación
+     faltante. Juntos darían un solo error que no distingue nada. */
   try {
-    const cuit = String(req.query.cuit || process.env.AFIP_CUIT || '').replace(/\D/g, '');
-    const afip = crearAfip(cuit);
-    const out = { cuit, estadoServidores: null, puntosDeVenta: null };
-    try { out.estadoServidores = await afip.ElectronicBilling.getServerStatus(); } catch (e) { out.estadoServidores = 'error: ' + e.message; }
-    try { out.puntosDeVenta    = await afip.ElectronicBilling.getSalesPoints();  } catch (e) { out.puntosDeVenta = 'error: ' + e.message; }
-    return res.json(out);
+    out.estadoServidores = await arca.estadoServidores(entorno());
   } catch (e) {
-    return res.status(e.faltanCreds ? 400 : 500).json({ error: e.message, detalle: detalleError(e) });
+    out.estadoServidores = 'error: ' + e.message;
   }
+
+  let tk = null;
+  try {
+    tk = await ticket();
+    out.ticket = 'ok, vence ' + new Date(tk.expira).toISOString();
+  } catch (e) {
+    out.ticket = 'error: ' + e.message;
+    return res.json(out);
+  }
+
+  try {
+    out.puntosDeVenta = await arca.puntosDeVenta(tk, cuit, entorno());
+  } catch (e) {
+    out.puntosDeVenta = 'error: ' + explicarArca(e);
+  }
+  return res.json(out);
 });
 
 app.listen(PORT, () => console.log('EBD backend escuchando en el puerto ' + PORT));
