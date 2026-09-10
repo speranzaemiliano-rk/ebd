@@ -138,7 +138,7 @@ un aviso. Usá GitHub Pages, o serví la carpeta por HTTP desde tu máquina.
 3. **Configuración** → inicializá la bóveda con una contraseña maestra.
    Guardala en un lugar seguro: no se almacena en ningún lado y no hay forma de recuperarla.
 4. **Clientes** → cargá el primer contribuyente.
-5. **Comprobantes** → importá el CSV de Mis Comprobantes.
+5. **Comprobantes** → importá el archivo de Mis Comprobantes, en CSV o en Excel.
 6. **Recategorización** → mirá el semáforo.
 
 La escala de ARCA vigente desde el 01/08/2026 ya viene cargada. Cuando publiquen la
@@ -147,11 +147,24 @@ existente: así los cálculos de períodos anteriores siguen dando bien.
 
 ---
 
+## Traer los comprobantes de ARCA sin importar archivos
+
+El backend que consulta los web services de ARCA está escrito y probado en la
+carpeta **`functions/`** — ver `functions/README.md`, que tiene el paso a paso
+completo. Trae los comprobantes **emitidos** y la **constancia de inscripción**.
+
+Para que empiece a funcionar faltan tres cosas, y ninguna es código:
+
+1. Sacar el certificado digital del estudio en ARCA (clave fiscal nivel 3).
+2. Que cada cliente delegue el servicio al estudio desde su clave fiscal.
+3. Desplegar la carpeta `functions/` en Railway con el certificado cargado.
+
+Los comprobantes **recibidos** no tienen web service en ARCA: esos se siguen
+importando desde el archivo de Mis Comprobantes.
+
 ## Qué falta (próximos pasos)
 
-- **Web service WSFE** para bajar los comprobantes emitidos automáticamente.
-  Va en Cloud Functions (carpeta `functions/`), requiere plan Blaze y certificado
-  digital del estudio. Los comprobantes **recibidos** no tienen web service en ARCA:
-  esos se siguen importando por CSV.
+- **Botón "Traer de ARCA"** en la pantalla de Comprobantes, que llame al backend.
+  Se conecta cuando el certificado y las delegaciones estén listas.
 - **Cálculo de IIBB**: hoy los importes de ARBA, AGIP y municipio se cargan a mano.
 - **Adjuntar el PDF del VEP** al mail (hoy va como link).
