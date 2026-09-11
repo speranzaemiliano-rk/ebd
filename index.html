@@ -7,13 +7,24 @@
 
 <!-- ---------- Instalable como app (PWA) ---------- -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1A73E8">
+<meta name="theme-color" content="#F5F5F7">
+<meta name="color-scheme" content="light">
 <meta name="description" content="Liquidación de monotributo, ingresos brutos y tasas municipales, con control de recategorización semestral.">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="EBD">
+
+<!-- ---------- Tipografía ----------
+     San Francisco, la letra del sistema de Apple, no se puede distribuir en una
+     web. Con -apple-system se pide la del sistema: en Mac, iPhone y iPad sale
+     SF de verdad, sin descargar nada. En Windows y Android no existe, así que
+     ahí cae en Inter, que es la que más se le parece de las libres. Si la red
+     falla, la página se ve igual con la letra del sistema: no bloquea nada. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 
 <!-- Lector de Excel (SheetJS). Solo se usa al importar comprobantes en .xlsx;
      si no carga, la importación por CSV sigue funcionando igual. -->
@@ -24,32 +35,65 @@
      Nunca mover dentro de un div con display:none (rompe los tabs).
      ============================================================ -->
 <style>
+/* ==========================================================================
+   ESTILO — lenguaje visual de Apple (apple.com / macOS / iOS)
+
+   Las tres decisiones que definen el aspecto, por si hay que volver atrás:
+
+   1. TIPOGRAFIA. San Francisco (la letra del sistema de Apple) no se puede
+      distribuir en una web: se pide primero con -apple-system, así en Mac,
+      iPhone y iPad sale la de verdad. En Windows y Android cae en Inter, que
+      es la que más se le parece de las gratuitas. El tracking es NEGATIVO y
+      cambia con el tamaño: cuanto más grande el texto, más apretado.
+   2. COLOR. Gris casi negro para el texto (#1d1d1f), gris medio para lo
+      secundario (#6e6e73), y dos fondos nada más: blanco y #f5f5f7. El azul
+      #0071e3 es el de los botones de apple.com. Los colores de estado son
+      los "accesibles" de Apple, que son los del sistema oscurecidos para que
+      se lean sobre fondo claro.
+   3. FORMA. Nada de sombras marcadas ni bordes duros: tarjetas blancas con
+      esquinas muy redondeadas (18px) apoyadas sobre el gris, botones con
+      forma de pastilla, y separadores de un pelo de ancho.
+   ========================================================================== */
+
 :root{
-  --azul:#1A73E8; --azul-h:#1765CC; --azul-bg:#E8F0FE;
-  --borde:#DADCE0; --texto:#202124; --gris:#5F6368; --gris2:#80868B;
-  --fondo:#F1F3F4; --blanco:#FFFFFF;
-  --verde:#188038; --verde-bg:#E6F4EA;
-  --amar:#B06000;  --amar-bg:#FEF7E0;
-  --rojo:#C5221F;  --rojo-bg:#FCE8E6;
-  --violeta:#8430CE; --violeta-bg:#F3E8FD;
-  --r:16px; --r2:10px;
-  --sombra:0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+  /* Azul de acción (el de los botones de apple.com) */
+  --azul:#0071E3; --azul-h:#0077ED; --azul-link:#0066CC;
+  --azul-bg:rgba(0,113,227,.10);
+
+  /* Grises: texto, secundario, terciario, separador y los dos fondos */
+  --texto:#1D1D1F; --gris:#6E6E73; --gris2:#86868B;
+  --borde:#D2D2D7; --pelo:rgba(0,0,0,.08);
+  --fondo:#F5F5F7; --blanco:#FFFFFF;
+
+  /* Estados: versión accesible de los colores del sistema (se leen en claro) */
+  --verde:#248A3D; --verde-bg:rgba(52,199,89,.15);
+  --amar:#C93400;  --amar-bg:rgba(255,149,0,.17);
+  --rojo:#D70015;  --rojo-bg:rgba(255,59,48,.13);
+  --violeta:#8944AB; --violeta-bg:rgba(175,82,222,.14);
+
+  --r:18px; --r2:12px;
+  --sombra:0 4px 20px rgba(0,0,0,.09);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{
-  font-family:"Google Sans",Roboto,-apple-system,"Segoe UI",Arial,sans-serif;
-  background:var(--fondo); color:var(--texto); font-size:14px; line-height:1.5;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",
+              "Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+  background:var(--fondo); color:var(--texto);
+  font-size:14px; line-height:1.47; letter-spacing:-.01em;
+  /* Apple suaviza el trazo: sin esto la letra se ve más gorda de la cuenta */
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
 }
 /* El tracking depende del tamaño: la letra grande se lee separada y hay que
    apretarla, la chica necesita aire. Un solo valor para todo queda mal en
    algún lado. */
-h1,h2,h3{font-weight:500}
-h1{letter-spacing:-.6px;line-height:1.12}
-h2{letter-spacing:-.3px;line-height:1.2}
-h3{letter-spacing:-.2px}
-button{font-family:inherit;font-size:14px;cursor:pointer;border:none;background:none}
-input,select,textarea{font-family:inherit;font-size:14px}
-a{color:var(--azul);text-decoration:none}
+h1,h2,h3{font-weight:600}
+h1{letter-spacing:-.03em;line-height:1.08}
+h2{letter-spacing:-.022em;line-height:1.16}
+h3{letter-spacing:-.018em;line-height:1.2}
+button{font-family:inherit;font-size:14px;cursor:pointer;border:none;background:none;letter-spacing:inherit}
+input,select,textarea{font-family:inherit;font-size:14px;letter-spacing:inherit}
+a{color:var(--azul-link);text-decoration:none}
+a:hover{text-decoration:underline}
 .oculto{display:none !important}
 
 /* ---------- LOGO ----------
@@ -62,9 +106,9 @@ a{color:var(--azul);text-decoration:none}
   font-size:9.5px;font-weight:500;letter-spacing:.28em;
   text-transform:uppercase;color:var(--gris);line-height:1;white-space:nowrap;
 }
-.logo-marca.claro .logo-txt{color:rgba(255,255,255,.78)}
-/* Sobre el azul del panel, la marca necesita despegarse del fondo */
-.logo-marca.claro svg{filter:drop-shadow(0 2px 7px rgba(3,26,72,.4))}
+.logo-marca.claro .logo-txt{color:rgba(255,255,255,.72)}
+/* Sobre el panel oscuro la marca no necesita sombra: ya contrasta sola */
+.logo-marca.claro svg{filter:none}
 
 /* La órbita da la vuelta completa alrededor de las letras. El recuadro de los
    logos que giran es CUADRADO (viewBox 10 10 100 100) justamente por esto: el
@@ -92,15 +136,16 @@ a{color:var(--azul);text-decoration:none}
 @media (prefers-reduced-transparency:reduce){
   header.top,nav.tabs{
     background:var(--blanco);backdrop-filter:none;-webkit-backdrop-filter:none;
-    border-bottom:1px solid var(--borde);
   }
-  .modal-fondo{background:rgba(32,33,36,.72);backdrop-filter:none;-webkit-backdrop-filter:none}
+  .modal-fondo{background:rgba(0,0,0,.55);backdrop-filter:none;-webkit-backdrop-filter:none}
+  #toast{background:#1D1D1F;backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 
 @media (prefers-contrast:more){
   header.top,nav.tabs{background:var(--blanco);border-bottom:1px solid var(--texto)}
   .btn.sec,.btn.gris{border-color:var(--texto)}
-  .modal{box-shadow:0 0 0 1px var(--texto),0 8px 28px rgba(0,0,0,.28)}
+  .card{box-shadow:0 0 0 1px var(--texto)}
+  .modal{box-shadow:0 0 0 1px var(--texto),0 24px 60px rgba(0,0,0,.3)}
 }
 
 /* ---------- LOGIN: pantalla de presentación ---------- */
@@ -109,21 +154,23 @@ a{color:var(--azul);text-decoration:none}
   display:grid;grid-template-columns:1.12fr .88fr;
 }
 
-/* Panel izquierdo: la "slide" */
+/* Panel izquierdo: la "slide".
+   Negro, como las secciones de producto de apple.com. El color no lo pone un
+   degradado de lado a lado sino dos luces apoyadas sobre el negro. */
 .slide{
   position:relative;overflow:hidden;color:#fff;
-  padding:56px 58px;display:flex;flex-direction:column;justify-content:space-between;
-  background:linear-gradient(135deg,#0B4BB8 0%,#1A73E8 48%,#3D8BFF 100%);
+  padding:60px 58px;display:flex;flex-direction:column;justify-content:space-between;
+  background:#000;
 }
 .slide::before{
   content:"";position:absolute;inset:0;pointer-events:none;
   background:
-    radial-gradient(circle at 84% 10%, rgba(255,255,255,.18), transparent 44%),
-    radial-gradient(circle at 4% 96%, rgba(0,0,0,.20), transparent 48%);
+    radial-gradient(circle at 78% 8%, rgba(0,113,227,.55), transparent 52%),
+    radial-gradient(circle at 12% 88%, rgba(88,86,214,.38), transparent 55%);
 }
 /* retícula tenue, como el papel de un libro contable */
 .slide::after{
-  content:"";position:absolute;inset:0;pointer-events:none;opacity:.13;
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.10;
   background-image:
     linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px);
@@ -133,33 +180,32 @@ a{color:var(--azul);text-decoration:none}
 }
 .slide > *{position:relative;z-index:1}
 .slide h1{
-  font-size:clamp(28px,3.1vw,42px);font-weight:500;line-height:1.12;
-  letter-spacing:-1.1px;margin-bottom:15px;
+  font-size:clamp(30px,3.4vw,48px);font-weight:600;line-height:1.06;
+  letter-spacing:-.035em;margin-bottom:16px;
 }
-.slide .bajada{font-size:16px;line-height:1.6;opacity:.92;max-width:450px}
-.slide ul{list-style:none;margin-top:32px;display:grid;gap:14px}
-.slide li{display:flex;gap:12px;align-items:flex-start;font-size:14.5px;opacity:.95;line-height:1.45}
+.slide .bajada{font-size:17px;line-height:1.55;letter-spacing:-.018em;color:rgba(255,255,255,.78);max-width:450px}
+.slide ul{list-style:none;margin-top:34px;display:grid;gap:15px}
+.slide li{display:flex;gap:13px;align-items:flex-start;font-size:15px;color:rgba(255,255,255,.9);line-height:1.45;letter-spacing:-.015em}
 .slide li .tic{
   flex:none;width:22px;height:22px;border-radius:50%;margin-top:1px;
-  background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:11px;
+  background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:11px;
 }
-.slide .pie{font-size:12.5px;opacity:.7;line-height:1.65}
+.slide .pie{font-size:12.5px;color:rgba(255,255,255,.5);line-height:1.65}
 
 /* Panel derecho: el formulario */
 .lado-form{display:flex;align-items:center;justify-content:center;padding:40px 44px}
 .login-card{width:100%;max-width:376px}
-.login-card .titulo{font-size:27px;font-weight:500;letter-spacing:-.5px;margin-bottom:6px}
-.login-card .sub{color:var(--gris);margin-bottom:26px;font-size:14px}
+.login-card .titulo{font-size:32px;font-weight:600;letter-spacing:-.03em;line-height:1.1;margin-bottom:8px}
+.login-card .sub{color:var(--gris);margin-bottom:28px;font-size:15px;letter-spacing:-.016em}
 .login-card .legal{
-  margin-top:26px;padding-top:18px;border-top:1px solid var(--borde);
   font-size:12px;color:var(--gris2);line-height:1.6;
 }
 
 @media(max-width:900px){
   #pantallaLogin{display:block;overflow-y:auto}
-  .slide{padding:30px 24px 34px}
-  .slide h1{font-size:25px;letter-spacing:-.6px;margin-bottom:10px}
-  .slide .bajada{font-size:14.5px}
+  .slide{padding:34px 24px 38px}
+  .slide h1{font-size:28px;letter-spacing:-.03em;margin-bottom:10px}
+  .slide .bajada{font-size:15px}
   .slide ul,.slide .pie{display:none}
   .lado-form{padding:32px 20px 48px;align-items:flex-start}
 }
@@ -172,151 +218,169 @@ a{color:var(--azul);text-decoration:none}
 #app.visible{display:block}
 /* Barra y solapas como material translúcido: el contenido pasa por abajo y se
    nota que hay una capa flotando, en vez de una franja opaca que tapa. El
-   borde es apenas un velo, no una línea dura. */
+   borde es un pelo, no una línea. */
 header.top{
   background:rgba(255,255,255,.72);
-  backdrop-filter:blur(20px) saturate(180%);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);
-  border-bottom:1px solid rgba(218,220,224,.6);
-  padding:0 24px;height:64px;display:flex;align-items:center;gap:16px;
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--pelo);
+  padding:0 24px;height:54px;display:flex;align-items:center;gap:16px;
   position:sticky;top:0;z-index:100;
 }
-header.top .marca{font-size:19px;font-weight:500;white-space:nowrap}
-header.top .marca span{color:var(--azul)}
+header.top .marca{font-size:17px;font-weight:600;letter-spacing:-.022em;white-space:nowrap}
+header.top .marca span{color:var(--azul-link)}
 header.top .sep{flex:1}
 .chip-user{
-  display:flex;align-items:center;gap:10px;background:var(--fondo);
-  border-radius:999px;padding:6px 14px 6px 6px;font-size:13px;
+  display:flex;align-items:center;gap:9px;background:rgba(0,0,0,.05);
+  border-radius:999px;padding:4px 13px 4px 4px;font-size:13px;letter-spacing:-.014em;
 }
 .avatar{
-  width:30px;height:30px;border-radius:50%;background:var(--azul);color:#fff;
-  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;
+  width:28px;height:28px;border-radius:50%;background:var(--azul);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;
 }
 
-/* ---------- TABS ---------- */
+/* ---------- TABS ----------
+   Control segmentado, como en iOS: la solapa activa es una pastilla llena,
+   no un subrayado. */
 nav.tabs{
   background:rgba(255,255,255,.72);
-  backdrop-filter:blur(20px) saturate(180%);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);
-  border-bottom:1px solid rgba(218,220,224,.6);
-  padding:0 24px;display:flex;gap:2px;overflow-x:auto;position:sticky;top:64px;z-index:99;
+  backdrop-filter:saturate(180%) blur(20px);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid var(--pelo);
+  padding:9px 24px;display:flex;gap:4px;overflow-x:auto;position:sticky;top:54px;z-index:99;
+  scrollbar-width:none;
 }
+nav.tabs::-webkit-scrollbar{display:none}
 nav.tabs button{
-  padding:14px 18px;color:var(--gris);font-weight:500;font-size:14px;
-  border-bottom:3px solid transparent;white-space:nowrap;border-radius:8px 8px 0 0;
+  padding:7px 15px;color:var(--gris);font-weight:400;font-size:13.5px;letter-spacing:-.014em;
+  border-radius:999px;white-space:nowrap;
+  transition:background .18s, color .18s, transform .09s ease-out;
 }
-nav.tabs button:hover{background:var(--fondo)}
-nav.tabs button.activo{color:var(--azul);border-bottom-color:var(--azul)}
-main{padding:24px;max-width:1500px;margin:0 auto}
+nav.tabs button:hover{background:rgba(0,0,0,.05);color:var(--texto)}
+nav.tabs button.activo{background:var(--texto);color:#fff;font-weight:500}
+main{padding:28px 24px 60px;max-width:1500px;margin:0 auto}
 .panel{display:none}
 .panel.activo{display:block}
 
-/* ---------- CARDS ---------- */
+/* ---------- CARDS ----------
+   Blanco sobre gris, esquinas grandes y ninguna línea alrededor: la tarjeta
+   se separa del fondo por el color, no por un borde. */
 .card{
-  background:var(--blanco);border:1px solid var(--borde);border-radius:var(--r);
-  padding:22px;margin-bottom:18px;
+  background:var(--blanco);border-radius:var(--r);padding:24px 26px;margin-bottom:18px;
+  box-shadow:0 1px 3px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05);
 }
-.card > h2{font-size:17px;margin-bottom:4px}
-.card > .desc{color:var(--gris);font-size:13px;margin-bottom:18px}
-.card-head{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
-.card-head h2{font-size:17px;flex:1;min-width:200px}
+.card > h2{font-size:21px;letter-spacing:-.022em;margin-bottom:5px}
+.card > .desc{color:var(--gris);font-size:14px;letter-spacing:-.016em;margin-bottom:20px}
+.card-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.card-head h2{font-size:21px;letter-spacing:-.022em;flex:1;min-width:200px}
 
-.grid{display:grid;gap:16px}
+/* ---------- GRILLAS ---------- */
+.grid{display:grid;gap:18px}
 .g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .g3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .g4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
 
 /* ---------- KPI ---------- */
+/* Cada número va en su propia tarjeta blanca: los KPI van sueltos sobre el
+   gris de la página, no dentro de una tarjeta, así que si fueran grises se
+   confundirían con el fondo. */
 .kpi{
-  background:var(--blanco);border:1px solid var(--borde);border-radius:var(--r);padding:20px;
+  background:var(--blanco);border-radius:var(--r);padding:22px 24px;
+  box-shadow:0 1px 3px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05);
 }
-.kpi .lbl{color:var(--gris);font-size:12px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
-.kpi .val{font-size:30px;font-weight:500;line-height:1.1}
-.kpi .pie{color:var(--gris2);font-size:12px;margin-top:6px}
+.kpi .lbl{color:var(--gris);font-size:13px;letter-spacing:-.014em;margin-bottom:6px}
+.kpi .val{font-size:38px;font-weight:600;line-height:1.05;letter-spacing:-.028em}
+.kpi .pie{color:var(--gris2);font-size:12.5px;letter-spacing:-.012em;margin-top:7px}
 .kpi.ok .val{color:var(--verde)} .kpi.warn .val{color:var(--amar)} .kpi.bad .val{color:var(--rojo)}
 
-/* ---------- BOTONES ---------- */
-/* La respuesta va en el apretar, no en el soltar: si el botón se hunde recién
+/* ---------- BOTONES ----------
+   Pastilla azul, sin sombra y sin negrita: en Apple el botón se distingue por
+   el color y la forma, no por el peso de la letra.
+   La respuesta va en el apretar, no en el soltar: si el botón se hunde recién
    al soltar, la interfaz se siente muerta. 90ms es lo que tarda en leerse como
    instantáneo sin verse como un salto. */
 .btn{
-  background:var(--azul);color:#fff;border-radius:999px;padding:10px 22px;font-weight:500;
-  transition:background .15s, box-shadow .15s, transform .09s ease-out;
+  background:var(--azul);color:#fff;border-radius:999px;padding:11px 22px;
+  font-weight:400;font-size:14px;letter-spacing:-.016em;line-height:1.2;
+  transition:background .18s, transform .09s ease-out;
 }
 .btn:active:not(:disabled){transform:scale(.97)}
 .btn-icono:active{transform:scale(.92)}
 nav.tabs button:active{transform:scale(.98)}
-.btn:hover{background:var(--azul-h);box-shadow:var(--sombra)}
-.btn:disabled{background:#C4C7C5;cursor:not-allowed;box-shadow:none}
-.btn.sec{background:var(--blanco);color:var(--azul);border:1px solid var(--borde)}
-.btn.sec:hover{background:var(--azul-bg)}
-.btn.gris{background:var(--blanco);color:var(--gris);border:1px solid var(--borde)}
-.btn.gris:hover{background:var(--fondo)}
-.btn.peligro{background:var(--rojo)} .btn.peligro:hover{background:#A50E0E}
+.btn:hover{background:var(--azul-h)}
+.btn:disabled{background:rgba(0,0,0,.16);color:rgba(255,255,255,.9);cursor:not-allowed}
+.btn.sec{background:transparent;color:var(--azul-link);border:1px solid var(--azul)}
+.btn.sec:hover{background:var(--azul);color:#fff}
+.btn.gris{background:rgba(0,0,0,.05);color:var(--texto);border:none}
+.btn.gris:hover{background:rgba(0,0,0,.09)}
+.btn.peligro{background:#FF3B30} .btn.peligro:hover{background:#E5342A}
 .btn.chico{padding:7px 16px;font-size:13px}
 .btn-icono{
   width:34px;height:34px;border-radius:50%;color:var(--gris);
   display:inline-flex;align-items:center;justify-content:center;font-size:16px;
+  transition:background .18s, color .18s, transform .09s ease-out;
 }
-.btn-icono:hover{background:var(--fondo);color:var(--texto)}
+.btn-icono:hover{background:rgba(0,0,0,.05);color:var(--texto)}
 
-/* ---------- FORMULARIOS ---------- */
-.campo{margin-bottom:16px}
-.campo label{display:block;font-size:12px;color:var(--gris);margin-bottom:6px;font-weight:500}
+/* ---------- FORMULARIOS ----------
+   El foco no es una línea más oscura: es un halo blando alrededor del campo,
+   como en macOS. */
+.campo{margin-bottom:18px}
+.campo label{display:block;font-size:13px;color:var(--gris);margin-bottom:7px;font-weight:400;letter-spacing:-.014em}
 .campo input[type=text],.campo input[type=email],.campo input[type=number],
 .campo input[type=password],.campo input[type=date],.campo input[type=month],
 .campo select,.campo textarea{
-  width:100%;padding:11px 13px;border:1px solid var(--borde);border-radius:var(--r2);
-  background:var(--blanco);color:var(--texto);outline:none;transition:border-color .15s;
+  width:100%;padding:12px 14px;border:1px solid var(--borde);border-radius:var(--r2);
+  background:var(--blanco);color:var(--texto);outline:none;font-size:15px;letter-spacing:-.016em;
+  transition:border-color .15s, box-shadow .15s;
 }
-.campo input:focus,.campo select:focus,.campo textarea:focus{border-color:var(--azul);box-shadow:0 0 0 1px var(--azul)}
+.campo input:focus,.campo select:focus,.campo textarea:focus{
+  border-color:var(--azul);box-shadow:0 0 0 4px rgba(0,113,227,.22);
+}
 .campo textarea{resize:vertical;min-height:110px;font-family:inherit;line-height:1.6}
-.campo .ayuda{font-size:12px;color:var(--gris2);margin-top:5px}
-.check{display:flex;align-items:center;gap:9px;padding:8px 0;cursor:pointer;font-size:14px}
-.check input{width:17px;height:17px;accent-color:var(--azul);cursor:pointer}
+.campo .ayuda{font-size:12.5px;color:var(--gris2);margin-top:6px;letter-spacing:-.012em}
+.check{display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;font-size:14.5px;letter-spacing:-.016em}
+.check input{width:18px;height:18px;accent-color:var(--azul);cursor:pointer}
 
-/* ---------- TABLAS ---------- */
-.tabla-wrap{overflow-x:auto;border:1px solid var(--borde);border-radius:var(--r2)}
-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--blanco)}
+/* ---------- TABLAS ----------
+   Encabezado en minúscula y gris: el VERSALITA ESPACIADO es de otra escuela.
+   Acá la jerarquía la da el color, no el tamaño de la caja. */
+.tabla-wrap{overflow-x:auto;border:1px solid var(--pelo);border-radius:14px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--blanco);letter-spacing:-.014em}
 th{
-  text-align:left;padding:12px 14px;background:#F8F9FA;color:var(--gris);
-  font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.5px;
-  border-bottom:1px solid var(--borde);white-space:nowrap;
+  text-align:left;padding:12px 15px;background:#FBFBFD;color:var(--gris);
+  font-weight:500;font-size:12.5px;letter-spacing:-.01em;
+  border-bottom:1px solid var(--pelo);white-space:nowrap;
 }
-td{padding:12px 14px;border-bottom:1px solid #EDEEF0;vertical-align:middle}
+td{padding:13px 15px;border-bottom:1px solid rgba(0,0,0,.055);vertical-align:middle}
 tbody tr:last-child td{border-bottom:none}
-tbody tr:hover{background:#FAFBFC}
+tbody tr:hover{background:#FAFAFC}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.mono{font-family:"Roboto Mono",ui-monospace,Consolas,monospace;font-size:12.5px}
+.mono{font-family:"SF Mono",SFMono-Regular,ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;letter-spacing:0}
 
 /* ---------- BANDA DE BIENVENIDA DEL INICIO ---------- */
 .hero-inicio{
   position:relative;overflow:hidden;border-radius:var(--r);margin-bottom:18px;
-  padding:26px 30px;color:#fff;display:flex;align-items:center;gap:26px;flex-wrap:wrap;
-  background:linear-gradient(135deg,#0B4BB8 0%,#1A73E8 55%,#3D8BFF 100%);
+  padding:32px 34px;color:#fff;display:flex;align-items:center;gap:26px;flex-wrap:wrap;
+  background:#1D1D1F;
 }
 .hero-inicio::before{
-  content:"";position:absolute;inset:0;pointer-events:none;opacity:.13;
-  background-image:
-    linear-gradient(rgba(255,255,255,.7) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.7) 1px, transparent 1px);
-  background-size:46px 46px;
-  -webkit-mask-image:radial-gradient(circle at 18% 50%, #000, transparent 78%);
-  mask-image:radial-gradient(circle at 18% 50%, #000, transparent 78%);
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(circle at 92% -20%, rgba(0,113,227,.62), transparent 62%);
 }
 .hero-inicio > *{position:relative;z-index:1}
 .hero-txt{flex:1;min-width:220px}
-.hero-txt h2{font-size:23px;font-weight:500;letter-spacing:-.4px;margin-bottom:5px}
-.hero-txt p{font-size:14px;opacity:.9;line-height:1.55}
+.hero-txt h2{font-size:28px;font-weight:600;letter-spacing:-.028em;line-height:1.1;margin-bottom:7px}
+.hero-txt p{font-size:15px;color:rgba(255,255,255,.72);line-height:1.5;letter-spacing:-.016em}
 .hero-dato{
-  background:rgba(255,255,255,.14);border-radius:var(--r2);padding:12px 18px;
+  background:rgba(255,255,255,.10);border-radius:var(--r2);padding:14px 20px;
   text-align:center;min-width:118px;
 }
-.hero-dato .n{display:block;font-size:22px;font-weight:500;line-height:1.2}
-.hero-dato .l{display:block;font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.6px;margin-top:3px}
+.hero-dato .n{display:block;font-size:26px;font-weight:600;line-height:1.15;letter-spacing:-.024em}
+.hero-dato .l{display:block;font-size:12px;color:rgba(255,255,255,.65);letter-spacing:-.012em;margin-top:4px}
 @media(max-width:640px){
-  .hero-inicio{padding:20px;gap:16px}
-  .hero-txt h2{font-size:19px}
+  .hero-inicio{padding:22px;gap:16px}
+  .hero-txt h2{font-size:22px}
 }
 
 /* ---------- PRESENTACIÓN DE ENTRADA (dos pasos: Mess, después EBD) ----------
@@ -352,25 +416,24 @@ tbody tr:hover{background:#FAFBFC}
   background:linear-gradient(90deg,transparent,rgba(124,92,255,.6),transparent);
   transition:width 1.2s cubic-bezier(.4,0,.2,1);
 }
-#ebdSplash.paso2 .sp-rule{background:linear-gradient(90deg,transparent,rgba(61,139,255,.75),transparent)}
+#ebdSplash.paso2 .sp-rule{background:linear-gradient(90deg,transparent,rgba(0,113,227,.75),transparent)}
 #ebdSplash .sp-sub{
   margin-top:10px;font-size:.78rem;font-weight:600;letter-spacing:2.4px;text-transform:uppercase;
   color:#6f6c8a;max-width:88vw;text-align:center;
 }
 #ebdSplash.paso2 .sp-sub{color:rgba(191,216,255,.62)}
 #ebdSplash .sp-enter{
-  margin-top:32px;padding:9px 28px;border:1px solid rgba(61,139,255,.55);background:transparent;
-  color:#BFD8FF;font-family:"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:9.5px;
-  letter-spacing:.32em;text-transform:uppercase;border-radius:3px;cursor:pointer;
+  margin-top:32px;padding:10px 26px;border:1px solid rgba(255,255,255,.3);background:transparent;
+  color:#fff;font-size:13px;letter-spacing:-.014em;border-radius:999px;cursor:pointer;
   opacity:0;pointer-events:none;transition:opacity .5s ease,border-color .2s,color .2s,background .2s;
 }
 #ebdSplash.paso2 .sp-enter{opacity:1;pointer-events:auto}
 #ebdSplash .sp-enter:hover,#ebdSplash .sp-enter:focus-visible{
-  border-color:rgba(61,139,255,.95);color:#fff;background:rgba(26,115,232,.14);outline:none;
+  border-color:transparent;color:#fff;background:var(--azul);outline:none;
 }
 #ebdSplash .sp-pista{
   position:absolute;bottom:28px;left:0;right:0;text-align:center;
-  font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.28);
+  font-size:12px;letter-spacing:-.012em;color:rgba(255,255,255,.34);
   transition:opacity .3s;
 }
 #ebdSplash.paso2 .sp-pista{opacity:0}
@@ -382,16 +445,16 @@ tbody tr:hover{background:#FAFBFC}
 .dobleentrada{min-width:920px}
 .dobleentrada th.cli,.dobleentrada td.cli{
   position:sticky;left:0;z-index:2;background:var(--blanco);
-  min-width:210px;max-width:210px;box-shadow:1px 0 0 var(--borde);
+  min-width:210px;max-width:210px;box-shadow:1px 0 0 var(--pelo);
 }
-.dobleentrada th.cli{background:#F8F9FA;z-index:3}
-.dobleentrada tbody tr:hover td.cli{background:#FAFBFC}
+.dobleentrada th.cli{background:#FBFBFD;z-index:3}
+.dobleentrada tbody tr:hover td.cli{background:#FAFAFC}
 .dobleentrada th.mes{text-align:center;width:62px;padding:10px 4px}
 .dobleentrada td.mes{text-align:center;padding:5px 4px}
 .celda{
-  display:block;width:100%;border-radius:7px;padding:7px 3px;
-  font-size:11.5px;font-weight:500;line-height:1.25;cursor:pointer;
-  border:1px solid transparent;transition:.12s;
+  display:block;width:100%;border-radius:9px;padding:7px 3px;
+  font-size:11.5px;font-weight:500;line-height:1.25;cursor:pointer;letter-spacing:-.012em;
+  border:1px solid transparent;transition:transform .14s ease-out, box-shadow .14s;
 }
 .celda:hover{transform:translateY(-1px);box-shadow:var(--sombra)}
 .celda .m{display:block;font-size:10px;opacity:.75;font-weight:400}
@@ -400,44 +463,44 @@ tbody tr:hover{background:#FAFBFC}
 .c-porv{background:var(--amar-bg);color:var(--amar)}
 .c-nada{background:var(--fondo);color:var(--gris2);cursor:default}
 .c-nada:hover{transform:none;box-shadow:none}
-.c-parc{background:#FFF0E1;color:#B06000}
-.col-deuda{background:#FFFBFA;font-weight:500}
+.c-parc{background:rgba(255,149,0,.17);color:var(--amar)}
+.col-deuda{background:rgba(255,59,48,.04);font-weight:500}
 
 /* ---------- BADGES / SEMAFORO ---------- */
 .badge{
   display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;
-  font-size:12px;font-weight:500;white-space:nowrap;
+  font-size:12px;font-weight:500;white-space:nowrap;letter-spacing:-.012em;
 }
 .b-verde{background:var(--verde-bg);color:var(--verde)}
 .b-amar{background:var(--amar-bg);color:var(--amar)}
 .b-rojo{background:var(--rojo-bg);color:var(--rojo)}
-.b-azul{background:var(--azul-bg);color:var(--azul)}
+.b-azul{background:var(--azul-bg);color:var(--azul-link)}
 .b-viol{background:var(--violeta-bg);color:var(--violeta)}
-.b-gris{background:var(--fondo);color:var(--gris)}
+.b-gris{background:rgba(0,0,0,.06);color:var(--gris)}
 .punto{width:8px;height:8px;border-radius:50%;display:inline-block}
-.p-verde{background:var(--verde)} .p-amar{background:var(--amar)} .p-rojo{background:var(--rojo)}
+.p-verde{background:#34C759} .p-amar{background:#FF9500} .p-rojo{background:#FF3B30}
 
 .cat-chip{
   display:inline-flex;align-items:center;justify-content:center;
-  width:30px;height:30px;border-radius:8px;font-weight:500;font-size:14px;
-  background:var(--azul-bg);color:var(--azul);
+  width:30px;height:30px;border-radius:9px;font-weight:600;font-size:14px;letter-spacing:-.02em;
+  background:var(--azul-bg);color:var(--azul-link);
 }
 .cat-chip.sube{background:var(--rojo-bg);color:var(--rojo)}
 .cat-chip.baja{background:var(--verde-bg);color:var(--verde)}
-.cat-chip.fuera{background:#3C4043;color:#fff}
+.cat-chip.fuera{background:var(--texto);color:#fff}
 
 /* barra de avance hacia el tope de la categoria */
-.barra{height:6px;background:var(--fondo);border-radius:999px;overflow:hidden;min-width:90px}
+.barra{height:6px;background:rgba(0,0,0,.08);border-radius:999px;overflow:hidden;min-width:90px}
 .barra i{display:block;height:100%;border-radius:999px;transition:width .4s}
-.barra i.ok{background:var(--verde)} .barra i.warn{background:var(--amar)} .barra i.bad{background:var(--rojo)}
+.barra i.ok{background:#34C759} .barra i.warn{background:#FF9500} .barra i.bad{background:#FF3B30}
 
 /* ---------- MODAL ---------- */
 /* El fondo se oscurece y además desenfoca: empuja hacia atrás lo que quedó
    abierto en vez de solo taparlo con un velo gris. */
 .modal-fondo{
-  position:fixed;inset:0;background:rgba(32,33,36,.42);z-index:8000;
-  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-  display:none;align-items:flex-start;justify-content:center;padding:32px 16px;overflow-y:auto;
+  position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:8000;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;
   opacity:0;transition:opacity .18s ease-out;
 }
 .modal-fondo.abierto{display:flex;opacity:1}
@@ -445,8 +508,8 @@ tbody tr:hover{background:#FAFBFC}
 /* Entra materializándose —crece y se define— y se va por el mismo camino. Si
    apareciera de una forma y se fuera por otra, se pierde de dónde vino. */
 .modal{
-  background:var(--blanco);border-radius:var(--r);width:100%;max-width:760px;
-  box-shadow:0 8px 28px rgba(0,0,0,.28);
+  background:var(--blanco);border-radius:20px;width:100%;max-width:760px;
+  box-shadow:0 24px 60px rgba(0,0,0,.24);
   animation:materializar .22s cubic-bezier(.2,.8,.2,1);
   transition:opacity .16s ease-in, transform .16s ease-in;
 }
@@ -458,68 +521,75 @@ tbody tr:hover{background:#FAFBFC}
 }
 .modal-fondo.cerrando{opacity:0}
 .modal-fondo.cerrando .modal{opacity:0;transform:translateY(10px) scale(.98);animation:none}
-.modal-head{padding:22px 26px 0;display:flex;align-items:flex-start;gap:12px}
-.modal-head h3{font-size:19px;flex:1}
-.modal-body{padding:20px 26px}
+.modal-head{padding:26px 28px 0;display:flex;align-items:flex-start;gap:12px}
+.modal-head h3{font-size:22px;letter-spacing:-.024em;flex:1}
+.modal-body{padding:22px 28px}
 .modal-pie{
-  padding:16px 26px 22px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;
-  border-top:1px solid var(--borde);margin-top:6px;
+  padding:18px 28px 24px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;
+  border-top:1px solid var(--pelo);margin-top:6px;
 }
 
 /* ---------- VARIOS ---------- */
-.vacio{text-align:center;padding:56px 20px;color:var(--gris)}
-.vacio .ico{font-size:44px;margin-bottom:12px;opacity:.35}
+.vacio{text-align:center;padding:60px 20px;color:var(--gris);font-size:15px;letter-spacing:-.016em}
+.vacio .ico{font-size:44px;margin-bottom:12px;opacity:.3}
 .aviso{
-  padding:14px 16px;border-radius:var(--r2);font-size:13px;margin-bottom:16px;
-  display:flex;gap:11px;align-items:flex-start;line-height:1.55;
+  padding:15px 17px;border-radius:var(--r2);font-size:13.5px;margin-bottom:16px;
+  display:flex;gap:11px;align-items:flex-start;line-height:1.5;letter-spacing:-.014em;
 }
-.aviso.info{background:var(--azul-bg);color:#174EA6}
+.aviso.info{background:var(--azul-bg);color:#0040DD}
 .aviso.warn{background:var(--amar-bg);color:var(--amar)}
 .aviso.bad{background:var(--rojo-bg);color:var(--rojo)}
 .aviso.ok{background:var(--verde-bg);color:var(--verde)}
-.aviso b{font-weight:500}
+.aviso b{font-weight:600}
 
 #toast{
   position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(120px);
-  background:#3C4043;color:#fff;padding:14px 22px;border-radius:var(--r2);
-  font-size:14px;z-index:9500;transition:transform .25s;max-width:88vw;box-shadow:var(--sombra);
+  background:rgba(29,29,31,.88);color:#fff;padding:14px 22px;border-radius:14px;
+  backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
+  font-size:14px;letter-spacing:-.016em;z-index:9500;transition:transform .28s cubic-bezier(.2,.8,.2,1);
+  max-width:88vw;box-shadow:0 8px 30px rgba(0,0,0,.3);
 }
 #toast.ver{transform:translateX(-50%) translateY(0)}
-#toast.error{background:var(--rojo)}
-#toast.ok{background:var(--verde)}
+#toast.error{background:rgba(215,0,21,.92)}
+#toast.ok{background:rgba(36,138,61,.92)}
 
-.filtros{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.filtros{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
 .filtros input[type=text],.filtros select{
-  padding:9px 13px;border:1px solid var(--borde);border-radius:999px;background:var(--blanco);outline:none;
+  padding:9px 15px;border:1px solid var(--borde);border-radius:999px;background:var(--blanco);
+  outline:none;font-size:14px;letter-spacing:-.016em;transition:border-color .15s, box-shadow .15s;
 }
 .filtros input[type=text]{min-width:230px}
-.filtros input:focus,.filtros select:focus{border-color:var(--azul)}
+.filtros input:focus,.filtros select:focus{border-color:var(--azul);box-shadow:0 0 0 4px rgba(0,113,227,.22)}
 
 .dropzone{
-  border:2px dashed var(--borde);border-radius:var(--r);padding:40px 20px;text-align:center;
-  color:var(--gris);transition:.15s;cursor:pointer;background:#FAFBFC;
+  border:1.5px dashed var(--borde);border-radius:var(--r);padding:44px 20px;text-align:center;
+  color:var(--gris);transition:.18s;cursor:pointer;background:var(--fondo);
+  font-size:14.5px;letter-spacing:-.016em;
 }
-.dropzone:hover,.dropzone.encima{border-color:var(--azul);background:var(--azul-bg);color:var(--azul)}
-.dropzone .ico{font-size:40px;margin-bottom:10px;opacity:.5}
+.dropzone:hover,.dropzone.encima{border-color:var(--azul);background:var(--azul-bg);color:var(--azul-link)}
+.dropzone .ico{font-size:40px;margin-bottom:10px;opacity:.45}
 
 .lista-simple{list-style:none}
 .lista-simple li{
-  display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #EDEEF0;font-size:13px;
+  display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.055);
+  font-size:13.5px;letter-spacing:-.014em;
 }
 .lista-simple li:last-child{border-bottom:none}
 .lista-simple .crece{flex:1;min-width:0}
 .lista-simple .tit{font-weight:500}
-.lista-simple .sub{color:var(--gris);font-size:12px}
+.lista-simple .sub{color:var(--gris);font-size:12.5px}
 
+/* Título de sección: en minúscula y con peso, no versalita espaciada */
 .seccion-tit{
-  font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:var(--gris);
-  font-weight:500;margin:22px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--borde);
+  font-size:15px;letter-spacing:-.018em;color:var(--texto);
+  font-weight:600;margin:26px 0 12px;padding-bottom:9px;border-bottom:1px solid var(--pelo);
 }
 .seccion-tit:first-child{margin-top:0}
 
 @media(max-width:640px){
-  main{padding:14px} .card{padding:16px} header.top{padding:0 14px} nav.tabs{padding:0 8px}
-  .modal-body,.modal-head,.modal-pie{padding-left:16px;padding-right:16px}
+  main{padding:16px 14px 48px} .card{padding:18px 16px} header.top{padding:0 14px} nav.tabs{padding:8px 10px}
+  .modal-body,.modal-head,.modal-pie{padding-left:18px;padding-right:18px}
+  .login-card .titulo{font-size:27px}
 }
 </style>
 </head>
@@ -569,7 +639,7 @@ tbody tr:hover{background:#FAFBFC}
         '<clipPath id="delanteS"><rect x="0" y="63" width="120" height="57"/></clipPath>' +
       '</defs>' +
       '<ellipse class="orbita" cx="60" cy="60" rx="50" ry="21.5" fill="none" stroke="url(#aroS)" stroke-width="3.2" opacity=".5"/>' +
-      '<g font-family="Google Sans, Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">' +
+      '<g font-family="-apple-system, BlinkMacSystemFont, Inter, Helvetica Neue, Arial, sans-serif" font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">' +
         '<g fill="url(#cantoS)">' +
           '<text x="60.4" y="72.4">EBD</text><text x="60.8" y="72.8">EBD</text>' +
           '<text x="61.2" y="73.2">EBD</text><text x="61.6" y="73.6">EBD</text>' +
@@ -659,7 +729,7 @@ tbody tr:hover{background:#FAFBFC}
         </defs>
         <ellipse class="orbita" cx="60" cy="60" rx="50" ry="21.5" fill="none"
                  stroke="url(#aroL)" stroke-width="3.2" opacity=".5"/>
-        <g font-family="Google Sans, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+        <g font-family="-apple-system, BlinkMacSystemFont, Inter, Helvetica Neue, Arial, sans-serif"
            font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">
           <g fill="url(#cantoL)">
             <text x="60.4" y="72.4">EBD</text><text x="60.8" y="72.8">EBD</text>
@@ -731,10 +801,10 @@ tbody tr:hover{background:#FAFBFC}
             <stop offset="0" stop-color="#0E3E90"/><stop offset="1" stop-color="#07245E"/>
           </linearGradient>
           <linearGradient id="aroH" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stop-color="#1A73E8" stop-opacity=".15"/>
-            <stop offset=".32" stop-color="#1A73E8" stop-opacity=".85"/>
+            <stop offset="0" stop-color="#0071E3" stop-opacity=".15"/>
+            <stop offset=".32" stop-color="#0071E3" stop-opacity=".85"/>
             <stop offset=".70" stop-color="#6BA8FF" stop-opacity=".8"/>
-            <stop offset="1" stop-color="#1A73E8" stop-opacity=".15"/>
+            <stop offset="1" stop-color="#0071E3" stop-opacity=".15"/>
           </linearGradient>
           <clipPath id="delanteH"><rect x="0" y="63" width="120" height="57"/></clipPath>
         </defs>
@@ -742,7 +812,7 @@ tbody tr:hover{background:#FAFBFC}
           <ellipse cx="60" cy="60" rx="50" ry="21.5" fill="none"
                    stroke="url(#aroH)" stroke-width="3.2" opacity=".55"/>
         </g>
-        <g font-family="Google Sans, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+        <g font-family="-apple-system, BlinkMacSystemFont, Inter, Helvetica Neue, Arial, sans-serif"
            font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">
           <g fill="url(#cantoH)">
             <text x="60.4" y="72.4">EBD</text><text x="60.8" y="72.8">EBD</text>
@@ -808,7 +878,7 @@ tbody tr:hover{background:#FAFBFC}
           </defs>
           <ellipse class="orbita" cx="60" cy="60" rx="50" ry="21.5" fill="none"
                    stroke="url(#aroI)" stroke-width="3.2" opacity=".5"/>
-          <g font-family="Google Sans, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+          <g font-family="-apple-system, BlinkMacSystemFont, Inter, Helvetica Neue, Arial, sans-serif"
              font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">
             <g fill="url(#cantoI)">
               <text x="60.4" y="72.4">EBD</text><text x="60.8" y="72.8">EBD</text>
@@ -943,7 +1013,7 @@ tbody tr:hover{background:#FAFBFC}
       <div class="card">
         <div class="card-head">
           <h2>Control de recategorización</h2>
-          <select id="recatCorte" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:999px"></select>
+          <select id="recatCorte" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px"></select>
           <button class="btn sec chico" id="btnExportRecat">Exportar CSV</button>
         </div>
         <div class="aviso info">
@@ -959,7 +1029,7 @@ tbody tr:hover{background:#FAFBFC}
       <div class="card">
         <div class="card-head">
           <h2>Liquidación mensual</h2>
-          <input type="month" id="liqPeriodo" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:var(--r2)">
+          <input type="month" id="liqPeriodo" style="padding:9px 13px;border:1px solid var(--borde);border-radius:var(--r2)">
           <button class="btn sec chico" id="btnRecalcularLiq">Recalcular cuotas ARCA</button>
         </div>
         <div id="tablaLiquidacion"></div>
@@ -978,7 +1048,7 @@ tbody tr:hover{background:#FAFBFC}
       <div class="card">
         <div class="card-head">
           <h2>Honorarios por cliente y mes</h2>
-          <select id="honAnio" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:999px"></select>
+          <select id="honAnio" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px"></select>
           <button class="btn sec chico" id="btnHonExportar">Exportar CSV</button>
           <button class="btn sec chico" id="btnHonGenerar">Generar meses</button>
         </div>
@@ -1004,7 +1074,7 @@ tbody tr:hover{background:#FAFBFC}
           <button class="btn" id="btnNuevoMovimiento">+ Movimiento</button>
         </div>
         <div class="filtros">
-          <input type="month" id="cajaPeriodo" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:999px">
+          <input type="month" id="cajaPeriodo" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px">
           <select id="cajaCuenta"></select>
           <select id="cajaTipo">
             <option value="">Ingresos y egresos</option>
@@ -1022,7 +1092,7 @@ tbody tr:hover{background:#FAFBFC}
       <div class="card">
         <div class="card-head">
           <h2>Envío de avisos de pago</h2>
-          <input type="month" id="mailPeriodo" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:var(--r2)">
+          <input type="month" id="mailPeriodo" style="padding:9px 13px;border:1px solid var(--borde);border-radius:var(--r2)">
           <button class="btn sec chico" id="btnPreviewMail">Ver previsualización</button>
           <button class="btn" id="btnEnviarMails">Enviar seleccionados</button>
         </div>
@@ -1067,7 +1137,7 @@ tbody tr:hover{background:#FAFBFC}
       <div class="card">
         <div class="card-head">
           <h2>Escalas del monotributo</h2>
-          <select id="selEscala" style="padding:9px 13px;border:1px solid #DADCE0;border-radius:999px"></select>
+          <select id="selEscala" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px"></select>
           <button class="btn sec chico" id="btnNuevaEscala">+ Nueva vigencia</button>
           <button class="btn" id="btnGuardarEscala">Guardar cambios</button>
         </div>
@@ -2013,16 +2083,16 @@ function renderClientes(){
     var actTxt = c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios");
 
     html += "<tr" + (c.activo === false ? ' style="opacity:.5"' : "") + ">" +
-      "<td><b>" + esc(c.razonSocial) + "</b>" + (c.email ? '<div class="sub" style="color:#5F6368;font-size:12px">' + esc(c.email) + "</div>" : "") + "</td>" +
+      "<td><b>" + esc(c.razonSocial) + "</b>" + (c.email ? '<div class="sub" style="color:var(--gris);font-size:12px">' + esc(c.email) + "</div>" : "") + "</td>" +
       '<td class="mono">' + esc(formatCuit(c.cuit)) + "</td>" +
       "<td>" + actTxt + "</td>" +
       "<td>" + (c.categoriaActual ? '<span class="cat-chip">' + c.categoriaActual + "</span>" : '<span class="badge b-gris">—</span>') + "</td>" +
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">' + (tags.join("") || "—") + "</div></td>" +
       '<td class="num">' + pesos(an.ingresos) + "</td>" +
       '<td class="num">' + (c.honorarioMensual
-        ? pesos(c.honorarioMensual) + '<div style="color:#5F6368;font-size:11.5px">' +
+        ? pesos(c.honorarioMensual) + '<div style="color:var(--gris);font-size:11.5px">' +
           (c.honorarioModalidad === "vencido" ? "mes vencido" : "mes en curso") + "</div>"
-        : '<span style="color:#80868B">—</span>') + "</td>" +
+        : '<span style="color:var(--gris2)">—</span>') + "</td>" +
       "<td>" + badgeEstado(an) + "</td>" +
       '<td style="white-space:nowrap">' +
         (puedeEscribir()
@@ -2240,12 +2310,12 @@ function verFichaCliente(id){
     var pct = Math.min(an.porcentaje, 100);
     var clase = an.porcentaje >= 100 ? "bad" : (an.porcentaje >= 85 ? "warn" : "ok");
     html += '<div class="card" style="margin:0">' +
-      '<div style="font-size:12px;color:#5F6368;margin-bottom:8px">' + esc(co.etiqueta) + "</div>" +
+      '<div style="font-size:12px;color:var(--gris);margin-bottom:8px">' + esc(co.etiqueta) + "</div>" +
       '<div style="font-size:24px;font-weight:500">' + pesos(an.ingresos) + "</div>" +
-      '<div style="color:#5F6368;font-size:12px;margin-bottom:10px">' + an.mesesConDatos + " de 12 meses con datos cargados</div>" +
+      '<div style="color:var(--gris);font-size:12px;margin-bottom:10px">' + an.mesesConDatos + " de 12 meses con datos cargados</div>" +
       '<div class="barra" style="margin-bottom:10px"><i class="' + clase + '" style="width:' + pct + '%"></i></div>' +
       '<div style="display:flex;align-items:center;gap:8px">' + badgeEstado(an) +
-        (an.categoriaSugerida ? '<span style="color:#5F6368;font-size:12px">Cuota: ' + pesos(an.cuotaSugerida) + "</span>" : "") +
+        (an.categoriaSugerida ? '<span style="color:var(--gris);font-size:12px">Cuota: ' + pesos(an.cuotaSugerida) + "</span>" : "") +
       "</div></div>";
   });
   html += "</div>";
@@ -2254,7 +2324,7 @@ function verFichaCliente(id){
     "<th>Período</th><th class=num>Emitido</th><th class=num>Recibido</th><th class=num>Comprobantes</th></tr></thead><tbody>";
   var pers = Object.keys(t).sort().reverse().slice(0,24);
   if (!pers.length){
-    html += '<tr><td colspan="4" style="text-align:center;color:#5F6368;padding:26px">Sin comprobantes cargados</td></tr>';
+    html += '<tr><td colspan="4" style="text-align:center;color:var(--gris);padding:26px">Sin comprobantes cargados</td></tr>';
   } else {
     pers.forEach(function(p){
       var r = t[p];
@@ -2548,9 +2618,9 @@ function mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreAr
     html += "<tr><td>" + periodoLargo(p) + "</td>" +
       '<td class="num">' + porPeriodo[p].cant + "</td>" +
       '<td class="num"><b>' + pesos(porPeriodo[p].monto) + "</b></td>" +
-      '<td class="num" style="color:#5F6368">' + (ya ? pesos(ya) : "—") + "</td></tr>";
+      '<td class="num" style="color:var(--gris)">' + (ya ? pesos(ya) : "—") + "</td></tr>";
   });
-  html += '<tr style="background:#F8F9FA"><td><b>Total</b></td><td class="num"><b>' + registros.length +
+  html += '<tr style="background:var(--fondo)"><td><b>Total</b></td><td class="num"><b>' + registros.length +
     '</b></td><td class="num"><b>' + pesos(totalGeneral) + "</b></td><td></td></tr>";
   html += "</tbody></table></div>";
 
@@ -2976,7 +3046,7 @@ function renderTablaComprobantes(){
   });
   /* Con un mes elegido, la suma de arriba es la de ese mes; el año entero se
      agrega abajo para no perderlo de vista. */
-  html += '<tr style="background:#F8F9FA"><td><b>Total ' + (mes ? periodoLargo(anio + mes) : anio) + "</b></td>";
+  html += '<tr style="background:var(--fondo)"><td><b>Total ' + (mes ? periodoLargo(anio + mes) : anio) + "</b></td>";
   if (tipoF !== "recibido") html += '<td class="num"><b>' + pesos(sumE) + "</b></td><td></td>";
   if (tipoF !== "emitido")  html += '<td class="num"><b>' + pesos(sumR) + "</b></td><td></td>";
   html += "<td></td></tr>";
@@ -2987,7 +3057,7 @@ function renderTablaComprobantes(){
       anualE += t[p].emitido || 0;  cantE += t[p].cantEmitidos || 0;
       anualR += t[p].recibido || 0; cantR += t[p].cantRecibidos || 0;
     });
-    html += '<tr style="background:#F1F3F4;color:#5F6368"><td>Acumulado ' + anio + " (" + delAnio.length + " meses)</td>";
+    html += '<tr style="background:var(--fondo);color:var(--gris)"><td>Acumulado ' + anio + " (" + delAnio.length + " meses)</td>";
     if (tipoF !== "recibido") html += '<td class="num">' + pesos(anualE) + '</td><td class="num">' + cantE + "</td>";
     if (tipoF !== "emitido")  html += '<td class="num">' + pesos(anualR) + '</td><td class="num">' + cantR + "</td>";
     html += "<td></td></tr>";
@@ -3111,24 +3181,24 @@ function renderRecat(){
       : '<span class="badge b-verde">12/12</span>';
 
     html += "<tr>" +
-      "<td><b>" + esc(c.razonSocial) + '</b><div style="color:#5F6368;font-size:12px" class="mono">' + formatCuit(c.cuit) + "</div></td>" +
+      "<td><b>" + esc(c.razonSocial) + '</b><div style="color:var(--gris);font-size:12px" class="mono">' + formatCuit(c.cuit) + "</div></td>" +
       "<td>" + (c.actividad === "bienes" ? "Bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios")) + "</td>" +
       '<td class="num"><b>' + pesos(an.ingresos) + "</b></td>" +
       "<td>" + avisoDatos + "</td>" +
       '<td><div style="display:flex;align-items:center;gap:8px">' +
         '<div class="barra"><i class="' + clase + '" style="width:' + pct + '%"></i></div>' +
-        '<span style="font-size:12px;color:#5F6368;min-width:38px">' + (an.categoriaActual ? an.porcentaje.toFixed(0) + "%" : "—") + "</span></div></td>" +
+        '<span style="font-size:12px;color:var(--gris);min-width:38px">' + (an.categoriaActual ? an.porcentaje.toFixed(0) + "%" : "—") + "</span></div></td>" +
       "<td>" + (an.categoriaActual ? '<span class="cat-chip">' + an.categoriaActual + "</span>" : "—") + "</td>" +
       "<td>" + chipSug + "</td>" +
       '<td class="num">' + (an.excluido ? "—" : pesos(an.cuotaSugerida)) + "</td>" +
       "<td>" + ((an.estado === "sube" || an.estado === "baja") && puedeEscribir()
         ? '<button class="btn sec chico" onclick="aplicarRecat(\'' + an.clienteId + "','" + an.categoriaSugerida + '\')">Aplicar ' + an.categoriaSugerida + "</button>"
-        : '<span style="font-size:12px;color:#5F6368">' + esc(an.accion) + "</span>") + "</td>" +
+        : '<span style="font-size:12px;color:var(--gris)">' + esc(an.accion) + "</span>") + "</td>" +
       "</tr>";
   });
 
   var totalFact = analisis.reduce(function(a,b){ return a + b.ingresos; }, 0);
-  html += '<tr style="background:#F8F9FA"><td><b>' + analisis.length + " clientes</b></td><td></td>" +
+  html += '<tr style="background:var(--fondo)"><td><b>' + analisis.length + " clientes</b></td><td></td>" +
     '<td class="num"><b>' + pesos(totalFact) + "</b></td><td colspan=6></td></tr>";
   $("tablaRecat").innerHTML = html + "</tbody></table></div>";
 }
@@ -3207,11 +3277,11 @@ function renderLiquidacion(){
 
     IMPUESTOS.forEach(function(i){
       if (!(c.impuestos && c.impuestos[i.clave])){
-        html += '<td class="num" style="color:#C4C7C5">—</td>';
+        html += '<td class="num" style="color:var(--gris2)">—</td>';
       } else {
         var m = (liq[i.clave] && liq[i.clave].monto) || 0;
         totales[i.clave] += m;
-        html += '<td class="num"' + (m ? "" : ' style="color:#B06000"') + ">" + (m ? pesos(m) : "falta") + "</td>";
+        html += '<td class="num"' + (m ? "" : ' style="color:var(--amar)"') + ">" + (m ? pesos(m) : "falta") + "</td>";
       }
     });
 
@@ -3227,7 +3297,7 @@ function renderLiquidacion(){
         : "") + "</td></tr>";
   });
 
-  html += '<tr style="background:#F8F9FA"><td><b>Totales</b></td>' +
+  html += '<tr style="background:var(--fondo)"><td><b>Totales</b></td>' +
     IMPUESTOS.map(function(i){ return '<td class="num"><b>' + pesos(totales[i.clave]) + "</b></td>"; }).join("") +
     '<td class="num"><b>' + pesos(totales.general) + "</b></td><td colspan=3></td></tr>";
   $("tablaLiquidacion").innerHTML = html + "</tbody></table></div>";
@@ -3570,7 +3640,7 @@ function renderMails(){
       '<td><input type="checkbox" class="chkMail" value="' + id + '"' + (puede ? "" : " disabled") + (puede && !liq.enviado ? " checked" : "") + "></td>" +
       "<td><b>" + esc(c.razonSocial) + "</b></td>" +
       "<td>" + (c.email ? esc(c.email) : '<span class="badge b-rojo">sin correo</span>') + "</td>" +
-      '<td class="num">' + (tot ? pesos(tot) : '<span style="color:#B06000">sin liquidar</span>') + "</td>" +
+      '<td class="num">' + (tot ? pesos(tot) : '<span style="color:var(--amar)">sin liquidar</span>') + "</td>" +
       "<td>" + (liq.enviado
         ? '<span class="badge b-verde">Enviado ' + (liq.fechaEnvio || "").slice(0,10).split("-").reverse().join("/") + "</span>"
         : '<span class="badge b-gris">Sin enviar</span>') + "</td>" +
@@ -3592,7 +3662,7 @@ function verMail(clienteId, periodo){
   abrirModal("Previsualización del mail",
     '<div class="campo"><label>Para</label><input type="text" value="' + esc(m.para || "(sin correo cargado)") + '" readonly></div>' +
     '<div class="campo"><label>Asunto</label><input type="text" value="' + esc(m.asunto) + '" readonly></div>' +
-    '<div class="campo"><label>Cuerpo</label><textarea readonly style="min-height:320px;background:#F8F9FA">' + esc(m.cuerpo) + "</textarea></div>",
+    '<div class="campo"><label>Cuerpo</label><textarea readonly style="min-height:320px;background:var(--fondo)">' + esc(m.cuerpo) + "</textarea></div>",
     [
       { texto:"Abrir en Gmail", clase:"sec", accion:function(){ abrirEnGmail(clienteId, periodo); } },
       { texto:"Cerrar", clase:"gris", accion:cerrarModal }
@@ -3711,11 +3781,11 @@ function pintarEscala(){
   LETRAS.forEach(function(l){
     var c = e.categorias[l] || {};
     html += '<tr><td><span class="cat-chip">' + l + "</span></td>" +
-      '<td class="num"><input type="number" step="0.01" data-cat="' + l + '" data-campo="ingresos" value="' + (c.ingresos || 0) + '" style="width:160px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
-      '<td class="num"><input type="number" data-cat="' + l + '" data-campo="sup" value="' + (c.sup || 0) + '" style="width:70px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
-      '<td class="num"><input type="number" data-cat="' + l + '" data-campo="kw" value="' + (c.kw || 0) + '" style="width:85px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
-      '<td class="num"><input type="number" step="0.01" data-cat="' + l + '" data-campo="cuotaServicios" value="' + (c.cuotaServicios || 0) + '" style="width:130px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
-      '<td class="num"><input type="number" step="0.01" data-cat="' + l + '" data-campo="cuotaBienes" value="' + (c.cuotaBienes || 0) + '" style="width:130px;text-align:right;padding:6px 9px;border:1px solid #DADCE0;border-radius:6px"></td>' +
+      '<td class="num"><input type="number" step="0.01" data-cat="' + l + '" data-campo="ingresos" value="' + (c.ingresos || 0) + '" style="width:160px;text-align:right;padding:6px 9px;border:1px solid var(--borde);border-radius:6px"></td>' +
+      '<td class="num"><input type="number" data-cat="' + l + '" data-campo="sup" value="' + (c.sup || 0) + '" style="width:70px;text-align:right;padding:6px 9px;border:1px solid var(--borde);border-radius:6px"></td>' +
+      '<td class="num"><input type="number" data-cat="' + l + '" data-campo="kw" value="' + (c.kw || 0) + '" style="width:85px;text-align:right;padding:6px 9px;border:1px solid var(--borde);border-radius:6px"></td>' +
+      '<td class="num"><input type="number" step="0.01" data-cat="' + l + '" data-campo="cuotaServicios" value="' + (c.cuotaServicios || 0) + '" style="width:130px;text-align:right;padding:6px 9px;border:1px solid var(--borde);border-radius:6px"></td>' +
+      '<td class="num"><input type="number" step="0.01" data-cat="' + l + '" data-campo="cuotaBienes" value="' + (c.cuotaBienes || 0) + '" style="width:130px;text-align:right;padding:6px 9px;border:1px solid var(--borde);border-radius:6px"></td>' +
       "</tr>";
   });
   $("tablaEscala").innerHTML = html + "</tbody></table></div>";
@@ -3813,7 +3883,7 @@ function renderConfig(){
           return '<li><div class="crece"><div class="tit">' + esc(u.nombre || u.email) + '</div><div class="sub">' + esc(u.email) + "</div></div>" +
             '<span class="badge ' + (u.rol === "admin" ? "b-azul" : (u.rol === "editor" ? "b-verde" : "b-gris")) + '">' + esc(u.rol) + "</span></li>";
         }).join("") + "</ul>"
-      : '<div style="color:#5F6368;font-size:13px">Todavía no hay usuarios registrados.</div>';
+      : '<div style="color:var(--gris);font-size:13px">Todavía no hay usuarios registrados.</div>';
   });
 }
 
@@ -4182,7 +4252,7 @@ function pintarArchivos(){
       html += "<tr><td><b>" + esc(nombreCliente(f.cli)) + "</b></td>" +
         '<td><span class="badge b-azul">' + esc(nombreTipoArchivo(a.tipo)) + "</span></td>" +
         "<td>" + (a.periodo ? periodoLargo(a.periodo) : "—") + "</td>" +
-        '<td class="mono">' + esc(a.nombre || "") + (a.peso ? ' <span style="color:#5F6368">(' + Math.round(a.peso/1024) + " KB)</span>" : "") + "</td>" +
+        '<td class="mono">' + esc(a.nombre || "") + (a.peso ? ' <span style="color:var(--gris)">(' + Math.round(a.peso/1024) + " KB)</span>" : "") + "</td>" +
         "<td>" + esc(a.nota || "") + "</td>" +
         "<td>" + esc(String(a.subido || "").slice(0,10).split("-").reverse().join("/")) + "</td>" +
         '<td style="white-space:nowrap">' +
@@ -4313,7 +4383,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:"){
 function mostrarAvisoActualizacion(reg){
   var t = $("toast");
   t.innerHTML = 'Hay una versión nueva del sistema. ' +
-    '<a href="#" id="lnkActualizar" style="color:#8AB4F8;font-weight:500">Actualizar</a>';
+    '<a href="#" id="lnkActualizar" style="color:#6BB8FF;font-weight:500">Actualizar</a>';
   t.className = "ver";
   var lnk = $("lnkActualizar");
   if (lnk) lnk.onclick = function(e){
@@ -4515,7 +4585,7 @@ function renderHonorarios(){
 
     var etiqueta = cli.honorarioModalidad === "vencido" ? "mes vencido" : "mes en curso";
     html += '<tr><td class="cli"><b>' + esc(nombreCliente(id)) + "</b>" +
-      '<div style="color:#5F6368;font-size:11.5px">' + pesos(cli.honorarioMensual || 0) + " · " + etiqueta + "</div></td>";
+      '<div style="color:var(--gris);font-size:11.5px">' + pesos(cli.honorarioMensual || 0) + " · " + etiqueta + "</div></td>";
 
     for (var mm = 1; mm <= 12; mm++){
       var per = anio + String(mm).padStart(2,"0");
@@ -4538,8 +4608,8 @@ function renderHonorarios(){
     }
 
     html += '<td class="num col-deuda">' + (deuda > 0.005
-      ? '<b style="color:#C5221F">' + pesos(deuda) + "</b>"
-      : '<span style="color:#188038">al día</span>') + "</td></tr>";
+      ? '<b style="color:var(--rojo)">' + pesos(deuda) + "</b>"
+      : '<span style="color:var(--verde)">al día</span>') + "</td></tr>";
   });
 
   $("tablaHonorarios").innerHTML = html + "</tbody></table></div>";
@@ -4840,12 +4910,12 @@ function renderCaja(){
       "<td>" + esc(m.contraparteNombre || "—") + "</td>" +
       "<td>" + esc(nombreMedio(m.medio)) + "</td>" +
       "<td>" + esc(nombreCuenta(m.cuentaId)) + "</td>" +
-      '<td class="num" style="color:#188038">' + (m.tipo === "ingreso" ? pesos(m.monto) : "") + "</td>" +
-      '<td class="num" style="color:#C5221F">' + (m.tipo === "egreso" ? pesos(m.monto) : "") + "</td>" +
+      '<td class="num" style="color:var(--verde)">' + (m.tipo === "ingreso" ? pesos(m.monto) : "") + "</td>" +
+      '<td class="num" style="color:var(--rojo)">' + (m.tipo === "egreso" ? pesos(m.monto) : "") + "</td>" +
       '<td class="num">' + pesos(corriente) + "</td>" +
       '<td style="white-space:nowrap">' +
         (m.origen === "honorario"
-          ? '<span style="font-size:11px;color:#80868B">desde Honorarios</span>'
+          ? '<span style="font-size:11px;color:var(--gris2)">desde Honorarios</span>'
           : (puedeEscribir()
             ? '<button class="btn-icono" onclick="editarMovimiento(\'' + m._id + '\')" title="Editar">✏️</button>' +
               '<button class="btn-icono" onclick="borrarMovimiento(\'' + m._id + '\')" title="Eliminar">🗑️</button>'
@@ -4853,9 +4923,9 @@ function renderCaja(){
       "</td></tr>";
   });
 
-  html += '<tr style="background:#F8F9FA"><td colspan="5"><b>Totales de ' + periodoLargo(per) + "</b></td>" +
-    '<td class="num"><b style="color:#188038">' + pesos(ing) + "</b></td>" +
-    '<td class="num"><b style="color:#C5221F">' + pesos(egr) + "</b></td>" +
+  html += '<tr style="background:var(--fondo)"><td colspan="5"><b>Totales de ' + periodoLargo(per) + "</b></td>" +
+    '<td class="num"><b style="color:var(--verde)">' + pesos(ing) + "</b></td>" +
+    '<td class="num"><b style="color:var(--rojo)">' + pesos(egr) + "</b></td>" +
     '<td class="num"><b>' + pesos(ing - egr) + "</b></td><td></td></tr>";
   $("tablaCaja").innerHTML = html + "</tbody></table></div>";
 }
@@ -5004,7 +5074,7 @@ $("btnGestionCuentas").onclick = function(){
         "<td>" + (puedeEscribir()
           ? '<button class="btn sec chico" onclick="editarCuenta(\'' + id + '\')">Editar</button>'
           : "") + "</td></tr>";
-    }).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px;color:#5F6368">Sin cuentas</td></tr>') +
+    }).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--gris)">Sin cuentas</td></tr>') +
     "</tbody></table></div>";
 
   var botones = [];
@@ -5072,7 +5142,7 @@ $("btnGestionProveedores").onclick = function(){
         "<td>" + (puedeEscribir()
           ? '<button class="btn sec chico" onclick="editarProveedor(\'' + id + '\')">Editar</button>'
           : "") + "</td></tr>";
-    }).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px;color:#5F6368">Sin proveedores cargados</td></tr>') +
+    }).join("") : '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--gris)">Sin proveedores cargados</td></tr>') +
     "</tbody></table></div>";
 
   var botones = [];
