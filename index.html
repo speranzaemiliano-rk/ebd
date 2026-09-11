@@ -721,6 +721,7 @@ tbody tr:hover{background:#FAFBFC}
     <button data-tab="tabHonorarios">Honorarios</button>
     <button data-tab="tabCaja">Caja</button>
     <button data-tab="tabMails">Mails</button>
+    <button data-tab="tabArchivos">Archivos</button>
     <button data-tab="tabEscalas">Escalas ARCA</button>
     <button data-tab="tabConfig">Configuración</button>
   </nav>
@@ -987,6 +988,22 @@ tbody tr:hover{background:#FAFBFC}
       </div>
     </section>
 
+    <!-- ---------- ARCHIVOS ---------- -->
+    <section class="panel" id="tabArchivos">
+      <div class="card">
+        <div class="card-head">
+          <h2>Declaraciones juradas y resúmenes</h2>
+          <button class="btn" id="btnSubirArchivo">+ Subir archivo</button>
+        </div>
+        <p class="desc">Los papeles de cada cliente, guardados en un solo lugar: declaraciones juradas, resúmenes bancarios, constancias y lo que haga falta.</p>
+        <div class="filtros">
+          <select id="arcCliente"></select>
+          <select id="arcTipo"><option value="">Todos los tipos</option></select>
+        </div>
+        <div id="tablaArchivos"></div>
+      </div>
+    </section>
+
     <!-- ---------- ESCALAS ---------- -->
     <section class="panel" id="tabEscalas">
       <div class="card">
@@ -1155,7 +1172,16 @@ var ESTADO = {
 /* Todos los IDs de panel. Si agregás un tab nuevo, sumalo acá o se rompe la navegación. */
 var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
                 "tabLiquidacion","tabHonorarios","tabCaja","tabMails",
-                "tabEscalas","tabConfig"];
+                "tabArchivos","tabEscalas","tabConfig"];
+
+/* Papeles que se guardan por cliente. El archivo en sí va aparte de la ficha
+   (ver REF de archivosContenido) para que el listado abra liviano. */
+var TIPOS_ARCHIVO = [
+  { clave:"ddjj",     nombre:"Declaración jurada" },
+  { clave:"resumen",  nombre:"Resumen bancario" },
+  { clave:"constancia", nombre:"Constancia" },
+  { clave:"otro",     nombre:"Otro" }
+];
 
 /* Cuentas que se crean solas la primera vez que arranca el sistema. */
 var CUENTAS_SEMILLA = {
@@ -1268,7 +1294,7 @@ function esAdminRol(){ return ESTADO.rol === "admin"; }
    datos, sumarlo también a una de estas dos listas. */
 var BOTONES_ESCRITURA = ["btnNuevoCliente","btnCargaManual","btnRecalcularLiq",
                          "btnEnviarMails","btnHonGenerar","btnNuevoMovimiento",
-                         "btnTraerArca","btnTraerPortal"];
+                         "btnTraerArca","btnTraerPortal","btnSubirArchivo"];
 var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
                          "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
                          "btnConfigBoveda","btnBoveda","btnGuardarBackend"];
@@ -1708,6 +1734,7 @@ function irA(tabId){
   if (tabId === "tabHonorarios")   renderHonorarios();
   if (tabId === "tabCaja")         renderCaja();
   if (tabId === "tabMails")        renderMails();
+  if (tabId === "tabArchivos")     renderArchivos();
   if (tabId === "tabEscalas")      renderEscala();
   if (tabId === "tabConfig")       renderConfig();
 }
@@ -1761,8 +1788,10 @@ function llenarSelectClientes(sel, incluirTodos){
   if (actual && ids.indexOf(actual) !== -1) sel.value = actual;
 }
 function llenarAnios(){
+  /* Diez años atrás: al cargar la facturación vieja de un cliente nuevo, con
+     cinco no alcanzaba y no había forma de mirar lo que ya estaba importado. */
   var sel = $("verCompAnio"), hoy = new Date().getFullYear(), out = "";
-  for (var a = hoy; a >= hoy - 5; a--) out += '<option value="' + a + '">Año ' + a + "</option>";
+  for (var a = hoy; a >= hoy - 9; a--) out += '<option value="' + a + '">Año ' + a + "</option>";
   sel.innerHTML = out;
 
   /* El mes hace falta porque ingresos brutos se liquida mes a mes. El año
@@ -1892,7 +1921,7 @@ function renderClientes(){
 
   var html = '<div class="tabla-wrap"><table><thead><tr>' +
     "<th>Razón social</th><th>CUIT</th><th>Actividad</th><th>Cat.</th>" +
-    "<th>Impuestos</th><th class=num>Facturado 12m</th><th>Situación</th><th></th>" +
+    "<th>Impuestos</th><th class=num>Facturado 12m</th><th class=num>Honorario</th><th>Situación</th><th></th>" +
     "</tr></thead><tbody>";
 
   var corte = cortesDisponibles()[0];
@@ -1915,6 +1944,10 @@ function renderClientes(){
       "<td>" + (c.categoriaActual ? '<span class="cat-chip">' + c.categoriaActual + "</span>" : '<span class="badge b-gris">—</span>') + "</td>" +
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">' + (tags.join("") || "—") + "</div></td>" +
       '<td class="num">' + pesos(an.ingresos) + "</td>" +
+      '<td class="num">' + (c.honorarioMensual
+        ? pesos(c.honorarioMensual) + '<div style="color:#5F6368;font-size:11.5px">' +
+          (c.honorarioModalidad === "vencido" ? "mes vencido" : "mes en curso") + "</div>"
+        : '<span style="color:#80868B">—</span>') + "</td>" +
       "<td>" + badgeEstado(an) + "</td>" +
       '<td style="white-space:nowrap">' +
         (puedeEscribir()
@@ -1982,6 +2015,21 @@ function formCliente(c){
   '<div class="campo" id="wrapMuni"' + (imp.municipal ? "" : ' style="display:none"') + '>' +
     '<label>Municipio</label><input type="text" id="fcMunicipio" value="' + esc(c.municipio || "") + '" placeholder="Avellaneda">' +
   "</div>" +
+
+  /* Con la alícuota cargada, la liquidación mensual se calcula sola sobre lo
+     facturado. El mínimo es opcional: vacío significa que no tiene. */
+  '<div class="seccion-tit">Alícuotas de ingresos brutos y tasa</div>' +
+  '<div class="ayuda" style="margin-bottom:10px">Se aplican sobre el total facturado del mes. Si el cálculo da menos que el mínimo, se paga el mínimo.</div>' +
+  ["arba", "agip", "municipal"].map(function(k){
+    var conf = (c.iibb || {})[k] || {};
+    var etiq = { arba:"ARBA", agip:"AGIP", municipal:"Tasa municipal" }[k];
+    return '<div class="grid g2">' +
+      '<div class="campo"><label>' + etiq + ' — alícuota %</label>' +
+        '<input type="number" step="0.001" id="fcAlic_' + k + '" value="' + (conf.alicuota || "") + '" placeholder="3,5"></div>' +
+      '<div class="campo"><label>' + etiq + ' — mínimo mensual</label>' +
+        '<input type="number" step="0.01" id="fcMin_' + k + '" value="' + (conf.minimo || "") + '" placeholder="sin mínimo"></div>' +
+    "</div>";
+  }).join("") +
 
   '<div class="seccion-tit">Delegación de servicios</div>' +
   '<div class="grid g2">' +
@@ -2073,6 +2121,13 @@ function guardarFormCliente(id){
       municipal: $("fcMuni").checked
     },
     municipio: $("fcMunicipio") ? $("fcMunicipio").value.trim() : "",
+    iibb: ["arba", "agip", "municipal"].reduce(function(acc, k){
+      acc[k] = {
+        alicuota: parseFloat($("fcAlic_" + k).value) || null,
+        minimo:   parseFloat($("fcMin_" + k).value)  || null
+      };
+      return acc;
+    }, {}),
     estadoDelegacion: $("fcDelegacion").value,
     ptosVenta: $("fcPtosVenta").value.split(",").map(function(s){ return parseInt(s.trim(),10); }).filter(function(n){ return !isNaN(n); }),
     activo: $("fcActivo").checked,
@@ -3103,15 +3158,128 @@ function renderLiquidacion(){
   $("tablaLiquidacion").innerHTML = html + "</tbody></table></div>";
 }
 
+/* ---------- CÁLCULO DE INGRESOS BRUTOS ----------
+   Con la alícuota cargada en la ficha, el importe sale solo del total
+   facturado del mes. El mínimo y las retenciones son los dos ajustes que
+   hacen que el número coincida con lo que realmente se paga. */
+var _liqActual = null;
+
+function calculoIIBB(c, clienteId, periodo, clave, d){
+  if (clave === "arca") return "";
+  return '<div id="calc_' + clave + '">' + textoCalculoIIBB(c, clienteId, periodo, clave, d) + "</div>";
+}
+
+/* Se vuelve a pintar cuando cambian las retenciones, para que el saldo de
+   arriba no quede contradiciendo lo que se acaba de escribir abajo. */
+function pintarCalculoIIBB(clave){
+  if (!_liqActual) return;
+  var cont = $("calc_" + clave);
+  if (!cont) return;
+  var campo = $("lq_" + clave + "_ret");
+  cont.innerHTML = textoCalculoIIBB(_liqActual.c, _liqActual.clienteId, _liqActual.periodo, clave,
+                                    { retenciones: campo ? campo.value : 0 });
+}
+
+function textoCalculoIIBB(c, clienteId, periodo, clave, d){
+  var conf = (c.iibb || {})[clave] || {};
+  if (!conf.alicuota){
+    return '<div class="ayuda" style="margin-bottom:8px">Sin alícuota cargada en la ficha del cliente: el importe va a mano.</div>';
+  }
+
+  var t = (ESTADO.totales[clienteId] || {})[periodo];
+  if (!t || !t.emitido){
+    return '<div class="aviso warn"><span>⚠️</span><div>No hay ventas cargadas en ' + periodoLargo(periodo) +
+      ", así que no se puede calcular. Importá primero los comprobantes del mes.</div></div>";
+  }
+
+  var ventas   = t.emitido;
+  var porAlic  = ventas * conf.alicuota / 100;
+  var base     = (conf.minimo && porAlic < conf.minimo) ? conf.minimo : porAlic;
+  var usoMinimo = base !== porAlic;
+  var ret      = parseFloat(d.retenciones) || 0;
+  var aPagar   = Math.max(0, base - ret);
+
+  var detalle = pesos(ventas) + " × " + conf.alicuota + "% = <b>" + pesos(porAlic) + "</b>";
+  if (usoMinimo) detalle += "; como es menor al mínimo de " + pesos(conf.minimo) + ", se toma el mínimo";
+  if (ret)       detalle += "; menos " + pesos(ret) + " de retenciones";
+
+  return '<div class="aviso info"><span>🧮</span><div>' + detalle +
+    " → <b>" + pesos(aPagar) + "</b> " +
+    '<a href="#" onclick="document.getElementById(\'lq_' + clave + '_monto\').value=' + aPagar.toFixed(2) +
+    ';return false;">Usar este importe</a></div></div>';
+}
+
+/* ---------- EL VEP EN PDF ----------
+   Se guarda con la liquidación para tenerlo a mano cuando el cliente lo pide
+   o cuando hay que adjuntarlo al mail. */
+function bloqueVepArchivo(clave, d){
+  var a = d.vepArchivo;
+  return '<div class="campo"><label>VEP en PDF</label>' +
+    (a && a.contenido
+      ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<span class="badge b-verde">📎 ' + esc(a.nombre || "VEP.pdf") + "</span>" +
+          '<button type="button" class="btn sec chico" onclick="verVep(\'' + clave + '\')">Ver / descargar</button>' +
+          '<button type="button" class="btn sec chico" onclick="quitarVep(\'' + clave + '\')">Quitar</button>' +
+        "</div>"
+      : "") +
+    '<input type="file" accept="application/pdf,image/*" id="lq_' + clave + '_file" style="margin-top:6px">' +
+    '<div class="ayuda">Hasta 3 MB. Queda guardado con la liquidación del mes.</div></div>';
+}
+
+/* Los archivos ya guardados viven en esta variable mientras el modal está
+   abierto: así se pueden quitar o reemplazar sin tocar la base hasta guardar. */
+var _vepsDelModal = {};
+
+function verVep(clave){
+  var a = _vepsDelModal[clave];
+  if (!a || !a.contenido){ toast("No hay archivo guardado", "error"); return; }
+  var w = window.open("");
+  if (!w){ toast("El navegador bloqueó la ventana", "error"); return; }
+  w.document.write('<title>' + esc(a.nombre || "VEP") + '</title>' +
+    '<iframe src="' + a.contenido + '" style="border:0;width:100%;height:100%;position:fixed;inset:0"></iframe>');
+}
+
+function quitarVep(clave){
+  _vepsDelModal[clave] = null;
+  toast("Se quita al guardar", "ok");
+  var campo = $("lq_" + clave + "_file");
+  if (campo && campo.parentNode) {
+    var badge = campo.parentNode.querySelector(".badge");
+    if (badge) badge.textContent = "📎 se quita al guardar";
+  }
+}
+
+/* Lee el archivo elegido como data URL, que es lo que se guarda y lo que el
+   navegador puede volver a abrir sin más trámite. */
+function leerArchivo(input, maxMB){
+  return new Promise(function(resolve, reject){
+    var f = input && input.files && input.files[0];
+    if (!f) return resolve(null);
+    if (f.size > maxMB * 1024 * 1024) return reject(new Error("«" + f.name + "» pesa más de " + maxMB + " MB"));
+    var lector = new FileReader();
+    lector.onload = function(e){ resolve({ nombre: f.name, contenido: e.target.result, subido: new Date().toISOString() }); };
+    lector.onerror = function(){ reject(new Error("No pude leer «" + f.name + "»")); };
+    lector.readAsDataURL(f);
+  });
+}
+
 function editarLiquidacion(clienteId, periodo){
   var c = ESTADO.clientes[clienteId], liq = liqDe(clienteId, periodo);
   var html = "";
+
+  _liqActual = { clienteId: clienteId, periodo: periodo, c: c };
+  _vepsDelModal = {};
+  IMPUESTOS.forEach(function(i){
+    var d = liq[i.clave] || {};
+    if (d.vepArchivo) _vepsDelModal[i.clave] = d.vepArchivo;
+  });
 
   IMPUESTOS.forEach(function(i){
     if (!(c.impuestos && c.impuestos[i.clave])) return;
     var d = liq[i.clave] || {};
     var nombre = i.clave === "municipal" ? "Tasa municipal — " + (c.municipio || "sin municipio") : i.nombre;
     html += '<div class="seccion-tit">' + esc(nombre) + "</div>" +
+      calculoIIBB(c, clienteId, periodo, i.clave, d) +
       '<div class="grid g3">' +
         '<div class="campo"><label>Importe a pagar</label>' +
           '<input type="number" step="0.01" id="lq_' + i.clave + '_monto" value="' + (d.monto || "") + '"></div>' +
@@ -3120,8 +3288,14 @@ function editarLiquidacion(clienteId, periodo){
         '<div class="campo"><label>Vence el</label>' +
           '<input type="date" id="lq_' + i.clave + '_vto" value="' + esc(d.vencimiento || "") + '"></div>' +
       "</div>" +
+      (i.clave === "arca" ? "" :
+        '<div class="campo"><label>Retenciones y percepciones del mes</label>' +
+          '<input type="number" step="0.01" id="lq_' + i.clave + '_ret" value="' + (d.retenciones || "") +
+            '" placeholder="0,00" oninput="pintarCalculoIIBB(\'' + i.clave + '\')">' +
+          '<div class="ayuda">Se descuenta del cálculo para llegar al saldo a pagar.</div></div>') +
       '<div class="campo"><label>Link al VEP (opcional)</label>' +
-        '<input type="text" id="lq_' + i.clave + '_link" value="' + esc(d.link || "") + '" placeholder="https://…"></div>';
+        '<input type="text" id="lq_' + i.clave + '_link" value="' + esc(d.link || "") + '" placeholder="https://…"></div>' +
+      bloqueVepArchivo(i.clave, d);
   });
 
   if (!html) html = '<div class="aviso warn"><span>⚠️</span><div>Este cliente no tiene ningún impuesto tildado en su ficha.</div></div>';
@@ -3147,19 +3321,27 @@ function guardarLiquidacion(clienteId, periodo){
   var c = ESTADO.clientes[clienteId];
   var datos = { observaciones: $("lqObs").value.trim(), actualizado: new Date().toISOString() };
 
-  IMPUESTOS.forEach(function(i){
-    if (!(c.impuestos && c.impuestos[i.clave])) return;
-    var m = $("lq_" + i.clave + "_monto");
-    if (!m) return;
-    datos[i.clave] = {
-      monto: parseFloat(m.value) || 0,
-      vep: $("lq_" + i.clave + "_vep").value.trim(),
-      vencimiento: $("lq_" + i.clave + "_vto").value,
-      link: $("lq_" + i.clave + "_link").value.trim()
-    };
+  var lecturas = IMPUESTOS.filter(function(i){
+    return c.impuestos && c.impuestos[i.clave] && $("lq_" + i.clave + "_monto");
+  }).map(function(i){
+    /* Si eligió un PDF nuevo pisa al anterior; si no, queda el que ya estaba
+       (o null, si lo quitó con el botón). */
+    return leerArchivo($("lq_" + i.clave + "_file"), 3).then(function(nuevo){
+      var ret = $("lq_" + i.clave + "_ret");
+      datos[i.clave] = {
+        monto: parseFloat($("lq_" + i.clave + "_monto").value) || 0,
+        vep: $("lq_" + i.clave + "_vep").value.trim(),
+        vencimiento: $("lq_" + i.clave + "_vto").value,
+        link: $("lq_" + i.clave + "_link").value.trim(),
+        retenciones: ret ? (parseFloat(ret.value) || 0) : 0,
+        vepArchivo: nuevo || _vepsDelModal[i.clave] || null
+      };
+    });
   });
 
-  ref("liquidaciones/" + clienteId + "/" + periodo).update(datos).then(function(){
+  Promise.all(lecturas).then(function(){
+    return ref("liquidaciones/" + clienteId + "/" + periodo).update(datos);
+  }).then(function(){
     if (!ESTADO.liquidaciones[clienteId]) ESTADO.liquidaciones[clienteId] = {};
     ESTADO.liquidaciones[clienteId][periodo] = Object.assign(ESTADO.liquidaciones[clienteId][periodo] || {}, datos);
     cerrarModal(); toast("Liquidación guardada", "ok");
@@ -3865,6 +4047,171 @@ function guardarCredenciales(clienteId){
     listarCredenciales();
   }).catch(function(e){ toast("Error: " + e.message, "error"); });
 }
+
+/* ---------- ARCHIVOS: DECLARACIONES JURADAS Y RESÚMENES ----------
+   Los datos van partidos en dos a propósito: en `archivos` quedan solo los
+   datos de la ficha (tipo, período, nombre, nota) y el contenido del archivo
+   vive aparte, en `archivosContenido`. Si estuvieran juntos, abrir el listado
+   bajaría todos los PDF del estudio y la pantalla tardaría una eternidad. */
+
+function renderArchivos(){
+  llenarSelectClientes($("arcCliente"), true);
+  var selTipo = $("arcTipo");
+  if (selTipo.options.length <= 1){
+    selTipo.innerHTML = '<option value="">Todos los tipos</option>' +
+      TIPOS_ARCHIVO.map(function(t){ return '<option value="' + t.clave + '">' + t.nombre + "</option>"; }).join("");
+  }
+  pintarArchivos();
+}
+
+function nombreTipoArchivo(clave){
+  var out = clave;
+  TIPOS_ARCHIVO.forEach(function(t){ if (t.clave === clave) out = t.nombre; });
+  return out;
+}
+
+function pintarArchivos(){
+  var cont = $("tablaArchivos");
+  cont.innerHTML = '<div class="ayuda">Buscando…</div>';
+
+  ref("archivos").once("value").then(function(s){
+    var todo = s.val() || {};
+    var filtroCli  = $("arcCliente").value;
+    var filtroTipo = $("arcTipo").value;
+
+    var filas = [];
+    Object.keys(todo).forEach(function(cli){
+      if (filtroCli && cli !== filtroCli) return;
+      Object.keys(todo[cli] || {}).forEach(function(id){
+        var a = todo[cli][id];
+        if (filtroTipo && a.tipo !== filtroTipo) return;
+        filas.push({ cli: cli, id: id, a: a });
+      });
+    });
+
+    if (!filas.length){
+      cont.innerHTML = '<div class="vacio"><div class="ico">🗂️</div><div>Todavía no hay archivos guardados' +
+        (filtroCli || filtroTipo ? " con ese filtro" : "") + ".</div></div>";
+      return;
+    }
+
+    /* Del más nuevo al más viejo: lo último que se subió es lo que se busca. */
+    filas.sort(function(x, y){ return String(y.a.subido || "").localeCompare(String(x.a.subido || "")); });
+
+    var html = '<div class="tabla-wrap"><table><thead><tr>' +
+      "<th>Cliente</th><th>Tipo</th><th>Período</th><th>Archivo</th><th>Nota</th><th>Subido</th><th></th>" +
+      "</tr></thead><tbody>";
+
+    filas.forEach(function(f){
+      var a = f.a;
+      html += "<tr><td><b>" + esc(nombreCliente(f.cli)) + "</b></td>" +
+        '<td><span class="badge b-azul">' + esc(nombreTipoArchivo(a.tipo)) + "</span></td>" +
+        "<td>" + (a.periodo ? periodoLargo(a.periodo) : "—") + "</td>" +
+        '<td class="mono">' + esc(a.nombre || "") + (a.peso ? ' <span style="color:#5F6368">(' + Math.round(a.peso/1024) + " KB)</span>" : "") + "</td>" +
+        "<td>" + esc(a.nota || "") + "</td>" +
+        "<td>" + esc(String(a.subido || "").slice(0,10).split("-").reverse().join("/")) + "</td>" +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn-icono" onclick="verArchivo(\'' + f.cli + "','" + f.id + '\')" title="Ver / descargar">📄</button>' +
+          (puedeEscribir()
+            ? '<button class="btn-icono" onclick="borrarArchivo(\'' + f.cli + "','" + f.id + '\')" title="Borrar">🗑️</button>'
+            : "") +
+        "</td></tr>";
+    });
+
+    cont.innerHTML = html + "</tbody></table></div>";
+  }).catch(function(e){
+    cont.innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(explicarError(e)) + "</div></div>";
+  });
+}
+
+/* El contenido se baja recién al abrirlo, que es la razón de tenerlo aparte. */
+function verArchivo(cli, id){
+  toast("Buscando el archivo…", "ok");
+  ref("archivosContenido/" + id).once("value").then(function(s){
+    var contenido = s.val();
+    if (!contenido){ toast("No encontré el contenido de ese archivo", "error"); return; }
+    var w = window.open("");
+    if (!w){ toast("El navegador bloqueó la ventana nueva", "error"); return; }
+    w.document.write('<iframe src="' + contenido + '" style="border:0;width:100%;height:100%;position:fixed;inset:0"></iframe>');
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
+
+function borrarArchivo(cli, id){
+  abrirModal("Borrar archivo",
+    '<div class="aviso warn"><span>⚠️</span><div>Se borra el archivo y no se puede recuperar.</div></div>',
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Borrar", clase:"peligro", accion:function(){
+          var updates = {};
+          updates["archivos/" + cli + "/" + id] = null;
+          updates["archivosContenido/" + id] = null;
+          ref("").update(updates).then(function(){
+            cerrarModal(); toast("Archivo borrado", "ok"); pintarArchivos();
+          }).catch(function(e){ toast(explicarError(e), "error"); });
+        } }
+    ], "angosto");
+}
+
+function abrirSubirArchivo(){
+  var hoy = periodoHoy();
+  abrirModal("Subir archivo",
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Cliente *</label><select id="sbCliente"></select></div>' +
+      '<div class="campo"><label>Tipo</label><select id="sbTipo">' +
+        TIPOS_ARCHIVO.map(function(t){ return '<option value="' + t.clave + '">' + t.nombre + "</option>"; }).join("") +
+      "</select></div>" +
+      '<div class="campo"><label>Período (opcional)</label><input type="month" id="sbPeriodo" value="' + periodoAMonthInput(hoy) + '"></div>' +
+      '<div class="campo"><label>Nota (opcional)</label><input type="text" id="sbNota" placeholder="DDJJ IVA, resumen Galicia…"></div>' +
+    "</div>" +
+    '<div class="campo"><label>Archivo *</label><input type="file" id="sbArchivo" accept="application/pdf,image/*">' +
+      '<div class="ayuda">Hasta 5 MB. Sirve PDF o foto.</div></div>' +
+    '<div id="sbEstado"></div>',
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Subir", id:"btnSbGuardar", accion:guardarArchivo }
+    ]);
+
+  setTimeout(function(){ llenarSelectClientes($("sbCliente"), false); }, 50);
+}
+
+function guardarArchivo(){
+  var cli = $("sbCliente").value;
+  if (!cli){ toast("Elegí el cliente", "error"); return; }
+
+  var btn = $("btnSbGuardar");
+  if (btn){ btn.disabled = true; btn.textContent = "Subiendo…"; }
+
+  leerArchivo($("sbArchivo"), 5).then(function(arch){
+    if (!arch) throw new Error("Elegí un archivo");
+
+    var id = ref("archivos/" + cli).push().key;
+    var entrada = $("sbArchivo").files[0];
+    var ficha = {
+      tipo:    $("sbTipo").value,
+      periodo: monthInputAPeriodo($("sbPeriodo").value) || "",
+      nombre:  arch.nombre,
+      nota:    $("sbNota").value.trim(),
+      peso:    entrada ? entrada.size : 0,
+      subido:  arch.subido
+    };
+
+    var updates = {};
+    updates["archivos/" + cli + "/" + id] = ficha;
+    updates["archivosContenido/" + id] = arch.contenido;
+    return ref("").update(updates);
+  }).then(function(){
+    cerrarModal();
+    toast("Archivo guardado", "ok");
+    pintarArchivos();
+  }).catch(function(e){
+    $("sbEstado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(e.message || explicarError(e)) + "</div></div>";
+    if (btn){ btn.disabled = false; btn.textContent = "Subir"; }
+  });
+}
+
+$("btnSubirArchivo").onclick = abrirSubirArchivo;
+$("arcCliente").onchange = pintarArchivos;
+$("arcTipo").onchange    = pintarArchivos;
 
 /* ---------- 19. INSTALACIÓN COMO APP (PWA) ---------- */
 
