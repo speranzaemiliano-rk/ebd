@@ -53,6 +53,16 @@
         ".write": "auth != null && root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() !== 'lector'"
       },
 
+      "archivos": {
+        ".read": "auth != null",
+        ".write": "auth != null && root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() !== 'lector'"
+      },
+
+      "archivosContenido": {
+        ".read": "auth != null",
+        ".write": "auth != null && root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() !== 'lector'"
+      },
+
       "escalas": {
         ".read": "auth != null",
         ".write": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')"
