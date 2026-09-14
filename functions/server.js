@@ -19,7 +19,9 @@ const arca    = require('./arca');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '2mb' }));
+/* Los PDF y las fotos viajan en base64 dentro del JSON, y una constancia
+   escaneada tranquilamente pasa los 2 MB. */
+app.use(express.json({ limit: '12mb' }));
 
 /* ---------- CORS ----------
    ALLOWED_ORIGINS es una lista separada por comas con los dominios que
@@ -419,6 +421,100 @@ app.post('/portal/comprobantes', async (req, res) => {
 });
 
 /* ==========================================================================
+   GEMINI — leer constancias y responder preguntas
+
+   La clave de Gemini no puede vivir en el index.html: cualquiera que abra la
+   página la vería y la podría gastar. Va acá, en una variable de entorno, y el
+   sistema le pide a este backend que hable con Google.
+
+   Un solo endpoint para los dos usos —leer un archivo y contestar una
+   pregunta— porque a Gemini se le manda lo mismo: texto y, si hay, un archivo
+   adjunto. Lo que cambia es la consigna, y esa la arma el frontend.
+   ========================================================================== */
+
+const GEMINI_KEY    = limpiar(process.env.GEMINI_API_KEY);
+const GEMINI_MODELO = limpiar(process.env.GEMINI_MODEL) || 'gemini-2.0-flash';
+
+/* Tipos que Gemini acepta como adjunto. Cualquier otro se rechaza acá y no se
+   gasta una llamada para que conteste que no puede. */
+const TIPOS_ADJUNTO = [
+  'application/pdf',
+  'image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'
+];
+
+app.post('/gemini', async (req, res) => {
+  if (!GEMINI_KEY) {
+    return res.status(503).json({
+      error: 'Falta GEMINI_API_KEY en el backend',
+      detalle: 'Cargala en las variables de entorno de Railway y reiniciá el servicio.'
+    });
+  }
+
+  const prompt  = limpiar(req.body && req.body.prompt);
+  const archivo = req.body && req.body.archivo;   // { mime, datos } en base64, sin el prefijo data:
+
+  if (!prompt) return res.status(400).json({ error: 'Falta el texto de la consulta' });
+
+  if (archivo && TIPOS_ADJUNTO.indexOf(limpiar(archivo.mime)) === -1) {
+    return res.status(400).json({
+      error: 'Tipo de archivo no soportado',
+      detalle: 'Se puede mandar PDF, PNG, JPG, WEBP o HEIC. Llegó: ' + limpiar(archivo.mime)
+    });
+  }
+
+  const partes = [{ text: prompt }];
+  if (archivo && archivo.datos) {
+    partes.push({ inline_data: { mime_type: archivo.mime, data: archivo.datos } });
+  }
+
+  const cuerpo = {
+    contents: [{ parts: partes }],
+    generationConfig: {
+      temperature: req.body.temperatura === undefined ? 0.2 : Number(req.body.temperatura),
+      maxOutputTokens: 2048
+    }
+  };
+
+  try {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+                encodeURIComponent(GEMINI_MODELO) + ':generateContent?key=' + encodeURIComponent(GEMINI_KEY);
+
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo)
+    });
+    const j = await r.json();
+
+    if (!r.ok) {
+      /* El error de Google se devuelve tal cual: dice si la clave es inválida,
+         si se agotó la cuota o si el modelo no existe, y son tres arreglos
+         distintos. Esconderlo detrás de "error de Gemini" no ayuda a nadie. */
+      return res.status(r.status).json({
+        error: 'Gemini rechazó la consulta',
+        detalle: (j && j.error && j.error.message) || ('HTTP ' + r.status)
+      });
+    }
+
+    const cand  = j.candidates && j.candidates[0];
+    const texto = cand && cand.content && cand.content.parts
+      ? cand.content.parts.map(p => p.text || '').join('').trim()
+      : '';
+
+    if (!texto) {
+      return res.status(502).json({
+        error: 'Gemini no devolvió texto',
+        detalle: (cand && cand.finishReason) || 'sin respuesta'
+      });
+    }
+
+    res.json({ texto, modelo: GEMINI_MODELO });
+  } catch (e) {
+    res.status(502).json({ error: 'No pude hablar con Gemini', detalle: e.message });
+  }
+});
+
+/* ==========================================================================
    DIAGNÓSTICO
    ========================================================================== */
 
@@ -435,6 +531,7 @@ app.get('/diag', (req, res) => {
   if (entorno() !== 'production') avisos.push('ARCA en modo TESTING: las consultas van al ambiente de homologación, no a los datos reales.');
   if (!APP_TOKEN) avisos.push('APP_API_TOKEN sin configurar: el backend acepta pedidos de cualquiera.');
   if (!ORIGENES.length) avisos.push('ALLOWED_ORIGINS sin configurar: acepta llamadas desde cualquier dominio.');
+  if (!GEMINI_KEY) avisos.push('GEMINI_API_KEY sin configurar: no funcionan ni el lector de constancias con IA ni el asistente.');
 
   res.json({
     certificadoCargado: !!cert,
@@ -445,6 +542,8 @@ app.get('/diag', (req, res) => {
     ambiente:           entorno(),
     tokenConfigurado:   !!APP_TOKEN,
     corsRestringido:    ORIGENES.length > 0,
+    geminiConfigurado:  !!GEMINI_KEY,
+    geminiModelo:       GEMINI_KEY ? GEMINI_MODELO : '',
     avisos
   });
 });

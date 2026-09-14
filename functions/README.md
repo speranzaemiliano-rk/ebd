@@ -131,6 +131,8 @@ base64 -w0 ebd.key
 | `APP_API_TOKEN` | Una contraseña larga inventada por vos. El sistema la manda en cada pedido | Sí |
 | `ALLOWED_ORIGINS` | `https://speranzaemiliano-rk.github.io` | Recomendada |
 | `AFIP_SDK_TOKEN` | Token de la cuenta de Afip SDK. Solo hace falta para traer del portal | Para el portal |
+| `GEMINI_API_KEY` | Clave de Google Gemini. La usan el lector de constancias con IA y el asistente | Para la IA |
+| `GEMINI_MODEL` | Modelo a usar. Sin definir, `gemini-2.0-flash` | No |
 
 Sin `APP_API_TOKEN` el backend queda abierto a cualquiera que descubra la URL.
 Sin `ALLOWED_ORIGINS`, cualquier página puede llamarlo desde el navegador.
@@ -164,6 +166,7 @@ Si dice que no está autorizado, falta la delegación de ese cliente.
 | `GET /arca/emitidos?cuit=&desde=&hasta=` | Comprobantes emitidos del rango, más el total por período |
 | `GET /arca/constancia?cuit=` | Todavía no implementado (usa otro web service de ARCA) |
 | `POST /portal/comprobantes` | Emitidos y recibidos desde el portal, con la clave fiscal del cliente |
+| `POST /gemini` | Le pregunta algo a Gemini, con un archivo adjunto opcional |
 
 Mirá `/diag/firma` **antes** que `/diag/arca`: si la clave y el certificado no
 son pareja, no hay nada más que probar, y esta consulta no gasta un ticket de
@@ -198,3 +201,42 @@ cd functions
 npm install
 APP_API_TOKEN=loquesea npm start
 ```
+
+---
+
+## Sobre `/gemini`
+
+La clave de Gemini no puede vivir en el `index.html`: cualquiera que abra la
+página la vería y la podría gastar. Va acá, en una variable de entorno, y el
+sistema le pide a este backend que hable con Google.
+
+Un solo endpoint para los dos usos —leer una constancia y contestar una
+pregunta del asistente— porque a Gemini se le manda lo mismo: texto y, si hay,
+un archivo. Lo que cambia es la consigna, y esa la arma el frontend.
+
+```json
+POST /gemini
+{
+  "prompt": "Devolvé un JSON con el CUIT y la razón social de esta constancia",
+  "archivo": { "mime": "image/png", "datos": "<base64 sin el prefijo data:>" },
+  "temperatura": 0
+}
+```
+
+Responde `{ "texto": "...", "modelo": "gemini-2.0-flash" }`.
+
+Acepta PDF, PNG, JPG, WEBP y HEIC. Cualquier otro tipo se rechaza acá mismo,
+sin gastar una llamada para que Google conteste que no puede.
+
+El error de Google se devuelve tal cual en `detalle`: dice si la clave es
+inválida, si se agotó la cuota o si el modelo no existe, y son tres arreglos
+distintos. Esconderlo detrás de un "error de Gemini" no ayuda a nadie.
+
+**Qué NO se manda.** El asistente arma su contexto con los datos del estudio
+—clientes, deuda, categorías, liquidaciones— pero nunca con las claves
+fiscales. La bóveda está cifrada y la contraseña maestra vive sólo en el
+navegador de quien la escribió: mandarlas a un tercero sería tirar por la borda
+todo eso.
+
+El límite del cuerpo de los pedidos subió a 12 MB, porque una constancia
+escaneada en base64 pasa tranquilamente los 2 MB que había antes.
