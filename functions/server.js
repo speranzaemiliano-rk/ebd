@@ -433,7 +433,10 @@ app.post('/portal/comprobantes', async (req, res) => {
    ========================================================================== */
 
 const GEMINI_KEY    = limpiar(process.env.GEMINI_API_KEY);
-const GEMINI_MODELO = limpiar(process.env.GEMINI_MODEL) || 'gemini-2.0-flash';
+/* Google jubila modelos y cambia los nombres sin avisar: gemini-2.0-flash
+   dejó de existir de un día para el otro. Por eso el modelo se puede cambiar
+   por variable de entorno Y desde el sistema, sin tocar código. */
+const GEMINI_MODELO = limpiar(process.env.GEMINI_MODEL) || 'gemini-3.6-flash';
 
 /* Tipos que Gemini acepta como adjunto. Cualquier otro se rechaza acá y no se
    gasta una llamada para que conteste que no puede. */
@@ -442,6 +445,24 @@ const TIPOS_ADJUNTO = [
   'image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'
 ];
 
+/* Los modelos que la clave puede usar para generar texto. Sólo se consulta
+   cuando ya falló por el modelo: es una llamada más y no vale la pena hacerla
+   siempre. */
+async function modelosDisponibles(clave) {
+  try {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' +
+                          encodeURIComponent(clave) + '&pageSize=200');
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).indexOf('generateContent') !== -1)
+      .map(m => String(m.name || '').replace(/^models\//, ''))
+      .filter(n => /^gemini/.test(n));
+  } catch (e) {
+    return [];
+  }
+}
+
 app.post('/gemini', async (req, res) => {
   /* La clave sale de la variable de entorno; si no está, se acepta la que
      mande el sistema. Esto último no es lo ideal —una clave en una variable de
@@ -449,7 +470,8 @@ app.post('/gemini', async (req, res) => {
      en la base— pero es la diferencia entre que la función ande o no ande
      cuando la variable, por lo que sea, no llega al contenedor.
      El pedido igual exige X-App-Token, así que no queda abierto a cualquiera. */
-  const clave = GEMINI_KEY || limpiar(req.body && req.body.clave);
+  const clave  = GEMINI_KEY || limpiar(req.body && req.body.clave);
+  const modelo = limpiar(process.env.GEMINI_MODEL) || limpiar(req.body && req.body.modelo) || GEMINI_MODELO;
   if (!clave) {
     return res.status(503).json({
       error: 'Falta la clave de Gemini',
@@ -485,7 +507,7 @@ app.post('/gemini', async (req, res) => {
 
   try {
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-                encodeURIComponent(GEMINI_MODELO) + ':generateContent?key=' + encodeURIComponent(clave);
+                encodeURIComponent(modelo) + ':generateContent?key=' + encodeURIComponent(clave);
 
     const r = await fetch(url, {
       method: 'POST',
@@ -498,10 +520,20 @@ app.post('/gemini', async (req, res) => {
       /* El error de Google se devuelve tal cual: dice si la clave es inválida,
          si se agotó la cuota o si el modelo no existe, y son tres arreglos
          distintos. Esconderlo detrás de "error de Gemini" no ayuda a nadie. */
-      return res.status(r.status).json({
-        error: 'Gemini rechazó la consulta',
-        detalle: (j && j.error && j.error.message) || ('HTTP ' + r.status)
-      });
+      let detalle = (j && j.error && j.error.message) || ('HTTP ' + r.status);
+
+      /* Si el problema es el modelo, se le pregunta a Google cuáles hay y se
+         devuelven en el mismo error. Un "ese modelo ya no existe" sin decir
+         cuál usar deja al usuario buscando a ciegas. */
+      if (/model/i.test(detalle) && /(not found|no longer available|not supported|deprecat)/i.test(detalle)) {
+        const disponibles = await modelosDisponibles(clave);
+        if (disponibles.length) {
+          detalle += ' — Modelos disponibles con esta clave: ' + disponibles.slice(0, 8).join(', ') +
+                     '. Cargá el que quieras en Configuración → Asistente (IA), o en Railway como GEMINI_MODEL.';
+        }
+      }
+
+      return res.status(r.status).json({ error: 'Gemini rechazó la consulta', detalle, modelo });
     }
 
     const cand  = j.candidates && j.candidates[0];
@@ -516,7 +548,7 @@ app.post('/gemini', async (req, res) => {
       });
     }
 
-    res.json({ texto, modelo: GEMINI_MODELO });
+    res.json({ texto, modelo });
   } catch (e) {
     res.status(502).json({ error: 'No pude hablar con Gemini', detalle: e.message });
   }

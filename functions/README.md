@@ -132,7 +132,7 @@ base64 -w0 ebd.key
 | `ALLOWED_ORIGINS` | `https://speranzaemiliano-rk.github.io` | Recomendada |
 | `AFIP_SDK_TOKEN` | Token de la cuenta de Afip SDK. Solo hace falta para traer del portal | Para el portal |
 | `GEMINI_API_KEY` | Clave de Google Gemini. La usan el lector de constancias con IA y el asistente | Para la IA |
-| `GEMINI_MODEL` | Modelo a usar. Sin definir, `gemini-2.0-flash` | No |
+| `GEMINI_MODEL` | Modelo a usar. Sin definir, `gemini-3.6-flash` | No |
 
 Sin `APP_API_TOKEN` el backend queda abierto a cualquiera que descubra la URL.
 Sin `ALLOWED_ORIGINS`, cualquier página puede llamarlo desde el navegador.
@@ -240,3 +240,14 @@ todo eso.
 
 El límite del cuerpo de los pedidos subió a 12 MB, porque una constancia
 escaneada en base64 pasa tranquilamente los 2 MB que había antes.
+
+### Cuando Google jubila un modelo
+
+Pasa sin aviso: `gemini-2.0-flash` dejó de existir de un día para el otro y la
+API contesta "no longer available". Por eso el modelo se puede cambiar por
+variable de entorno **y** desde el sistema (Configuración → Asistente (IA)),
+sin tocar código ni desplegar.
+
+Y cuando el error es por el modelo, el backend le pregunta a Google cuáles
+tiene disponibles esa clave y los devuelve en el mismo mensaje. Un "ese modelo
+ya no existe" sin decir cuál usar deja al usuario buscando a ciegas.

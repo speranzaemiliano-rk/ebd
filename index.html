@@ -1333,6 +1333,11 @@ tbody tr:hover{background:#FAFAFC}
           <p class="desc">El asistente y la lectura de constancias con IA usan Gemini, de Google.
             Lo mejor es cargar la clave en Railway como <span class="mono">GEMINI_API_KEY</span>: ahí no la ve nadie.
             Si por lo que sea no se puede, pegala acá y el sistema se la manda al backend en cada consulta.</p>
+          <div class="campo"><label>Modelo</label>
+            <input type="text" id="cfgGeminiModelo" placeholder="gemini-3.6-flash">
+            <div class="ayuda">Vacío usa el que viene por defecto. Google jubila modelos y les cambia el
+              nombre cada tanto; si alguno deja de andar, el error te va a decir cuáles hay disponibles con
+              tu clave y lo escribís acá.</div></div>
           <div class="campo"><label>Clave de Gemini</label>
             <input type="password" id="cfgGeminiKey" placeholder="AIzaSy…">
             <div class="ayuda">Se saca de <span class="mono">aistudio.google.com/apikey</span>.
@@ -1641,7 +1646,7 @@ var CAMPOS_ADMIN = ["cfgNombre","cfgCuit","cfgMail","cfgTel",
                     "cfgEjsService","cfgEjsTemplate","cfgEjsKey",
                     "escalaVigencia","escalaAlquileres",
                     "plantillaAsunto","plantillaCuerpo",
-                    "cfgBackUrl","cfgBackToken","cfgGeminiKey"];
+                    "cfgBackUrl","cfgBackToken","cfgGeminiKey","cfgGeminiModelo"];
 
 function aplicarPermisos(){
   BOTONES_ESCRITURA.forEach(function(id){
@@ -3677,13 +3682,13 @@ function postAlBackend(ruta, cuerpo){
    del backend no está. Vive bajo `credenciales`, que ya tiene publicada la
    regla más estricta del sistema —sólo administradores leen y escriben—, así
    que no hace falta tocar las reglas de Firebase para esto. */
-var _geminiClave = null;   /* null = no se leyó todavía; "" = no hay */
+var _geminiConf = null;   /* null = no se leyó todavía */
 
-function leerClaveGemini(){
-  if (_geminiClave !== null) return Promise.resolve(_geminiClave);
+function leerConfGemini(){
+  if (_geminiConf !== null) return Promise.resolve(_geminiConf);
   return ref("credenciales/__gemini").once("value")
-    .then(function(s){ _geminiClave = (s.val() || {}).key || ""; return _geminiClave; })
-    .catch(function(){ _geminiClave = ""; return ""; });   /* sin permiso: se sigue sin ella */
+    .then(function(s){ _geminiConf = s.val() || {}; return _geminiConf; })
+    .catch(function(){ _geminiConf = {}; return _geminiConf; });   /* sin permiso: se sigue sin ella */
 }
 
 /* Le pide algo a Gemini a través del backend. `archivo` es opcional: un File
@@ -3692,8 +3697,9 @@ function preguntarAGemini(prompt, archivo, temperatura){
   var envio = { prompt: prompt };
   if (temperatura !== undefined) envio.temperatura = temperatura;
   var conClave = function(e){
-    return leerClaveGemini().then(function(k){
-      if (k) e.clave = k;
+    return leerConfGemini().then(function(c){
+      if (c.key)    e.clave  = c.key;
+      if (c.modelo) e.modelo = c.modelo;
       return postAlBackend("/gemini", e).then(function(r){ return r.texto; });
     });
   };
@@ -3952,11 +3958,13 @@ $("btnGuardarBackend").onclick = function(){
 
 $("btnGuardarGemini").onclick = function(){
   var k = $("cfgGeminiKey").value.trim();
-  ref("credenciales/__gemini").set(k ? { key: k, actualizado: new Date().toISOString() } : null)
+  var m = $("cfgGeminiModelo").value.trim();
+  var datos = (k || m) ? { key: k, modelo: m, actualizado: new Date().toISOString() } : null;
+  ref("credenciales/__gemini").set(datos)
     .then(function(){
-      _geminiClave = k;
+      _geminiConf = datos || {};
       $("cfgGeminiEstado").innerHTML = '<div class="aviso ok"><span>✓</span><div>' +
-        (k ? "Clave guardada. Probala con el botón de al lado." : "Clave borrada.") + "</div></div>";
+        (k ? "Guardado. Probalo con el botón de al lado." : "Borrado.") + "</div></div>";
     })
     .catch(function(e){ toast(explicarError(e), "error"); });
 };
@@ -3966,8 +3974,9 @@ $("btnGuardarGemini").onclick = function(){
 $("btnProbarGemini").onclick = function(){
   var cont = $("cfgGeminiEstado");
   cont.innerHTML = '<div class="aviso info"><span>⏳</span><div>Preguntándole algo a Gemini…</div></div>';
-  var k = $("cfgGeminiKey").value.trim();
-  if (k) _geminiClave = k;   /* se prueba lo que está escrito, sin obligar a guardar antes */
+  /* Se prueba lo que está escrito, sin obligar a guardar antes. */
+  var k = $("cfgGeminiKey").value.trim(), m = $("cfgGeminiModelo").value.trim();
+  if (k || m) _geminiConf = { key: k, modelo: m };
   preguntarAGemini("Contestá únicamente con la palabra LISTO.", null, 0).then(function(txt){
     cont.innerHTML = '<div class="aviso ok"><span>✨</span><div><b>Anda.</b> Gemini contestó: ' +
       esc(String(txt).slice(0, 60)) + "</div></div>";
@@ -4942,8 +4951,9 @@ function renderConfig(){
 
   /* La clave de Gemini se lee aparte: vive en la rama de administradores y
      para un rol menor la lectura falla, sin que eso rompa la pantalla. */
-  if (esAdminRol()) leerClaveGemini().then(function(k){
-    if ($("cfgGeminiKey")) $("cfgGeminiKey").value = k || "";
+  if (esAdminRol()) leerConfGemini().then(function(c){
+    if ($("cfgGeminiKey"))    $("cfgGeminiKey").value    = c.key || "";
+    if ($("cfgGeminiModelo")) $("cfgGeminiModelo").value = c.modelo || "";
   });
 
   pintarEstadoBoveda();
@@ -5476,7 +5486,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v35";
+var VERSION_APP = "v36";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
