@@ -1051,11 +1051,13 @@ tbody tr:hover{background:#FAFAFC}
           <select id="honAnio" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px"></select>
           <button class="btn sec chico" id="btnHonExportar">Exportar CSV</button>
           <button class="btn sec chico" id="btnHonGenerar">Generar meses</button>
+          <button class="btn chico" id="btnHonActualizar">% Actualizar honorarios</button>
         </div>
         <div class="aviso info">
           <span>ℹ️</span>
           <div>Cada celda es un mes. <b>Verde</b> = cobrado, <b>rojo</b> = vencido e impago, <b>amarillo</b> = corresponde pero todavía no vence,
-            <b>gris</b> = el cliente no tenía honorario ese mes. Hacé clic en cualquier celda para registrar el cobro.</div>
+            <b>gris</b> = el cliente no tenía honorario ese mes. Hacé clic en cualquier celda para marcar que pagó, que debe, o un pago parcial.
+            Con <b>% Actualizar honorarios</b> subís la tarifa de todos de una vez desde el mes que elijas, sin tocar lo ya cobrado.</div>
         </div>
         <div id="tablaHonorarios"></div>
       </div>
@@ -1421,7 +1423,7 @@ function esAdminRol(){ return ESTADO.rol === "admin"; }
    dentro de cada render con puedeEscribir(). Al agregar un botón que guarde
    datos, sumarlo también a una de estas dos listas. */
 var BOTONES_ESCRITURA = ["btnNuevoCliente","btnCargaManual","btnRecalcularLiq",
-                         "btnEnviarMails","btnHonGenerar","btnNuevoMovimiento",
+                         "btnEnviarMails","btnHonGenerar","btnHonActualizar","btnNuevoMovimiento",
                          "btnTraerArca","btnTraerPortal","btnSubirArchivo"];
 var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
                          "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
@@ -4487,6 +4489,42 @@ function honorarioDe(clienteId, periodo){
   return (ESTADO.honorarios[clienteId] || {})[periodo] || null;
 }
 
+/* Honorario que le correspondía a un cliente en un mes determinado.
+
+   Un honorario no es un número fijo: se actualiza por porcentaje cada tanto y
+   lo de antes tiene que seguir valiendo lo que valía. Por eso cada ficha
+   guarda `honorarioHistorial`, un mapa período -> importe que significa "desde
+   este mes en adelante, este es el honorario". Se busca la última entrada que
+   no sea posterior al mes pedido.
+
+   Las fichas viejas no tienen historial: ahí vale `honorarioMensual`, como
+   siempre. La primera actualización se encarga de sembrar el valor anterior en
+   el mes de arranque del cliente, así lo pasado no se toca. */
+function honorarioVigente(cli, periodo){
+  if (!cli) return 0;
+  var hist = cli.honorarioHistorial;
+  if (hist){
+    var claves = Object.keys(hist).sort();
+    var vale = null;
+    for (var i = 0; i < claves.length; i++){
+      if (claves[i] <= periodo) vale = hist[claves[i]];
+    }
+    /* Si todas las entradas son posteriores, el mes es anterior a la primera
+       tarifa registrada: se usa esa, que es de donde arranca. */
+    if (vale === null && claves.length) vale = hist[claves[0]];
+    if (vale !== null) return vale;
+  }
+  return cli.honorarioMensual || 0;
+}
+
+/* Mes de la última actualización cargada, o null si nunca se actualizó. */
+function ultimaActualizacionHon(cli){
+  var hist = (cli || {}).honorarioHistorial;
+  if (!hist) return null;
+  var claves = Object.keys(hist).sort();
+  return claves.length > 1 ? claves[claves.length - 1] : null;
+}
+
 /* Estado de una celda del cuadro:
    pago | parcial | debe (vencido e impago) | porvenir (todavía no vence) | nada */
 function estadoHonorario(clienteId, periodo){
@@ -4494,7 +4532,7 @@ function estadoHonorario(clienteId, periodo){
   if (!correspondeHonorario(cli, periodo)) return { estado:"nada", monto:0, pagado:0, saldo:0 };
 
   var h      = honorarioDe(clienteId, periodo);
-  var monto  = (h && h.monto !== undefined && h.monto !== null) ? h.monto : cli.honorarioMensual;
+  var monto  = (h && h.monto !== undefined && h.monto !== null) ? h.monto : honorarioVigente(cli, periodo);
   var pagado = h ? (h.montoPagado || 0) : 0;
   var saldo  = Math.max(0, monto - pagado);
   var vence  = mesVencimiento(periodo, cli.honorarioModalidad);
@@ -4584,8 +4622,11 @@ function renderHonorarios(){
     if (deuda > 0.005) morosos++;
 
     var etiqueta = cli.honorarioModalidad === "vencido" ? "mes vencido" : "mes en curso";
+    var ultima   = ultimaActualizacionHon(cli);
     html += '<tr><td class="cli"><b>' + esc(nombreCliente(id)) + "</b>" +
-      '<div style="color:var(--gris);font-size:11.5px">' + pesos(cli.honorarioMensual || 0) + " · " + etiqueta + "</div></td>";
+      '<div style="color:var(--gris);font-size:11.5px">' + pesos(cli.honorarioMensual || 0) + " · " + etiqueta +
+      (ultima ? ' · <span title="Última actualización">↑ ' + periodoCorto(ultima) + "</span>" : "") +
+      "</div></td>";
 
     for (var mm = 1; mm <= 12; mm++){
       var per = anio + String(mm).padStart(2,"0");
@@ -4602,7 +4643,8 @@ function renderHonorarios(){
       html += '<td class="mes">' +
         (e.estado === "nada"
           ? '<span class="celda c-nada">—</span>'
-          : '<button class="celda ' + clase + '" onclick="abrirCobro(\'' + id + "','" + per + '\')">' +
+          : '<button class="celda ' + clase + '" title="' + esc(_detalleCelda(e)) +
+            '" onclick="abrirCobro(\'' + id + "','" + per + '\')">' +
             texto + '<span class="m">' + sub + "</span></button>") +
         "</td>";
     }
@@ -4816,6 +4858,189 @@ $("btnHonExportar").onclick = function(){
   });
   bajarCSV(filas, "honorarios-" + anio + ".csv");
 };
+
+/* Detalle que aparece al apoyar el mouse sobre una celda del cuadro. */
+function _detalleCelda(e){
+  var h = e.registro || {};
+  var partes = ["Honorario " + pesos(e.monto)];
+  if (e.pagado > 0.005){
+    partes.push("cobrado " + pesos(e.pagado) +
+      (h.fechaPago ? " el " + h.fechaPago.split("-").reverse().join("/") : "") +
+      (h.medio ? " por " + nombreMedio(h.medio) : ""));
+  }
+  if (e.saldo > 0.005) partes.push("saldo " + pesos(e.saldo));
+  if (h.obs) partes.push(h.obs);
+  return partes.join(" · ");
+}
+
+/* ---------- ACTUALIZACIÓN DE HONORARIOS POR PORCENTAJE ----------
+
+   Subir la tarifa no es cambiar un número: lo de antes tiene que seguir
+   valiendo lo que valía. Por eso esto escribe en tres lugares:
+
+   1. `honorarioHistorial` de la ficha, con el importe nuevo bajo el mes desde
+      el que rige (y, si la ficha nunca se actualizó, el valor viejo bajo el
+      mes de arranque, para que el pasado no cambie de precio).
+   2. `honorarioMensual`, que es lo que se muestra como tarifa de hoy.
+   3. Los meses YA generados de ahí en adelante que todavía no se cobraron.
+      Si no, el importe congelado por "Generar meses" le ganaría al aumento y
+      el cuadro seguiría mostrando la tarifa vieja.
+
+   Lo cobrado —entero o en parte— no se toca nunca. */
+
+var _actHon = { ids: [], sel: {} };
+
+/* A un honorario no se le deja "18.437,50": se redondea como se cobra. */
+function _redondearHon(v, paso){
+  if (!paso) return Math.round(v * 100) / 100;
+  return Math.round(v / paso) * paso;
+}
+
+function abrirActualizarHonorarios(){
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){
+    var c = ESTADO.clientes[id];
+    return (c.honorarioMensual || 0) > 0 && c.activo !== false;
+  });
+  ids.sort(function(a,b){ return nombreCliente(a).localeCompare(nombreCliente(b)); });
+
+  if (!ids.length){ toast("Ningún cliente activo tiene honorario cargado", "error"); return; }
+  _actHon.ids = ids;
+  _actHon.sel = {};
+
+  var html =
+    '<div class="grid g3">' +
+      '<div class="campo"><label>Porcentaje</label>' +
+        '<input type="number" step="0.1" id="acPct" value="10">' +
+        '<div class="ayuda">En negativo baja el honorario.</div></div>' +
+      '<div class="campo"><label>Rige desde el mes</label>' +
+        '<input type="month" id="acDesde" value="' + periodoAMonthInput(sumarMes(periodoHoy(), 1)) + '">' +
+        '<div class="ayuda">Los meses anteriores quedan como están.</div></div>' +
+      '<div class="campo"><label>Redondeo</label><select id="acRedondeo">' +
+        '<option value="0">Sin redondear</option>' +
+        '<option value="100" selected>A los $100</option>' +
+        '<option value="1000">A los $1.000</option>' +
+      "</select></div>" +
+    "</div>" +
+    '<div class="aviso info"><span>ℹ️</span><div>El importe nuevo rige <b>desde ese mes en adelante</b>. ' +
+      "Lo que ya cobraste no se toca, y los meses futuros que hayas generado con la tarifa vieja se corrigen solos.</div></div>" +
+    '<div class="seccion-tit">A quiénes se les aplica</div>' +
+    '<label class="check"><input type="checkbox" id="acTodos" checked> Todos los clientes activos con honorario</label>' +
+    '<div class="tabla-wrap" style="margin-top:10px;max-height:330px;overflow-y:auto">' +
+      '<table><thead><tr><th style="width:38px"></th><th>Cliente</th>' +
+      '<th class="num">Hoy</th><th class="num">Pasa a</th><th class="num">Diferencia</th></tr></thead>' +
+      '<tbody id="acCuerpo"></tbody></table></div>';
+
+  abrirModal("Actualizar honorarios", html, [
+    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Aplicar", accion:aplicarActualizacionHonorarios }
+  ], "ancho");
+
+  $("acPct").oninput       = pintarPreviewActualizacion;
+  $("acDesde").onchange    = pintarPreviewActualizacion;
+  $("acRedondeo").onchange = pintarPreviewActualizacion;
+  $("acTodos").onchange    = function(){
+    var v = this.checked;
+    _actHon.ids.forEach(function(id){ _actHon.sel[id] = v; });
+    pintarPreviewActualizacion();
+  };
+  pintarPreviewActualizacion();
+}
+
+/* Vista previa: se vuelve a dibujar con cada tecla, así que la selección vive
+   en _actHon.sel y no en los checkboxes, que se recrean. */
+function pintarPreviewActualizacion(){
+  var pct   = parseFloat($("acPct").value) || 0;
+  var paso  = parseFloat($("acRedondeo").value) || 0;
+  var desde = ($("acDesde").value || "").replace("-","");
+  var filas = "";
+
+  _actHon.ids.forEach(function(id){
+    var cli    = ESTADO.clientes[id];
+    var actual = desde ? honorarioVigente(cli, desde) : (cli.honorarioMensual || 0);
+    var nuevo  = _redondearHon(actual * (1 + pct / 100), paso);
+    var dif    = nuevo - actual;
+    filas += '<tr><td><input type="checkbox" class="ac-chk" data-id="' + id + '"' +
+        (_actHon.sel[id] === false ? "" : " checked") +
+        ' style="width:17px;height:17px;accent-color:var(--azul);cursor:pointer"></td>' +
+      "<td>" + esc(nombreCliente(id)) + "</td>" +
+      '<td class="num">' + pesos(actual) + "</td>" +
+      '<td class="num"><b>' + pesos(nuevo) + "</b></td>" +
+      '<td class="num" style="color:' + (dif < 0 ? "var(--rojo)" : "var(--verde)") + '">' +
+        (dif > 0 ? "+" : "") + pesos(dif) + "</td></tr>";
+  });
+
+  $("acCuerpo").innerHTML = filas;
+  Array.prototype.forEach.call(document.querySelectorAll(".ac-chk"), function(c){
+    c.onchange = function(){ _actHon.sel[this.dataset.id] = this.checked; };
+  });
+}
+
+function aplicarActualizacionHonorarios(){
+  var pct   = parseFloat($("acPct").value) || 0;
+  var paso  = parseFloat($("acRedondeo").value) || 0;
+  var desde = ($("acDesde").value || "").replace("-","");
+
+  if (!desde){ toast("Elegí desde qué mes rige", "error"); return; }
+  if (!pct)  { toast("Poné un porcentaje distinto de cero", "error"); return; }
+
+  var elegidos = _actHon.ids.filter(function(id){ return _actHon.sel[id] !== false; });
+  if (!elegidos.length){ toast("No seleccionaste ningún cliente", "error"); return; }
+
+  var updates = {}, cambios = [], mesesCorregidos = 0;
+
+  elegidos.forEach(function(id){
+    var cli    = ESTADO.clientes[id];
+    var actual = honorarioVigente(cli, desde);
+    var nuevo  = _redondearHon(actual * (1 + pct / 100), paso);
+    if (Math.abs(nuevo - actual) < 0.005) return;
+
+    var hist = Object.assign({}, cli.honorarioHistorial || {});
+    if (!Object.keys(hist).length){
+      /* Primera actualización: se guarda el valor viejo desde el arranque del
+         cliente, si no los meses anteriores pasarían a valer el importe nuevo. */
+      var arranque = (cli.honorarioDesde || "").replace("-","");
+      if (!arranque || arranque >= desde) arranque = "190001";
+      hist[arranque] = actual;
+    }
+    hist[desde] = nuevo;
+
+    updates["clientes/" + id + "/honorarioHistorial"] = hist;
+    updates["clientes/" + id + "/honorarioMensual"]   = nuevo;
+
+    var meses = [];
+    var regs = ESTADO.honorarios[id] || {};
+    Object.keys(regs).forEach(function(per){
+      if (per < desde) return;
+      if ((regs[per].montoPagado || 0) > 0.005) return;   /* cobrado: no se toca */
+      if (Math.abs((regs[per].monto || 0) - nuevo) < 0.005) return;
+      updates["honorarios/" + id + "/" + per + "/monto"] = nuevo;
+      meses.push(per);
+      mesesCorregidos++;
+    });
+
+    cambios.push({ id:id, hist:hist, nuevo:nuevo, meses:meses });
+  });
+
+  if (!cambios.length){ toast("No hubo cambios para aplicar", "ok"); return; }
+
+  ref("").update(updates).then(function(){
+    /* Recién acá se toca ESTADO: si la escritura falla, la pantalla no queda
+       mostrando un aumento que en la nube no existe. */
+    cambios.forEach(function(c){
+      var cli = ESTADO.clientes[c.id];
+      cli.honorarioHistorial = c.hist;
+      cli.honorarioMensual   = c.nuevo;
+      c.meses.forEach(function(per){ ESTADO.honorarios[c.id][per].monto = c.nuevo; });
+    });
+    cerrarModal();
+    toast(cambios.length + (cambios.length === 1 ? " honorario actualizado" : " honorarios actualizados") +
+          (mesesCorregidos ? " · " + mesesCorregidos + " meses corregidos" : ""), "ok");
+    renderHonorarios();
+    renderClientes();
+  }).catch(function(err){ toast("Error: " + err.message, "error"); });
+}
+
+$("btnHonActualizar").onclick = abrirActualizarHonorarios;
 
 /* ==========================================================================
    22. CAJA — ingresos, egresos y saldo
