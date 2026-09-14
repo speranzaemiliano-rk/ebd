@@ -847,6 +847,7 @@ tbody tr:hover{background:#FAFAFC}
     <button data-tab="tabRecat">Recategorización</button>
     <button data-tab="tabLiquidacion">Liquidación</button>
     <button data-tab="tabHonorarios">Honorarios</button>
+    <button data-tab="tabSocios" id="tabBtnSocios">Socios</button>
     <button data-tab="tabCaja">Caja</button>
     <button data-tab="tabMails">Mails</button>
     <button data-tab="tabArchivos">Archivos</button>
@@ -1064,6 +1065,40 @@ tbody tr:hover{background:#FAFAFC}
     </section>
 
     <!-- ---------- CAJA ---------- -->
+    <section class="panel" id="tabSocios">
+      <div class="grid g4" style="margin-bottom:18px">
+        <div class="kpi"><div class="lbl">Socios activos</div><div class="val" id="kpiSocios">—</div><div class="pie" id="kpiSociosPie">&nbsp;</div></div>
+        <div class="kpi"><div class="lbl">Reparto general</div><div class="val" id="kpiSocPct">—</div><div class="pie" id="kpiSocPctPie">tiene que sumar 100%</div></div>
+        <div class="kpi warn"><div class="lbl">Clientes sin socio</div><div class="val" id="kpiSocSin">—</div><div class="pie">nadie los tiene asignados</div></div>
+        <div class="kpi ok"><div class="lbl">Cobrado del año</div><div class="val" id="kpiSocCobrado">—</div><div class="pie" id="kpiSocAnioPie">&nbsp;</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Socios del estudio</h2>
+          <select id="socAnio" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px"></select>
+          <button class="btn" id="btnNuevoSocio">+ Nuevo socio</button>
+        </div>
+        <div class="aviso info">
+          <span>ℹ️</span>
+          <div>El <b>porcentaje general</b> es la parte que le toca a cada socio sobre todo lo que cobra el estudio;
+            entre todos tiene que dar 100%. En el cuadro de abajo tildás qué clientes atiende cada uno:
+            si a un cliente <b>no</b> le cargás porcentajes propios, se reparte entre los socios tildados
+            <b>en proporción a sus porcentajes generales</b> (si hay uno solo tildado, se lleva el 100%).
+            Si escribís porcentajes en la fila de un cliente, <b>esos mandan</b> y tienen que sumar 100.</div>
+        </div>
+        <div id="tablaSocios"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Quién atiende a cada cliente</h2>
+          <button class="btn sec chico" id="btnSociosExportar">Exportar CSV</button>
+        </div>
+        <div id="tablaRepartos"></div>
+      </div>
+    </section>
+
     <section class="panel" id="tabCaja">
       <div class="grid g4" id="kpisCuentas" style="margin-bottom:18px"></div>
 
@@ -1295,13 +1330,14 @@ var ESTADO = {
   caja: {},          // id -> movimiento de caja
   proveedores: {},   // id -> proveedor
   cuentas: {},       // id -> caja/banco/billetera
+  socios: {},        // id -> { nombre, porcentaje, clientes:{clienteId:{asignado,porcentaje}} }
   config: {},
   claveMaestra: null // CryptoKey en memoria, nunca se persiste
 };
 
 /* Todos los IDs de panel. Si agregás un tab nuevo, sumalo acá o se rompe la navegación. */
 var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
-                "tabLiquidacion","tabHonorarios","tabCaja","tabMails",
+                "tabLiquidacion","tabHonorarios","tabSocios","tabCaja","tabMails",
                 "tabArchivos","tabEscalas","tabConfig"];
 
 /* Papeles que se guardan por cliente. El archivo en sí va aparte de la ficha
@@ -1427,7 +1463,8 @@ var BOTONES_ESCRITURA = ["btnNuevoCliente","btnCargaManual","btnRecalcularLiq",
                          "btnTraerArca","btnTraerPortal","btnSubirArchivo"];
 var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
                          "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
-                         "btnConfigBoveda","btnBoveda","btnGuardarBackend"];
+                         "btnConfigBoveda","btnBoveda","btnGuardarBackend",
+                         "btnNuevoSocio","tabBtnSocios"];
 
 /* Campos que solo un admin puede guardar: sin el botón al lado, dejarlos
    editables invita a escribir algo que después se pierde. */
@@ -1882,7 +1919,8 @@ function cargarTodo(){
     ref("honorarios").once("value"),
     ref("caja").once("value"),
     ref("proveedores").once("value"),
-    ref("cuentas").once("value")
+    ref("cuentas").once("value"),
+    ref("socios").once("value")
   ]).then(function(s){
     ESTADO.clientes      = s[0].val() || {};
     ESTADO.totales       = s[1].val() || {};
@@ -1893,6 +1931,7 @@ function cargarTodo(){
     ESTADO.caja          = s[6].val() || {};
     ESTADO.proveedores   = s[7].val() || {};
     ESTADO.cuentas       = s[8].val() || {};
+    ESTADO.socios        = s[9].val() || {};
 
     /* Primera vez: efectivo y cuenta bancaria, para no arrancar con la caja vacía */
     if (!Object.keys(ESTADO.cuentas).length){
@@ -1934,6 +1973,7 @@ function irA(tabId){
   if (tabId === "tabRecat")        renderRecat();
   if (tabId === "tabLiquidacion")  renderLiquidacion();
   if (tabId === "tabHonorarios")   renderHonorarios();
+  if (tabId === "tabSocios")       renderSocios();
   if (tabId === "tabCaja")         renderCaja();
   if (tabId === "tabMails")        renderMails();
   if (tabId === "tabArchivos")     renderArchivos();
@@ -2298,7 +2338,7 @@ function formCliente(c){
         return '<option value="' + m.clave + '"' + (c.honorarioMedio === m.clave ? " selected" : "") + ">" + m.nombre + "</option>";
       }).join("") +
     "</select></div>" +
-    '<div class="campo"><label>Cuenta donde ingresa</label><select id="fcHonCuenta">' + opcionesCuentas(c.honorarioCuenta) + "</select></div>" +
+    '<div class="campo"><label>Cuenta donde ingresa</label>' + selectCuentas("fcHonCuenta", c.honorarioCuenta) + "</div>" +
   "</div>" +
 
   '<label class="check"><input type="checkbox" id="fcActivo"' + (c.activo !== false ? " checked" : "") + "> Cliente activo</label>";
@@ -2342,7 +2382,7 @@ function guardarFormCliente(id){
     honorarioModalidad: $("fcHonModalidad").value,
     honorarioDesde: $("fcHonDesde").value,
     honorarioMedio: $("fcHonMedio").value,
-    honorarioCuenta: $("fcHonCuenta").value,
+    honorarioCuenta: valorCuenta("fcHonCuenta"),
     actividad: $("fcActividad").value,
     categoriaActual: $("fcCategoria").value || null,
     obraSocial: $("fcObraSocial").value.trim(),
@@ -4698,10 +4738,93 @@ function opcionesCuentas(sel){
   var ids = Object.keys(ESTADO.cuentas).filter(function(id){ return ESTADO.cuentas[id].activa !== false; });
   ids.sort(function(a,b){ return (ESTADO.cuentas[a].orden || 99) - (ESTADO.cuentas[b].orden || 99); });
   return ids.map(function(id){
-    return '<option value="' + id + '"' + (sel === id ? " selected" : "") + ">" + esc(ESTADO.cuentas[id].nombre) + "</option>";
+    return '<option value="' + id + '"' + (sel === id ? " selected" : "") + ">" + esc(nombreCuenta(id)) + "</option>";
   }).join("");
 }
-function nombreCuenta(id){ return (ESTADO.cuentas[id] || {}).nombre || "—"; }
+/* El nombre lleva el titular pegado: dos cuentas del mismo banco, una de cada
+   socio, son indistinguibles en un desplegable que solo diga "Santander". */
+function nombreCuenta(id){
+  var c = ESTADO.cuentas[id];
+  if (!c) return "—";
+  return c.nombre + (c.titular ? " · " + c.titular : "");
+}
+
+function titularesCargados(){
+  var set = {};
+  Object.keys(ESTADO.cuentas).forEach(function(id){
+    var t = (ESTADO.cuentas[id].titular || "").trim();
+    if (t) set[t] = true;
+  });
+  return Object.keys(set).sort();
+}
+
+/* Desplegable de cuentas con alta en el momento. Mandar al usuario a
+   Caja → Cuentas en medio de un formulario le hace perder lo que venía
+   cargando, así que la cuenta nueva se crea acá mismo y queda elegida. */
+function selectCuentas(idCampo, sel){
+  return '<select id="' + idCampo + '" onchange="cuentaQuizasNueva(\'' + idCampo + '\')">' +
+      opcionesCuentas(sel) +
+      '<option value="__nueva">+ Crear una cuenta nueva…</option>' +
+    "</select>" +
+    '<datalist id="dlTitulares">' + titularesCargados().map(function(t){
+      return '<option value="' + esc(t) + '"></option>';
+    }).join("") + "</datalist>" +
+    '<div id="' + idCampo + '_alta" style="display:none;margin-top:10px;border:1px solid var(--pelo);border-radius:var(--r2);padding:12px 14px 4px">' +
+      '<div class="grid g3">' +
+        '<div class="campo"><label>Nombre del banco o billetera</label>' +
+          '<input type="text" id="' + idCampo + '_nom" placeholder="Santander, BBVA, Mercado Pago…"></div>' +
+        '<div class="campo"><label>Titular</label>' +
+          '<input type="text" id="' + idCampo + '_tit" list="dlTitulares" placeholder="Diego"></div>' +
+        '<div class="campo"><label>Tipo</label><select id="' + idCampo + '_tipo">' +
+          '<option value="banco">banco</option><option value="billetera">billetera</option>' +
+          '<option value="efectivo">efectivo</option></select></div>' +
+      "</div>" +
+      '<button type="button" class="btn sec chico" style="margin-bottom:12px" ' +
+        'onclick="crearCuentaRapida(\'' + idCampo + '\')">Crear y usar</button>' +
+    "</div>";
+}
+
+/* La opción "+ Crear una cuenta nueva…" no es una cuenta: si quedó elegida sin
+   haber creado nada, vale como "ninguna". */
+function valorCuenta(idCampo){
+  var el = $(idCampo);
+  if (!el || el.value === "__nueva") return "";
+  return el.value;
+}
+
+function cuentaQuizasNueva(idCampo){
+  var alta = $(idCampo + "_alta");
+  if (!alta) return;
+  var esNueva = $(idCampo).value === "__nueva";
+  alta.style.display = esNueva ? "" : "none";
+  if (esNueva) $(idCampo + "_nom").focus();
+}
+
+function crearCuentaRapida(idCampo){
+  var nombre = $(idCampo + "_nom").value.trim();
+  if (!nombre){ toast("Falta el nombre de la cuenta", "error"); return; }
+  var datos = {
+    nombre: nombre,
+    titular: $(idCampo + "_tit").value.trim(),
+    tipo: $(idCampo + "_tipo").value,
+    saldoInicial: 0,
+    activa: true,
+    orden: Object.keys(ESTADO.cuentas).length + 1
+  };
+  var clave = ref("cuentas").push().key;
+  ref("cuentas/" + clave).set(datos).then(function(){
+    ESTADO.cuentas[clave] = datos;
+    /* Se redibujan las opciones dejando elegida la recién creada, sin tocar
+       nada más del formulario. */
+    var sel = $(idCampo);
+    sel.innerHTML = opcionesCuentas(clave) + '<option value="__nueva">+ Crear una cuenta nueva…</option>';
+    sel.value = clave;
+    $(idCampo + "_alta").style.display = "none";
+    $(idCampo + "_nom").value = ""; $(idCampo + "_tit").value = "";
+    toast("Cuenta creada", "ok");
+    renderCaja();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
 function nombreMedio(clave){
   var m = MEDIOS_PAGO.filter(function(x){ return x.clave === clave; })[0];
   return m ? m.nombre : (clave || "—");
@@ -4816,7 +4939,7 @@ function abrirCobro(clienteId, periodo){
           return '<option value="' + m.clave + '"' + s + ">" + m.nombre + "</option>";
         }).join("") + "</select></div>" +
       '<div class="campo"><label>Cuenta donde entra</label>' +
-        '<select id="hoCuenta">' + opcionesCuentas(h.cuentaId || cli.honorarioCuenta) + "</select></div>" +
+        selectCuentas("hoCuenta", h.cuentaId || cli.honorarioCuenta) + "</div>" +
       '<div class="campo"><label>Observaciones</label>' +
         '<input type="text" id="hoObs" value="' + esc(h.obs || "") + '"></div>' +
     "</div>" +
@@ -4852,7 +4975,7 @@ function guardarCobro(clienteId, periodo){
     pagado: monto > 0 && pagado >= monto - 0.005,
     fechaPago: pagado > 0 ? $("hoFecha").value : null,
     medio:     pagado > 0 ? $("hoMedio").value : null,
-    cuentaId:  pagado > 0 ? $("hoCuenta").value : null,
+    cuentaId:  pagado > 0 ? (valorCuenta("hoCuenta") || null) : null,
     obs: $("hoObs").value.trim(),
     actualizado: new Date().toISOString()
   };
@@ -5168,6 +5291,314 @@ function aplicarActualizacionHonorarios(){
 $("btnHonActualizar").onclick = abrirActualizarHonorarios;
 
 /* ==========================================================================
+   SOCIOS — quién atiende a cada cliente y cómo se reparte lo que entra
+
+   El estudio reparte en dos niveles, y los dos hacen falta:
+
+   - El PORCENTAJE GENERAL de cada socio es su parte sobre todo lo que cobra
+     el estudio. Entre todos tiene que dar 100.
+   - El REPARTO POR CLIENTE es para los casos donde ese general no aplica.
+
+   Manda el del cliente si está cargado. Si no, se reparte entre los socios
+   tildados en proporción a sus generales: así, si a un cliente lo atiende uno
+   solo, se lleva el 100% de ese cliente sin tener que escribirlo.
+   ========================================================================== */
+
+function sociosOrdenados(soloActivos){
+  var ids = Object.keys(ESTADO.socios || {});
+  if (soloActivos) ids = ids.filter(function(id){ return ESTADO.socios[id].activo !== false; });
+  ids.sort(function(a,b){
+    var d = (ESTADO.socios[a].orden || 99) - (ESTADO.socios[b].orden || 99);
+    return d || (ESTADO.socios[a].nombre || "").localeCompare(ESTADO.socios[b].nombre || "");
+  });
+  return ids;
+}
+
+/* Devuelve el nodo de asignación, o null si ese socio no atiende al cliente. */
+function asignacionSocio(socioId, clienteId){
+  return (((ESTADO.socios[socioId] || {}).clientes || {})[clienteId]) || null;
+}
+
+function pctPropio(socioId, clienteId){
+  var a = asignacionSocio(socioId, clienteId);
+  if (!a) return null;
+  var p = a.porcentaje;
+  return (p === null || p === undefined || p === "" || isNaN(p)) ? null : Number(p);
+}
+
+/* Reparto efectivo de un cliente: socioId -> porcentaje. Suma 100 salvo que
+   el reparto propio cargado a mano no sume (ahí se muestra el error, no se
+   corrige solo: inventar el número escondería el problema). */
+function repartoDeCliente(clienteId){
+  var asignados = sociosOrdenados(true).filter(function(sid){ return asignacionSocio(sid, clienteId); });
+  if (!asignados.length) return {};
+
+  var hayPropio = asignados.some(function(sid){ return pctPropio(sid, clienteId) !== null; });
+  var out = {};
+
+  if (hayPropio){
+    asignados.forEach(function(sid){ out[sid] = pctPropio(sid, clienteId) || 0; });
+    return out;
+  }
+
+  var suma = 0;
+  asignados.forEach(function(sid){ suma += Number(ESTADO.socios[sid].porcentaje) || 0; });
+  if (suma <= 0){
+    asignados.forEach(function(sid){ out[sid] = 100 / asignados.length; });
+  } else {
+    asignados.forEach(function(sid){ out[sid] = (Number(ESTADO.socios[sid].porcentaje) || 0) * 100 / suma; });
+  }
+  return out;
+}
+
+function cobradoDelAnio(clienteId, anio){
+  var regs = ESTADO.honorarios[clienteId] || {}, t = 0;
+  Object.keys(regs).forEach(function(p){
+    if (p.slice(0,4) === String(anio)) t += regs[p].montoPagado || 0;
+  });
+  return t;
+}
+
+/* Clientes que entran en el cuadro: los que tienen honorario o los que ya
+   están asignados a alguien (por si a uno se le sacó el honorario). */
+function clientesDelReparto(){
+  var set = {};
+  Object.keys(ESTADO.clientes).forEach(function(id){
+    var c = ESTADO.clientes[id];
+    if (c.activo !== false && (c.honorarioMensual || 0) > 0) set[id] = true;
+  });
+  Object.keys(ESTADO.socios || {}).forEach(function(sid){
+    Object.keys(ESTADO.socios[sid].clientes || {}).forEach(function(cid){
+      if (ESTADO.clientes[cid]) set[cid] = true;
+    });
+  });
+  return Object.keys(set).sort(function(a,b){ return nombreCliente(a).localeCompare(nombreCliente(b)); });
+}
+
+function renderSocios(){
+  var sel = $("socAnio");
+  if (!sel.options.length){
+    var hoy = new Date().getFullYear(), out = "";
+    for (var a = hoy + 1; a >= hoy - 4; a--){
+      out += '<option value="' + a + '"' + (a === hoy ? " selected" : "") + ">" + a + "</option>";
+    }
+    sel.innerHTML = out;
+    sel.onchange = renderSocios;
+  }
+  var anio = sel.value;
+
+  var ids      = sociosOrdenados(false);
+  var activos  = sociosOrdenados(true);
+  var clientes = clientesDelReparto();
+
+  /* Lo cobrado en el año y cuánto le toca a cada socio */
+  var cobradoTotal = 0, porSocio = {}, sinSocio = 0;
+  ids.forEach(function(sid){ porSocio[sid] = 0; });
+  clientes.forEach(function(cid){
+    var cob = cobradoDelAnio(cid, anio);
+    cobradoTotal += cob;
+    var rep = repartoDeCliente(cid);
+    if (!Object.keys(rep).length){ sinSocio++; return; }
+    Object.keys(rep).forEach(function(sid){ porSocio[sid] = (porSocio[sid] || 0) + cob * rep[sid] / 100; });
+  });
+
+  var sumaGeneral = 0;
+  activos.forEach(function(sid){ sumaGeneral += Number(ESTADO.socios[sid].porcentaje) || 0; });
+
+  /* --- Tarjetas de arriba --- */
+  $("kpiSocios").textContent      = activos.length;
+  $("kpiSociosPie").textContent   = ids.length > activos.length ? (ids.length - activos.length) + " inactivos" : " ";
+  $("kpiSocPct").textContent      = (Math.round(sumaGeneral * 100) / 100) + "%";
+  $("kpiSocPct").parentNode.className = "kpi" + (Math.abs(sumaGeneral - 100) < 0.01 || !activos.length ? "" : " bad");
+  $("kpiSocPctPie").textContent   = Math.abs(sumaGeneral - 100) < 0.01 || !activos.length
+    ? "tiene que sumar 100%" : "no llega a 100%: revisá los porcentajes";
+  $("kpiSocSin").textContent      = sinSocio;
+  $("kpiSocCobrado").textContent  = pesosCorto(cobradoTotal);
+  $("kpiSocAnioPie").textContent  = "honorarios cobrados en " + anio;
+
+  /* --- Tabla de socios --- */
+  if (!ids.length){
+    $("tablaSocios").innerHTML = '<div class="vacio"><div class="ico">🤝</div>' +
+      "<div>Todavía no cargaste ningún socio.</div>" +
+      '<div style="font-size:13px;margin-top:6px">Con el botón <b>+ Nuevo socio</b> de arriba.</div></div>';
+  } else {
+    var h = '<div class="tabla-wrap"><table><thead><tr><th>Socio</th><th>Correo</th>' +
+      '<th class="num">% general</th><th class="num">Clientes</th>' +
+      '<th class="num">Le corresponde de ' + anio + "</th><th></th></tr></thead><tbody>";
+    ids.forEach(function(sid){
+      var so = ESTADO.socios[sid];
+      var cuantos = Object.keys(so.clientes || {}).filter(function(cid){ return ESTADO.clientes[cid]; }).length;
+      h += "<tr" + (so.activo === false ? ' style="opacity:.5"' : "") + "><td><b>" + esc(so.nombre || "") + "</b>" +
+        (so.activo === false ? ' <span class="badge b-gris">inactivo</span>' : "") + "</td>" +
+        "<td>" + esc(so.email || "—") + "</td>" +
+        '<td class="num">' + (Number(so.porcentaje) || 0) + "%</td>" +
+        '<td class="num">' + cuantos + "</td>" +
+        '<td class="num"><b>' + pesos(porSocio[sid] || 0) + "</b></td>" +
+        "<td>" + (esAdminRol()
+          ? '<button class="btn sec chico" onclick="editarSocio(\'' + sid + '\')">Editar</button>'
+          : "") + "</td></tr>";
+    });
+    /* El total repartido puede ser menor a lo cobrado: los clientes sin socio
+       asignado no se le imputan a nadie. */
+    var repartido = 0;
+    ids.forEach(function(sid){ repartido += porSocio[sid] || 0; });
+    h += '<tr style="background:var(--fondo)"><td><b>Totales</b></td><td></td>' +
+      '<td class="num"><b>' + (Math.round(sumaGeneral * 100) / 100) + "%</b></td><td></td>" +
+      '<td class="num"><b>' + pesos(repartido) + "</b>" +
+      (cobradoTotal - repartido > 0.5
+        ? '<div style="color:var(--amar);font-size:11.5px">' + pesos(cobradoTotal - repartido) + " sin asignar</div>"
+        : "") + "</td><td></td></tr>";
+    $("tablaSocios").innerHTML = h + "</tbody></table></div>";
+  }
+
+  /* --- Cuadro cliente × socio --- */
+  if (!activos.length || !clientes.length){
+    $("tablaRepartos").innerHTML = '<div class="vacio"><div class="ico">📋</div><div>' +
+      (!activos.length ? "Cargá primero los socios." : "No hay clientes con honorario cargado.") + "</div></div>";
+    return;
+  }
+
+  var puede = esAdminRol();
+  var t = '<div class="tabla-wrap"><table class="dobleentrada" style="min-width:' + (420 + activos.length * 150) + 'px">' +
+    '<thead><tr><th class="cli">Cliente</th><th class="num">Cobrado ' + anio + "</th>";
+  activos.forEach(function(sid){ t += '<th class="num">' + esc(ESTADO.socios[sid].nombre || "") + "</th>"; });
+  t += '<th class="num">Suma</th></tr></thead><tbody>';
+
+  clientes.forEach(function(cid){
+    var rep = repartoDeCliente(cid);
+    var suma = 0;
+    Object.keys(rep).forEach(function(sid){ suma += rep[sid]; });
+
+    t += '<tr><td class="cli"><b>' + esc(nombreCliente(cid)) + "</b>" +
+      '<div style="color:var(--gris);font-size:11.5px">' + pesos(ESTADO.clientes[cid].honorarioMensual || 0) + " por mes</div></td>" +
+      '<td class="num">' + pesos(cobradoDelAnio(cid, anio)) + "</td>";
+
+    activos.forEach(function(sid){
+      var asignado = !!asignacionSocio(sid, cid);
+      var propio   = pctPropio(sid, cid);
+      t += '<td class="num" style="white-space:nowrap">' +
+        '<input type="checkbox"' + (asignado ? " checked" : "") + (puede ? "" : " disabled") +
+          ' style="width:17px;height:17px;accent-color:var(--azul);cursor:pointer;vertical-align:middle"' +
+          ' onchange="asignarSocio(\'' + sid + "','" + cid + '\', this.checked)"> ' +
+        '<input type="number" step="0.01" value="' + (propio === null ? "" : propio) + '"' +
+          (asignado && puede ? "" : " disabled") +
+          ' placeholder="' + (asignado ? (Math.round((rep[sid] || 0) * 100) / 100) : "") + '"' +
+          ' style="width:66px;text-align:right;padding:5px 8px;border:1px solid var(--borde);border-radius:8px"' +
+          ' onchange="guardarPctSocio(\'' + sid + "','" + cid + '\', this.value)">' +
+      "</td>";
+    });
+
+    var okSuma = Math.abs(suma - 100) < 0.01;
+    t += '<td class="num col-deuda">' + (!Object.keys(rep).length
+      ? '<span class="badge b-amar">sin socio</span>'
+      : (okSuma ? '<span style="color:var(--verde)">100%</span>'
+                : '<b style="color:var(--rojo)">' + (Math.round(suma * 100) / 100) + "%</b>")) + "</td></tr>";
+  });
+
+  $("tablaRepartos").innerHTML = t + "</tbody></table></div>" +
+    '<div class="ayuda" style="margin-top:10px">El número al lado del tilde es el porcentaje propio de ese cliente. ' +
+    "Dejalo vacío para que se reparta según los porcentajes generales: ahí el campo muestra en gris cuánto queda.</div>";
+}
+
+/* Cada tilde y cada porcentaje se guardan en el momento, uno por uno: así dos
+   personas pueden estar tocando el cuadro a la vez sin pisarse. */
+function asignarSocio(socioId, clienteId, on){
+  var camino = "socios/" + socioId + "/clientes/" + clienteId;
+  ref(camino).set(on ? { asignado: true } : null).then(function(){
+    var so = ESTADO.socios[socioId];
+    if (!so.clientes) so.clientes = {};
+    if (on) so.clientes[clienteId] = { asignado: true };
+    else    delete so.clientes[clienteId];
+    renderSocios();
+  }).catch(function(e){ toast(explicarError(e), "error"); renderSocios(); });
+}
+
+function guardarPctSocio(socioId, clienteId, valor){
+  var v = valor === "" ? null : parseFloat(valor);
+  if (v !== null && (isNaN(v) || v < 0 || v > 100)){ toast("El porcentaje va entre 0 y 100", "error"); renderSocios(); return; }
+  ref("socios/" + socioId + "/clientes/" + clienteId + "/porcentaje").set(v).then(function(){
+    var a = asignacionSocio(socioId, clienteId);
+    if (a){ if (v === null) delete a.porcentaje; else a.porcentaje = v; }
+    renderSocios();
+  }).catch(function(e){ toast(explicarError(e), "error"); renderSocios(); });
+}
+
+function editarSocio(id){
+  var so = id ? ESTADO.socios[id] : {};
+  abrirModal(id ? "Editar socio" : "Nuevo socio",
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Nombre *</label><input type="text" id="soNombre" value="' + esc(so.nombre || "") + '" placeholder="Diego"></div>' +
+      '<div class="campo"><label>Correo electrónico</label><input type="email" id="soMail" value="' + esc(so.email || "") + '"></div>' +
+    "</div>" +
+    '<div class="campo"><label>Porcentaje general</label>' +
+      '<input type="number" step="0.01" id="soPct" value="' + (so.porcentaje === undefined ? "" : so.porcentaje) + '" placeholder="50">' +
+      '<div class="ayuda">Su parte sobre todo lo que cobra el estudio. Entre todos los socios tiene que dar 100.</div></div>' +
+    '<label class="check"><input type="checkbox" id="soActivo"' + (so.activo !== false ? " checked" : "") + "> Socio activo</label>",
+    [
+      { texto:"Volver", clase:"gris", accion:function(){ cerrarModal(); } },
+      (id ? { texto:"Borrar", clase:"peligro", accion:function(){ borrarSocio(id); } } : null),
+      { texto:"Guardar", accion:function(){
+          var nombre = $("soNombre").value.trim();
+          if (!nombre){ toast("Falta el nombre", "error"); return; }
+          var pct = parseFloat($("soPct").value);
+          if (isNaN(pct) || pct < 0 || pct > 100){ toast("El porcentaje general va entre 0 y 100", "error"); return; }
+          var datos = {
+            nombre: nombre,
+            email: $("soMail").value.trim(),
+            porcentaje: pct,
+            activo: $("soActivo").checked,
+            orden: so.orden || Object.keys(ESTADO.socios || {}).length + 1
+          };
+          var clave = id || ref("socios").push().key;
+          /* update y no set: set borraría los clientes ya asignados. */
+          ref("socios/" + clave).update(datos).then(function(){
+            ESTADO.socios[clave] = Object.assign(ESTADO.socios[clave] || {}, datos);
+            cerrarModal(); toast("Socio guardado", "ok"); renderSocios();
+          }).catch(function(e){ toast(explicarError(e), "error"); });
+        } }
+    ].filter(Boolean), "angosto");
+}
+
+function borrarSocio(id){
+  var so = ESTADO.socios[id] || {};
+  var cuantos = Object.keys(so.clientes || {}).length;
+  abrirModal("Borrar socio",
+    '<div class="aviso bad"><span>⚠️</span><div>Se va a borrar <b>' + esc(so.nombre || "") + "</b>" +
+      (cuantos ? " y sus <b>" + cuantos + "</b> clientes asignados" : "") +
+      ". Los honorarios y los cobros no se tocan; lo único que se pierde es el reparto.</div></div>" +
+      '<div class="ayuda">Si en realidad dejó el estudio pero querés conservar el historial, mejor destildalo como inactivo.</div>',
+    [
+      { texto:"Cancelar", clase:"gris", accion:function(){ editarSocio(id); } },
+      { texto:"Borrar", clase:"peligro", accion:function(){
+          ref("socios/" + id).remove().then(function(){
+            delete ESTADO.socios[id];
+            cerrarModal(); toast("Socio borrado", "ok"); renderSocios();
+          }).catch(function(e){ toast(explicarError(e), "error"); });
+        } }
+    ], "angosto");
+}
+
+$("btnNuevoSocio").onclick = function(){ editarSocio(null); };
+
+$("btnSociosExportar").onclick = function(){
+  var anio    = $("socAnio").value;
+  var activos = sociosOrdenados(true);
+  var cab = ["Cliente", "Honorario mensual", "Cobrado " + anio];
+  activos.forEach(function(sid){ cab.push(ESTADO.socios[sid].nombre + " %"); });
+  activos.forEach(function(sid){ cab.push(ESTADO.socios[sid].nombre + " $"); });
+  var filas = [cab];
+
+  clientesDelReparto().forEach(function(cid){
+    var cob = cobradoDelAnio(cid, anio), rep = repartoDeCliente(cid);
+    var f = [nombreCliente(cid), (ESTADO.clientes[cid].honorarioMensual || 0).toFixed(2), cob.toFixed(2)];
+    activos.forEach(function(sid){ f.push(rep[sid] ? (Math.round(rep[sid] * 100) / 100).toString() : ""); });
+    activos.forEach(function(sid){ f.push(rep[sid] ? (cob * rep[sid] / 100).toFixed(2) : ""); });
+    filas.push(f);
+  });
+  bajarCSV(filas, "socios-" + anio + ".csv");
+};
+
+/* ==========================================================================
    22. CAJA — ingresos, egresos y saldo
    ========================================================================== */
 
@@ -5307,7 +5738,7 @@ function formMovimiento(m){
         MEDIOS_PAGO.map(function(x){
           return '<option value="' + x.clave + '"' + (m.medio === x.clave ? " selected" : "") + ">" + x.nombre + "</option>";
         }).join("") + "</select></div>" +
-      '<div class="campo"><label>Cuenta *</label><select id="mvCuenta">' + opcionesCuentas(m.cuentaId) + "</select></div>" +
+      '<div class="campo"><label>Cuenta *</label>' + selectCuentas("mvCuenta", m.cuentaId) + "</div>" +
     "</div>";
 }
 
@@ -5347,7 +5778,7 @@ function guardarMovimiento(id){
   var monto    = parseFloat($("mvMonto").value) || 0;
   if (!concepto){ toast("Falta el concepto", "error"); return; }
   if (monto <= 0){ toast("El importe tiene que ser mayor a cero", "error"); return; }
-  if (!$("mvCuenta").value){ toast("Elegí una cuenta", "error"); return; }
+  if (!valorCuenta("mvCuenta")){ toast("Elegí una cuenta", "error"); return; }
 
   var tipoCp = $("mvContraparteTipo").value;
   var cpId   = tipoCp === "otro" ? null : ($("mvContraparteId").value || null);
@@ -5362,7 +5793,7 @@ function guardarMovimiento(id){
     contraparteId: cpId,
     contraparteNombre: cpNom,
     medio: $("mvMedio").value,
-    cuentaId: $("mvCuenta").value,
+    cuentaId: valorCuenta("mvCuenta"),
     monto: monto,
     origen: "manual",
     creado: (ESTADO.caja[id] || {}).creado || new Date().toISOString()
@@ -5417,7 +5848,8 @@ $("btnGestionCuentas").onclick = function(){
     "<th class=num>Saldo inicial</th><th class=num>Saldo actual</th><th></th></tr></thead><tbody>" +
     (ids.length ? ids.map(function(id){
       var c = ESTADO.cuentas[id];
-      return "<tr" + (c.activa === false ? ' style="opacity:.5"' : "") + "><td><b>" + esc(c.nombre) + "</b></td>" +
+      return "<tr" + (c.activa === false ? ' style="opacity:.5"' : "") + "><td><b>" + esc(c.nombre) + "</b>" +
+          (c.titular ? '<div style="color:var(--gris);font-size:12px">' + esc(c.titular) + "</div>" : "") + "</td>" +
         "<td>" + esc(c.tipo) + "</td>" +
         '<td class="num">' + pesos(c.saldoInicial || 0) + "</td>" +
         '<td class="num"><b>' + pesos(saldoCuenta(id)) + "</b></td>" +
@@ -5438,7 +5870,12 @@ function editarCuenta(id){
   var c = id ? ESTADO.cuentas[id] : {};
   abrirModal(id ? "Editar cuenta" : "Nueva cuenta",
     '<div class="campo"><label>Nombre *</label><input type="text" id="ctNombre" value="' + esc(c.nombre || "") +
-      '" placeholder="Banco Galicia, Mercado Pago…"></div>' +
+      '" placeholder="Banco Galicia, Santander, Mercado Pago…"></div>' +
+    '<div class="campo"><label>Titular</label><input type="text" id="ctTitular" list="dlTitularesCfg" value="' + esc(c.titular || "") +
+      '" placeholder="Diego"><div class="ayuda">De quién es la cuenta. Se muestra al lado del nombre para no confundir dos cuentas del mismo banco.</div></div>' +
+    '<datalist id="dlTitularesCfg">' + titularesCargados().map(function(t){
+      return '<option value="' + esc(t) + '"></option>';
+    }).join("") + "</datalist>" +
     '<div class="campo"><label>Tipo</label><select id="ctTipo">' +
       ["efectivo","banco","billetera"].map(function(t){
         return '<option value="' + t + '"' + (c.tipo === t ? " selected" : "") + ">" + t + "</option>";
@@ -5452,7 +5889,7 @@ function editarCuenta(id){
           var nombre = $("ctNombre").value.trim();
           if (!nombre){ toast("Falta el nombre", "error"); return; }
           var datos = {
-            nombre: nombre, tipo: $("ctTipo").value,
+            nombre: nombre, titular: $("ctTitular").value.trim(), tipo: $("ctTipo").value,
             saldoInicial: parseFloat($("ctSaldo").value) || 0,
             activa: $("ctActiva").checked,
             orden: c.orden || Object.keys(ESTADO.cuentas).length + 1
