@@ -3019,6 +3019,192 @@ function usarTextoConstancia(texto, origen){
   mostrarConstanciaLeida(d, origen);
 }
 
+/* Qué le agrega la constancia a un cliente que ya está cargado.
+
+   Se separan dos cosas, porque no se tratan igual:
+   - lo que FALTA: el campo está vacío y la constancia lo trae. Se ofrece
+     tildado, porque completar un vacío no pisa nada.
+   - lo que está DISTINTO: el cliente ya tiene un valor y la constancia dice
+     otro. Se ofrece DESTILDADO. Puede ser que el dato cambió en el organismo
+     (una recategorización, por ejemplo) o que la constancia sea vieja, y eso
+     lo sabe el contador, no el sistema.
+   Lo que ya coincide no se ofrece: sería ruido. */
+function cambiosDesdeConstancia(clienteId, d){
+  var c = ESTADO.clientes[clienteId] || {};
+  var out = [];
+
+  function agregar(nombre, actual, nuevo, aplicar){
+    if (!nuevo) return;
+    actual = actual === undefined || actual === null ? "" : String(actual);
+    if (actual.trim() === String(nuevo).trim()) return;
+    out.push({ nombre: nombre, actual: actual, nuevo: String(nuevo), falta: !actual.trim(), aplicar: aplicar });
+  }
+
+  agregar("Razón social / Nombre", c.razonSocial, d.razonSocial,
+          function(u){ u.razonSocial = d.razonSocial; });
+  agregar("Categoría de monotributo", c.categoriaActual, d.categoria,
+          function(u){ u.categoriaActual = d.categoria; });
+  agregar("Actividad", c.actividadIIBB, d.actividad,
+          function(u){ u.actividadIIBB = d.actividad; });
+  agregar("Código de actividad (NAES)", c.codigoNAES, d.codigoActividad,
+          function(u){ u.codigoNAES = d.codigoActividad; });
+  agregar("Nº de Ingresos Brutos", c.nroIIBB, d.nroIIBB,
+          function(u){ u.nroIIBB = d.nroIIBB; });
+
+  /* Los impuestos se escriben por camino relativo (impuestos/agip) para no
+     pisar el resto del objeto: tildar AGIP no puede destildar ARBA. */
+  var imp = c.impuestos || {};
+  if (d.organismo === "agip" && !imp.agip){
+    out.push({ nombre:"Liquida AGIP — ingresos brutos CABA", actual:"no", nuevo:"sí", falta:true,
+               aplicar:function(u){ u["impuestos/agip"] = true; } });
+  }
+  if (d.organismo === "arca" && imp.arca === false){
+    out.push({ nombre:"Liquida ARCA — monotributo", actual:"no", nuevo:"sí", falta:true,
+               aplicar:function(u){ u["impuestos/arca"] = true; } });
+  }
+  return out;
+}
+
+var _constanciaCliente = null;   /* id del cliente ya cargado con ese CUIT */
+var _constanciaCambios = [];
+
+function aplicarConstanciaAlCliente(){
+  var id = _constanciaCliente;
+  if (!id) return;
+  var u = {};
+  Array.prototype.forEach.call(document.querySelectorAll(".cc-chk"), function(chk){
+    if (chk.checked && _constanciaCambios[chk.dataset.i]) _constanciaCambios[chk.dataset.i].aplicar(u);
+  });
+  if (!Object.keys(u).length){ toast("No marcaste ningún dato para completar", "error"); return; }
+  u.modificado = new Date().toISOString();
+
+  ref("clientes/" + id).update(u).then(function(){
+    var c = ESTADO.clientes[id];
+    Object.keys(u).forEach(function(k){
+      /* Las claves con barra son caminos relativos: hay que bajar el objeto. */
+      var partes = k.split("/");
+      if (partes.length === 1){ c[k] = u[k]; return; }
+      var nodo = c;
+      for (var i = 0; i < partes.length - 1; i++){
+        if (!nodo[partes[i]]) nodo[partes[i]] = {};
+        nodo = nodo[partes[i]];
+      }
+      nodo[partes[partes.length - 1]] = u[k];
+    });
+    cerrarModal();
+    toast("Ficha completada con los datos de la constancia", "ok");
+    renderClientes(); renderHome();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
+
+/* Qué le agrega la constancia a un cliente que ya está cargado.
+
+   Se separan dos cosas, porque no se tratan igual:
+   - lo que FALTA: el campo está vacío y la constancia lo trae. Se ofrece
+     tildado, porque completar un vacío no pisa nada.
+   - lo que está DISTINTO: el cliente ya tiene un valor y la constancia dice
+     otro. Se ofrece DESTILDADO. Puede ser que el dato cambió en el organismo
+     —una recategorización, por ejemplo— o que la constancia sea vieja, y eso
+     lo sabe el contador, no el sistema.
+   Lo que ya coincide no se ofrece: sería ruido. */
+function cambiosDesdeConstancia(clienteId, d){
+  var c = ESTADO.clientes[clienteId] || {};
+  var out = [];
+
+  function agregar(nombre, actual, nuevo, aplicar){
+    if (!nuevo) return;
+    actual = (actual === undefined || actual === null) ? "" : String(actual);
+    if (actual.trim() === String(nuevo).trim()) return;
+    out.push({ nombre: nombre, actual: actual, nuevo: String(nuevo), falta: !actual.trim(), aplicar: aplicar });
+  }
+
+  agregar("Razón social / Nombre", c.razonSocial, d.razonSocial,
+          function(u){ u.razonSocial = d.razonSocial; });
+  agregar("Categoría de monotributo", c.categoriaActual, d.categoria,
+          function(u){ u.categoriaActual = d.categoria; });
+  agregar("Actividad", c.actividadIIBB, d.actividad,
+          function(u){ u.actividadIIBB = d.actividad; });
+  agregar("Código de actividad (NAES)", c.codigoNAES, d.codigoActividad,
+          function(u){ u.codigoNAES = d.codigoActividad; });
+  agregar("Nº de Ingresos Brutos", c.nroIIBB, d.nroIIBB,
+          function(u){ u.nroIIBB = d.nroIIBB; });
+
+  /* Los impuestos se escriben por camino relativo (impuestos/agip) para no
+     pisar el resto del objeto: tildar AGIP no puede destildar ARBA. */
+  var imp = c.impuestos || {};
+  if (d.organismo === "agip" && !imp.agip){
+    out.push({ nombre:"Liquida AGIP — ingresos brutos CABA", actual:"no", nuevo:"sí", falta:true,
+               aplicar:function(u){ u["impuestos/agip"] = true; } });
+  }
+  if (d.organismo === "arca" && imp.arca === false){
+    out.push({ nombre:"Liquida ARCA — monotributo", actual:"no", nuevo:"sí", falta:true,
+               aplicar:function(u){ u["impuestos/arca"] = true; } });
+  }
+  return out;
+}
+
+var _constanciaCliente = null;   /* id del cliente ya cargado con ese CUIT */
+var _constanciaCambios = [];
+
+function aplicarConstanciaAlCliente(){
+  var id = _constanciaCliente;
+  if (!id) return;
+  var u = {};
+  Array.prototype.forEach.call(document.querySelectorAll(".cc-chk"), function(chk){
+    if (chk.checked && _constanciaCambios[chk.dataset.i]) _constanciaCambios[chk.dataset.i].aplicar(u);
+  });
+  if (!Object.keys(u).length){ toast("No marcaste ningún dato para completar", "error"); return; }
+  u.modificado = new Date().toISOString();
+
+  ref("clientes/" + id).update(u).then(function(){
+    var c = ESTADO.clientes[id];
+    Object.keys(u).forEach(function(k){
+      /* Las claves con barra son caminos relativos: hay que bajar el objeto. */
+      var partes = k.split("/");
+      if (partes.length === 1){ c[k] = u[k]; return; }
+      var nodo = c;
+      for (var i = 0; i < partes.length - 1; i++){
+        if (!nodo[partes[i]]) nodo[partes[i]] = {};
+        nodo = nodo[partes[i]];
+      }
+      nodo[partes[partes.length - 1]] = u[k];
+    });
+    cerrarModal();
+    toast("Ficha completada con los datos de la constancia", "ok");
+    renderClientes(); renderHome();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
+
+function bloqueClienteExistente(id){
+  var nombre = esc(nombreCliente(id));
+
+  if (!_constanciaCambios.length){
+    return '<div class="aviso ok" style="margin-top:12px"><span>✓</span><div>Este CUIT ya es de <b>' + nombre +
+      "</b>, y la ficha ya tiene todo lo que trae la constancia. No hay nada para completar.</div></div>";
+  }
+
+  var distinto = _constanciaCambios.filter(function(x){ return !x.falta; }).length;
+
+  var filas = _constanciaCambios.map(function(x, i){
+    return '<tr><td style="width:38px"><input type="checkbox" class="cc-chk" data-i="' + i + '"' +
+        (x.falta ? " checked" : "") +
+        ' style="width:17px;height:17px;accent-color:var(--azul);cursor:pointer"></td>' +
+      "<td>" + esc(x.nombre) +
+        (x.falta ? ' <span class="badge b-amar">falta</span>' : ' <span class="badge b-viol">distinto</span>') + "</td>" +
+      '<td style="color:var(--gris)">' + (x.actual ? esc(x.actual) : "—") + "</td>" +
+      "<td><b>" + esc(x.nuevo) + "</b></td></tr>";
+  }).join("");
+
+  return '<div class="aviso info" style="margin-top:14px"><span>👤</span><div>Este CUIT ya es de <b>' + nombre +
+      "</b>. En vez de cargarlo de nuevo, podés completarle lo que le falta." +
+      (distinto
+        ? " Lo que aparece como <b>distinto</b> viene <b>destildado</b>: puede ser que el dato haya cambiado en el " +
+          "organismo, o que esta constancia sea vieja. Eso lo sabés vos, no el sistema."
+        : "") + "</div></div>" +
+    '<div class="tabla-wrap"><table><thead><tr><th></th><th>Dato</th>' +
+      "<th>En la ficha</th><th>Según la constancia</th></tr></thead><tbody>" + filas + "</tbody></table></div>";
+}
+
 function mostrarConstanciaLeida(d, origen){
   _constanciaLeida = d;
 
@@ -3030,12 +3216,14 @@ function mostrarConstanciaLeida(d, origen){
     return "<tr><td>" + c.nombre + '</td><td><b>' + esc(v) + "</b></td></tr>";
   }).join("");
 
-  /* Un cliente ya cargado con ese CUIT se avisa antes, no después de que el
-     usuario complete toda la ficha de nuevo. */
+  /* Un cliente ya cargado con ese CUIT no es un problema: es la oportunidad de
+     completarle lo que le falta. Duplicarlo casi nunca es lo que se quiere. */
   var yaEsta = null;
   Object.keys(ESTADO.clientes).forEach(function(id){
     if (String(ESTADO.clientes[id].cuit || "").replace(/\D/g,"") === d.cuit) yaEsta = id;
   });
+  _constanciaCliente = yaEsta;
+  _constanciaCambios = yaEsta ? cambiosDesdeConstancia(yaEsta, d) : [];
 
   $("ctcResultado").innerHTML =
     '<div class="aviso ok"><span>✓</span><div>Constancia de <b>' + quien + "</b>, leída por " + esc(origen) +
@@ -3049,15 +3237,28 @@ function mostrarConstanciaLeida(d, origen){
       ? '<div class="ayuda" style="margin-top:8px">No aparecen en esta constancia: ' +
         esc(d.faltantes.map(function(c){ return c.nombre; }).join(", ")) + ". Los completás a mano.</div>"
       : "") +
-    (yaEsta
-      ? '<div class="aviso warn" style="margin-top:12px"><span>⚠️</span><div>Ya tenés un cliente con ese CUIT: <b>' +
-        esc(nombreCliente(yaEsta)) + "</b>. Si seguís, vas a crear uno repetido.</div></div>"
-      : "");
+    (yaEsta ? bloqueClienteExistente(yaEsta) : "");
 
-  _pintarPieModal([
-  { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
-  { texto:"Abrir la ficha con estos datos", accion:function(){ abrirFichaDesdeConstancia(); } }
-  ]);
+  /* Si el cliente ya existe, lo primero que se ofrece es completarlo; crear
+     uno repetido queda como opción secundaria y dicha con todas las letras. */
+  if (yaEsta && _constanciaCambios.length){
+    _pintarPieModal([
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+      { texto:"Crear otro cliente igual", clase:"peligro", accion:function(){ abrirFichaDesdeConstancia(); } },
+      { texto:"Completar la ficha", accion:aplicarConstanciaAlCliente }
+    ]);
+  } else if (yaEsta){
+    _pintarPieModal([
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+      { texto:"Crear otro cliente igual", clase:"peligro", accion:function(){ abrirFichaDesdeConstancia(); } },
+      { texto:"Ver la ficha", clase:"sec", accion:function(){ cerrarModal(); setTimeout(function(){ editarCliente(yaEsta); }, 200); } }
+    ]);
+  } else {
+    _pintarPieModal([
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+      { texto:"Abrir la ficha con estos datos", accion:function(){ abrirFichaDesdeConstancia(); } }
+    ]);
+  }
 }
 
 function abrirFichaDesdeConstancia(){
@@ -5486,7 +5687,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v36";
+var VERSION_APP = "v37";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
