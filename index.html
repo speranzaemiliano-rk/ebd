@@ -4430,18 +4430,26 @@ function accesoRapido(clienteId, organismoClave){
 function mostrarAccesoRapido(cli, org, usuario, pass){
   /* El sitio se abre con un enlace de verdad, no con window.open: una pestaña
      abierta por código es un pop-up para el navegador y la puede bloquear. */
+  /* El enlace copia el CUIT en el mismo clic que abre la pestaña: así llega al
+     sitio con el dato ya en el portapapeles y alcanza con pegar. Copiar y
+     abrir tienen que pasar dentro del mismo gesto del usuario o el navegador
+     toma la pestaña por un pop-up. */
   var abrir = org.url
     ? '<a class="btn" href="' + esc(org.url) + '" target="_blank" rel="noopener" ' +
-      'style="display:inline-block;padding:10px 18px">Abrir ' + esc(org.nombre) + ' ↗</a>'
+      'onclick="arCopiar(\'arUsuario\',\'CUIT\')" ' +
+      'style="display:inline-block;padding:10px 18px">Copiar el CUIT y abrir ' + esc(org.nombre) + ' ↗</a>'
     : '<div class="ayuda">Cada municipio tiene su propia web, así que este no tiene enlace directo.</div>';
 
   var html =
-    '<div class="aviso info"><span>🔑</span><div>Copiás el usuario, abrís el sitio y lo pegás; ' +
-      "después volvés acá por la clave. <b>No se puede entrar solo</b>: los organismos piden " +
-      "segundo factor o captcha, y no hay forma de saltearlos sin exponer las claves.</div></div>" +
-    '<div class="campo"><label>Usuario / CUIT</label>' +
+    '<div class="aviso warn"><span>⚠️</span><div><b>' + esc(org.nombre) + " te va a mostrar el último CUIT que usaste " +
+      "en esa computadora, no el de este cliente.</b> Es del sitio del organismo, no del sistema: lo recuerda del navegador y " +
+      "no hay forma de decirle cuál abrir desde afuera. <b>Borrá el que aparezca y pegá este</b> — el botón de abajo ya te lo " +
+      "deja copiado.</div></div>" +
+    '<div class="aviso info"><span>🔑</span><div>Después volvés acá por la clave. <b>No se puede entrar solo</b>: los organismos ' +
+      "piden segundo factor o captcha, y no hay forma de saltearlos sin exponer las claves.</div></div>" +
+    '<div class="campo"><label>Usuario / CUIT de <b>' + esc(cli.razonSocial) + "</b></label>" +
       '<div style="display:flex;gap:8px">' +
-        '<input type="text" id="arUsuario" value="' + esc(usuario) + '" readonly style="flex:1">' +
+        '<input type="text" id="arUsuario" value="' + esc(usuario) + '" readonly style="flex:1;font-weight:600">' +
         '<button class="btn sec chico" onclick="arCopiar(\'arUsuario\',\'Usuario\')">Copiar</button>' +
       "</div></div>" +
     '<div class="campo"><label>Clave</label>' +
@@ -4703,7 +4711,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v26";
+var VERSION_APP = "v27";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
