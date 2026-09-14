@@ -518,7 +518,22 @@ app.post('/gemini', async (req, res) => {
    DIAGNÓSTICO
    ========================================================================== */
 
-app.get('/', (req, res) => res.json({ status: 'ok', service: 'EBD Consultores — backend' }));
+/* La raíz es lo único que se puede consultar sin token, y suma un "listo" con
+   BOOLEANOS y nada más: si el certificado está cargado y si la clave de Gemini
+   está cargada. Sirve para contestar "¿ya llegó la variable?" sin tener que
+   entrar a Railway a mirar, que es donde se pierde media hora.
+
+   Por qué esto no es /diag: /diag dice el CUIT del estudio, el ambiente y qué
+   falta, y por eso pide token. Acá no se expone ningún valor ni nada que no se
+   deduzca de que el servicio existe. */
+app.get('/', (req, res) => res.json({
+  status: 'ok',
+  service: 'EBD Consultores — backend',
+  listo: {
+    arca:   !!(leerPem(process.env.AFIP_CERT) && leerPem(process.env.AFIP_KEY)),
+    gemini: !!GEMINI_KEY
+  }
+}));
 
 /* Qué hay configurado y qué falta. Nunca devuelve el valor de nada secreto:
    solo si está o no está. */
