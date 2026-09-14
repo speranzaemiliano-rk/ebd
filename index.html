@@ -4947,7 +4947,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v29";
+var VERSION_APP = "v30";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
@@ -5968,6 +5968,124 @@ function guardarPctSocio(socioId, clienteId, valor){
   }).catch(function(e){ toast(explicarError(e), "error"); renderSocios(); });
 }
 
+/* Los socios activos menos el que se está editando. */
+function _otrosSocios(id){
+  return sociosOrdenados(true).filter(function(sid){ return sid !== id; });
+}
+
+function _redondear2(v){ return Math.round(v * 100) / 100; }
+
+/* El reparto general tiene que cerrar en 100 siempre. Al cambiarle el
+   porcentaje a un socio, el resto tiene que salir de algún lado:
+
+   - si es el único socio activo, se lleva el 100 y no hay nada que decidir;
+   - si hay uno solo más, el resto es suyo y se muestra, no se pregunta;
+   - si hay dos o más, se reparte entre ellos en proporción a lo que tenían y
+     queda editable, porque de quién sale el punto que se mueve es una decisión
+     del estudio, no una cuenta.
+
+   Nunca se ajusta solo al guardar: si no da 100, se avisa y no se escribe.
+   Un reparto "corregido" por el sistema es un reparto que nadie acordó. */
+function pintarRepartoSocio(id){
+  var cont = $("soReparto");
+  if (!cont) return;
+
+  var otros  = _otrosSocios(id);
+  var activo = $("soActivo").checked;
+  var pct    = activo ? (parseFloat($("soPct").value) || 0) : 0;
+
+  if (!otros.length){
+    $("soPct").value = 100;
+    $("soPct").readOnly = true;
+    cont.innerHTML = '<div class="aviso info"><span>ℹ️</span><div>Es el único socio activo, así que se lleva el ' +
+      "<b>100%</b>. Cuando cargues otro vas a poder repartir.</div></div>";
+    return;
+  }
+  $("soPct").readOnly = false;
+
+  var resto = _redondear2(100 - pct);
+  if (resto < 0){
+    cont.innerHTML = '<div class="aviso bad"><span>⚠️</span><div>Más de 100%: no queda nada para los demás socios.</div></div>';
+    return;
+  }
+
+  if (otros.length === 1){
+    var unico = otros[0];
+    cont.innerHTML = '<div class="aviso info"><span>ℹ️</span><div>El resto es de <b>' +
+      esc(ESTADO.socios[unico].nombre) + "</b>, que queda en <b>" + resto + "%</b>.</div></div>" +
+      '<input type="hidden" class="so-otro" data-id="' + unico + '" value="' + resto + '">';
+    return;
+  }
+
+  /* Lo que el usuario escribió a mano se respeta; lo que quedó como sugerencia
+     se vuelve a calcular. Sin esa distinción, al mover el porcentaje principal
+     los demás se quedaban con el número viejo y la suma no cerraba nunca.
+     Lo tocado se marca con data-sug="0" desde el propio campo. */
+  var fijos = {}, sumaFijos = 0;
+  Array.prototype.forEach.call(cont.querySelectorAll('.so-otro[data-sug="0"]'), function(el){
+    var v = Math.max(0, parseFloat(el.value) || 0);
+    fijos[el.dataset.id] = v;
+    sumaFijos = _redondear2(sumaFijos + v);
+  });
+
+  /* Lo que queda se reparte entre los que no tocaron, en proporción a lo que
+     tenían, para no cambiarle el peso relativo a nadie de prepo. La diferencia
+     por redondeo va al último: si no, la suma termina en 99,99. */
+  var libres = otros.filter(function(sid){ return fijos[sid] === undefined; });
+  var aRepartir = Math.max(0, _redondear2(resto - sumaFijos));
+
+  var base = 0;
+  libres.forEach(function(sid){ base += Number(ESTADO.socios[sid].porcentaje) || 0; });
+
+  var sug = {}, acum = 0;
+  libres.forEach(function(sid, i){
+    var v;
+    if (i === libres.length - 1) v = _redondear2(aRepartir - acum);
+    else {
+      v = base > 0 ? _redondear2(aRepartir * (Number(ESTADO.socios[sid].porcentaje) || 0) / base)
+                   : _redondear2(aRepartir / libres.length);
+      acum = _redondear2(acum + v);
+    }
+    sug[sid] = Math.max(0, v);
+  });
+
+  cont.innerHTML = '<div class="seccion-tit">El resto (' + resto + '%), ¿cómo se reparte?</div>' +
+    '<div class="ayuda" style="margin-bottom:10px">Viene repartido en proporción a lo que tenía cada uno. ' +
+      "Si escribís un número, ese socio queda <b>fijado</b> y la diferencia la absorben los demás.</div>" +
+    '<div class="tabla-wrap"><table><tbody>' +
+    otros.map(function(sid){
+      var tocado = fijos[sid] !== undefined;
+      var val = tocado ? fijos[sid] : sug[sid];
+      return "<tr><td>" + esc(ESTADO.socios[sid].nombre) +
+        (tocado ? ' <span class="badge b-azul">fijado</span>' : "") + '</td><td class="num">' +
+        '<input type="number" step="0.01" class="so-otro" data-id="' + sid + '" data-sug="' + (tocado ? "0" : "1") + '"' +
+        ' value="' + val + '"' +
+        ' style="width:100px;text-align:right;padding:6px 9px;border:1px solid var(--borde);border-radius:8px"' +
+        ' oninput="this.dataset.sug=\'0\';pintarTotalSocios()"></td></tr>';
+    }).join("") + "</tbody></table></div>" +
+    '<div id="soTotal" style="margin-top:10px"></div>';
+
+  pintarTotalSocios();
+}
+
+function _sumaRepartoSocios(){
+  var pct = $("soActivo").checked ? (parseFloat($("soPct").value) || 0) : 0;
+  Array.prototype.forEach.call(document.querySelectorAll(".so-otro"), function(el){
+    pct += parseFloat(el.value) || 0;
+  });
+  return _redondear2(pct);
+}
+
+function pintarTotalSocios(){
+  var cont = $("soTotal");
+  if (!cont) return;
+  var total = _sumaRepartoSocios();
+  var ok = Math.abs(total - 100) < 0.01;
+  cont.innerHTML = '<div class="aviso ' + (ok ? "ok" : "bad") + '"><span>' + (ok ? "✓" : "⚠️") +
+    "</span><div>Entre todos suman <b>" + total + "%</b>" +
+    (ok ? "." : " — tiene que dar 100%.") + "</div></div>";
+}
+
 function editarSocio(id){
   var so = id ? ESTADO.socios[id] : {};
   abrirModal(id ? "Editar socio" : "Nuevo socio",
@@ -5977,31 +6095,57 @@ function editarSocio(id){
     "</div>" +
     '<div class="campo"><label>Porcentaje general</label>' +
       '<input type="number" step="0.01" id="soPct" value="' + (so.porcentaje === undefined ? "" : so.porcentaje) + '" placeholder="50">' +
-      '<div class="ayuda">Su parte sobre todo lo que cobra el estudio. Entre todos los socios tiene que dar 100.</div></div>' +
-    '<label class="check"><input type="checkbox" id="soActivo"' + (so.activo !== false ? " checked" : "") + "> Socio activo</label>",
+      '<div class="ayuda">Su parte sobre todo lo que cobra el estudio.</div></div>' +
+    '<label class="check"><input type="checkbox" id="soActivo"' + (so.activo !== false ? " checked" : "") + "> Socio activo</label>" +
+    '<div id="soReparto" style="margin-top:14px"></div>',
     [
-      { texto:"Volver", clase:"gris", accion:function(){ cerrarModal(); } },
+      { texto:"Volver", clase:"gris", accion:cerrarModalPedido },
       (id ? { texto:"Borrar", clase:"peligro", accion:function(){ borrarSocio(id); } } : null),
-      { texto:"Guardar", accion:function(){
-          var nombre = $("soNombre").value.trim();
-          if (!nombre){ toast("Falta el nombre", "error"); return; }
-          var pct = parseFloat($("soPct").value);
-          if (isNaN(pct) || pct < 0 || pct > 100){ toast("El porcentaje general va entre 0 y 100", "error"); return; }
-          var datos = {
-            nombre: nombre,
-            email: $("soMail").value.trim(),
-            porcentaje: pct,
-            activo: $("soActivo").checked,
-            orden: so.orden || Object.keys(ESTADO.socios || {}).length + 1
-          };
-          var clave = id || ref("socios").push().key;
-          /* update y no set: set borraría los clientes ya asignados. */
-          ref("socios/" + clave).update(datos).then(function(){
-            ESTADO.socios[clave] = Object.assign(ESTADO.socios[clave] || {}, datos);
-            cerrarModal(); toast("Socio guardado", "ok"); renderSocios();
-          }).catch(function(e){ toast(explicarError(e), "error"); });
-        } }
+      { texto:"Guardar", accion:function(){ guardarSocio(id, so); } }
     ].filter(Boolean), "angosto");
+
+  $("soPct").oninput      = function(){ pintarRepartoSocio(id); };
+  $("soActivo").onchange  = function(){ pintarRepartoSocio(id); };
+  pintarRepartoSocio(id);
+}
+
+function guardarSocio(id, so){
+  var nombre = $("soNombre").value.trim();
+  if (!nombre){ toast("Falta el nombre", "error"); return; }
+
+  var pct = parseFloat($("soPct").value);
+  if (isNaN(pct) || pct < 0 || pct > 100){ toast("El porcentaje general va entre 0 y 100", "error"); return; }
+
+  var total = _sumaRepartoSocios();
+  if (Math.abs(total - 100) > 0.01){
+    toast("Entre todos los socios suman " + total + "%: tiene que dar 100%", "error");
+    return;
+  }
+
+  var clave = id || ref("socios").push().key;
+  var datos = {
+    nombre: nombre,
+    email: $("soMail").value.trim(),
+    porcentaje: pct,
+    activo: $("soActivo").checked,
+    orden: so.orden || Object.keys(ESTADO.socios || {}).length + 1
+  };
+
+  /* Los porcentajes de los demás van en la misma escritura: si se guardaran
+     aparte y fallara la segunda, el reparto quedaría sin cerrar en 100. */
+  var updates = {}, otros = [];
+  Object.keys(datos).forEach(function(k){ updates["socios/" + clave + "/" + k] = datos[k]; });
+  Array.prototype.forEach.call(document.querySelectorAll(".so-otro"), function(el){
+    var v = _redondear2(parseFloat(el.value) || 0);
+    updates["socios/" + el.dataset.id + "/porcentaje"] = v;
+    otros.push({ id: el.dataset.id, pct: v });
+  });
+
+  ref("").update(updates).then(function(){
+    ESTADO.socios[clave] = Object.assign(ESTADO.socios[clave] || {}, datos);
+    otros.forEach(function(o){ ESTADO.socios[o.id].porcentaje = o.pct; });
+    cerrarModal(); toast("Socio guardado", "ok"); renderSocios();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
 function borrarSocio(id){
