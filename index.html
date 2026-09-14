@@ -1674,14 +1674,24 @@ function cuotaActual(cli, fechaISO){
    temporizador del anterior apaga el que se acaba de abrir. */
 var _cierreModalPendiente = null;
 
-function abrirModal(titulo, html, botones, ancho){
-  clearTimeout(_cierreModalPendiente);
-  _cierreModalPendiente = null;
-  $("modalFondo").classList.remove("cerrando");
+/* ---------- Cambios sin guardar ----------
 
-  $("modalTitulo").textContent = titulo;
-  $("modalBody").innerHTML = html;
-  $("modalCaja").className = "modal" + (ancho ? " " + ancho : "");
+   Un clic afuera del cuadro cerraba el modal y lo tipeado se perdía sin aviso,
+   que en la ficha de un cliente es media hora de carga tirada. Ahora se marca
+   el modal como "sucio" apenas el usuario toca un campo, y los tres gestos de
+   cierre (clic afuera, ✕ y Escape) más los botones Cancelar preguntan antes.
+
+   La pregunta no abre otro modal —hay uno solo— sino que cambia el pie por
+   dos botones y después lo vuelve a dibujar. Por eso los botones se guardan en
+   _modalBotones: restaurar el innerHTML perdería los onclick.
+
+   Ojo con la distinción: cerrarModal() cierra y punto, y lo usan los guardados
+   (ahí ya no hay nada que perder). cerrarModalPedido() es el que pregunta, y
+   es el único que se engancha a un gesto del usuario. */
+var _modalSucio   = false;
+var _modalBotones = [];
+
+function _pintarPieModal(botones){
   var pie = $("modalPie");
   pie.innerHTML = "";
   (botones || []).forEach(function(b){
@@ -1692,16 +1702,61 @@ function abrirModal(titulo, html, botones, ancho){
     if (b.id) el.id = b.id;
     pie.appendChild(el);
   });
+}
+
+function abrirModal(titulo, html, botones, ancho){
+  clearTimeout(_cierreModalPendiente);
+  _cierreModalPendiente = null;
+  $("modalFondo").classList.remove("cerrando");
+
+  $("modalTitulo").textContent = titulo;
+  $("modalBody").innerHTML = html;
+  $("modalCaja").className = "modal" + (ancho ? " " + ancho : "");
+
+  _modalSucio   = false;
+  _modalBotones = botones || [];
+  _pintarPieModal(_modalBotones);
+
   $("modalFondo").classList.add("abierto");
 }
+
+/* input y change burbujean, así que alcanza con escucharlos en el contenedor:
+   sirve para lo que ya está y para lo que se agregue después. */
+$("modalBody").addEventListener("input",  function(){ _modalSucio = true; });
+$("modalBody").addEventListener("change", function(){ _modalSucio = true; });
+
+function hayCambiosSinGuardar(){
+  return _modalSucio && $("modalFondo").classList.contains("abierto");
+}
+
 function cerrarModal(){
   var f = $("modalFondo");
   if (!f.classList.contains("abierto")) return;
+  _modalSucio = false;
   f.classList.add("cerrando");
   _cierreModalPendiente = setTimeout(function(){
     f.classList.remove("abierto", "cerrando");
     _cierreModalPendiente = null;
+    /* Al ocultarse el modal, el campo que tenía el foco puede disparar todavía
+       su "change" y volver a marcar sucio. Por eso la verdad la dice
+       hayCambiosSinGuardar(), que además exige que el modal esté abierto;
+       esto es sólo higiene. */
+    _modalSucio = false;
   }, 160);
+}
+
+/* Cierre pedido por el usuario. Si hay algo cargado sin guardar, pregunta. */
+function cerrarModalPedido(){
+  if (!hayCambiosSinGuardar()){ cerrarModal(); return; }
+  _pintarPieModal([
+    { texto:"Seguir editando", clase:"sec", accion:function(){ _pintarPieModal(_modalBotones); } },
+    { texto:"Salir sin guardar", clase:"peligro", accion:function(){ _modalSucio = false; cerrarModal(); } }
+  ]);
+  var pie = $("modalPie");
+  var aviso = document.createElement("div");
+  aviso.style.cssText = "flex:1;min-width:180px;align-self:center;color:var(--rojo);font-size:13.5px;letter-spacing:-.014em";
+  aviso.textContent = "Hay cambios sin guardar.";
+  pie.insertBefore(aviso, pie.firstChild);
 }
 
 /* ---------- 8. AUTENTICACIÓN Y ARRANQUE ---------- */
@@ -1888,9 +1943,17 @@ function irA(tabId){
 Array.prototype.forEach.call($("navTabs").children, function(b){
   b.onclick = function(){ irA(b.dataset.tab); };
 });
-$("modalCerrar").onclick = cerrarModal;
-$("modalFondo").onclick = function(e){ if (e.target === this) cerrarModal(); };
-document.addEventListener("keydown", function(e){ if (e.key === "Escape") cerrarModal(); });
+$("modalCerrar").onclick = cerrarModalPedido;
+$("modalFondo").onclick = function(e){ if (e.target === this) cerrarModalPedido(); };
+document.addEventListener("keydown", function(e){ if (e.key === "Escape") cerrarModalPedido(); });
+
+/* Última red: recargar o cerrar la pestaña con un formulario a medio cargar.
+   El navegador muestra su propio cartel; el texto no lo elige la página. */
+window.addEventListener("beforeunload", function(e){
+  if (!hayCambiosSinGuardar()) return;
+  e.preventDefault();
+  e.returnValue = "";
+});
 
 function inicializarUI(){
   /* selects de corte y períodos */
@@ -2217,7 +2280,7 @@ function formCliente(c){
 function abrirFormCliente(id){
   var c = id ? ESTADO.clientes[id] : null;
   abrirModal(id ? "Editar cliente" : "Nuevo cliente", formCliente(c), [
-    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Guardar",  accion:function(){ guardarFormCliente(id); } }
   ], "ancho");
 
@@ -2340,7 +2403,7 @@ function verFichaCliente(id){
 
   abrirModal(c.razonSocial + " · " + formatCuit(c.cuit), html, [
     { texto:"Editar cliente", clase:"sec", accion:function(){ cerrarModal(); setTimeout(function(){ editarCliente(id); }, 180); } },
-    { texto:"Cerrar", clase:"gris", accion:cerrarModal }
+    { texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }
   ], "ancho");
 }
 
@@ -2630,7 +2693,7 @@ function mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreAr
     "(los importes de la columna “Ya cargado” se pisan). Los períodos que no aparecen acá no se tocan.</div></div>";
 
   abrirModal("Confirmar importación", html, [
-    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Importar " + registros.length + " comprobantes", accion:function(){
         confirmarImportacion(clienteId, tipo, registros, porPeriodo);
       } }
@@ -2757,7 +2820,7 @@ function traerDeArca(){
     '<div class="ayuda">Cuantos más meses pidas, más tarda: ARCA obliga a consultar comprobante por comprobante.</div>' +
     '<div id="arcaEstado" style="margin-top:12px"></div>',
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Traer", id:"btnArcaTraer", accion:function(){ ejecutarTraerDeArca(clienteId, cuit); } }
     ]);
 }
@@ -2883,7 +2946,7 @@ function pedirRangoDelPortal(clienteId, cuit, usuario, clave){
     "</div>" +
     '<div id="ptEstado" style="margin-top:12px"></div>',
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Traer", id:"btnPtTraer", accion:function(){
           ejecutarTraerDelPortal(clienteId, cuit, usuario, clave);
         } }
@@ -3094,7 +3157,7 @@ function verDetallePeriodo(clienteId, periodo){
         }).join("") + "</tbody></table></div>";
     }
     abrirModal(ESTADO.clientes[clienteId].razonSocial + " · " + periodoLargo(periodo), html,
-      [{ texto:"Cerrar", clase:"gris", accion:cerrarModal }], "ancho");
+      [{ texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }], "ancho");
   });
 }
 
@@ -3112,7 +3175,7 @@ $("btnCargaManual").onclick = function(){
       '<div class="campo"><label>Total recibido (compras)</label><input type="number" step="0.01" id="cmRecibido"></div>' +
     "</div>",
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Guardar", accion:function(){
           var id = $("cmCliente").value;
           var p  = monthInputAPeriodo($("cmPeriodo").value);
@@ -3212,7 +3275,7 @@ function aplicarRecat(clienteId, categoria){
     "<p>Cambiar a <b>" + esc(c.razonSocial) + "</b> de la categoría <b>" + (c.categoriaActual || "—") +
     "</b> a la categoría <b>" + categoria + "</b>?</p>",
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Sí, aplicar", accion:function(){
           guardarCliente(clienteId, { categoriaActual: categoria, recatAplicada: new Date().toISOString() }).then(function(){
             ESTADO.clientes[clienteId].categoriaActual = categoria;
@@ -3459,7 +3522,7 @@ function editarLiquidacion(clienteId, periodo){
   }
 
   abrirModal(c.razonSocial + " · " + periodoLargo(periodo), html, [
-    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Guardar", accion:function(){ guardarLiquidacion(clienteId, periodo); } }
   ], "ancho");
 }
@@ -3516,7 +3579,7 @@ $("btnRecalcularLiq").onclick = function(){
         '<td class="num">' + pesos(cuotaActual(c, fecha)) + "</td></tr>";
     }).join("") + "</tbody></table></div>",
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Recalcular", accion:function(){
           var updates = {};
           ids.forEach(function(id){
@@ -3667,7 +3730,7 @@ function verMail(clienteId, periodo){
     '<div class="campo"><label>Cuerpo</label><textarea readonly style="min-height:320px;background:var(--fondo)">' + esc(m.cuerpo) + "</textarea></div>",
     [
       { texto:"Abrir en Gmail", clase:"sec", accion:function(){ abrirEnGmail(clienteId, periodo); } },
-      { texto:"Cerrar", clase:"gris", accion:cerrarModal }
+      { texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }
     ], "ancho");
 }
 
@@ -3707,7 +3770,7 @@ $("btnEnviarMails").onclick = function(){
              "<b>" + pesos(m.total) + "</b></li>";
     }).join("") + "</ul>",
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Enviar " + ids.length + " correos", id:"btnConfirmEnvio", accion:function(){ enviarMails(ids, periodo); } }
     ], "ancho");
 };
@@ -3830,7 +3893,7 @@ $("btnNuevaEscala").onclick = function(){
       '<div class="campo"><label>Aumentar todo un %</label><input type="number" step="0.01" id="neAumento" placeholder="Ej: 16.8"><div class="ayuda">Opcional: aplica el % a topes y cuotas.</div></div>' +
     "</div>",
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Crear", accion:function(){
           var v = $("neVigencia").value;
           if (!v){ toast("Poné la fecha de vigencia", "error"); return; }
@@ -3911,7 +3974,7 @@ $("btnNuevoUsuario").onclick = function(){
     '<div class="campo"><label>Correo</label><input type="email" id="nuMail"></div>' +
     '<div class="campo"><label>Rol</label><select id="nuRol"><option value="lector">Lector</option><option value="editor">Editor</option><option value="admin">Admin</option></select></div>',
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Guardar", accion:function(){
           var uid = $("nuUid").value.trim();
           if (!uid){ toast("Falta el UID", "error"); return; }
@@ -3947,7 +4010,7 @@ function abrirDialogoBoveda(){
       '<div class="campo"><label>Contraseña maestra (mínimo 12 caracteres)</label><input type="password" id="bvPass1"></div>' +
       '<div class="campo"><label>Repetir contraseña</label><input type="password" id="bvPass2"></div>',
       [
-        { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+        { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
         { texto:"Inicializar", accion:inicializarBoveda }
       ], "angosto");
   } else if (ESTADO.claveMaestra){
@@ -3957,7 +4020,7 @@ function abrirDialogoBoveda(){
       '<div class="campo"><label>Contraseña maestra</label><input type="password" id="bvPass"></div>' +
       '<div id="bvError"></div>',
       [
-        { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+        { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
         { texto:"Abrir", accion:desbloquearBoveda }
       ], "angosto");
     setTimeout(function(){
@@ -4061,7 +4124,7 @@ function listarCredenciales(){
     });
 
     abrirModal("Bóveda de claves", html + "</tbody></table></div>",
-      [{ texto:"Cerrar", clase:"gris", accion:cerrarModal }], "ancho");
+      [{ texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }], "ancho");
   });
 }
 
@@ -4124,7 +4187,7 @@ function mostrarAccesoRapido(cli, org, usuario, pass){
       "En una computadora compartida, copiá cualquier otra cosa al terminar.</div></div>";
 
   abrirModal(org.nombre + " · " + cli.razonSocial, html,
-    [{ texto:"Cerrar", clase:"gris", accion:cerrarModal }]);
+    [{ texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }]);
 }
 
 function arCopiar(id, que){
@@ -4287,7 +4350,7 @@ function borrarArchivo(cli, id){
   abrirModal("Borrar archivo",
     '<div class="aviso warn"><span>⚠️</span><div>Se borra el archivo y no se puede recuperar.</div></div>',
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Borrar", clase:"peligro", accion:function(){
           var updates = {};
           updates["archivos/" + cli + "/" + id] = null;
@@ -4314,7 +4377,7 @@ function abrirSubirArchivo(){
       '<div class="ayuda">Hasta 5 MB. Sirve PDF o foto.</div></div>' +
     '<div id="sbEstado"></div>',
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Subir", id:"btnSbGuardar", accion:guardarArchivo }
     ]);
 
@@ -4434,7 +4497,7 @@ function explicarInstalacionManual(){
         "<li>Elegí <b>Instalar</b> o <b>Agregar a la pantalla de inicio</b>.</li>" +
         "</ol>" +
         '<div class="ayuda">Si no aparece la opción, puede ser que ya lo tengas instalado, o que estés abriendo el archivo desde el disco en vez de desde el link del sitio.</div>',
-    [{ texto:"Entendido", clase:"gris", accion:cerrarModal }], "angosto");
+    [{ texto:"Entendido", clase:"gris", accion:cerrarModalPedido }], "angosto");
 }
 
 /* Muestra el botón de instalar aunque el navegador no dispare el evento
@@ -4697,7 +4760,7 @@ function abrirCobro(clienteId, periodo){
     "</div>" +
     '<div class="aviso info"><span>ℹ️</span><div>Si cargás un importe cobrado, se genera solo el movimiento de ingreso en la <b>Caja</b>.</div></div>';
 
-  var botones = [{ texto:"Cancelar", clase:"gris", accion:cerrarModal }];
+  var botones = [{ texto:"Cancelar", clase:"gris", accion:cerrarModalPedido }];
   if (e.pagado > 0.005){
     botones.push({ texto:"Marcar como impago", clase:"peligro", accion:function(){ anularCobro(clienteId, periodo); } });
   } else {
@@ -4817,7 +4880,7 @@ $("btnHonGenerar").onclick = function(){
     '<div class="aviso info"><span>ℹ️</span><div>Se van a crear <b>' + pendientes.length + " registros</b> con el honorario que hoy tiene cada ficha. " +
     "Los meses ya cargados no se tocan. Sirve para dejar fijo el importe antes de actualizar la tarifa.</div></div>",
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Generar " + pendientes.length, accion:function(){
           var updates = {};
           pendientes.forEach(function(p){
@@ -4931,7 +4994,7 @@ function abrirActualizarHonorarios(){
       '<tbody id="acCuerpo"></tbody></table></div>';
 
   abrirModal("Actualizar honorarios", html, [
-    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Aplicar", accion:aplicarActualizacionHonorarios }
   ], "ancho");
 
@@ -5201,7 +5264,7 @@ function cablearContraparte(m){
 
 $("btnNuevoMovimiento").onclick = function(){
   abrirModal("Nuevo movimiento de caja", formMovimiento(null), [
-    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Guardar", accion:function(){ guardarMovimiento(null); } }
   ]);
   cablearContraparte(null);
@@ -5211,7 +5274,7 @@ function editarMovimiento(id){
   var m = ESTADO.caja[id];
   if (!m) return;
   abrirModal("Editar movimiento", formMovimiento(m), [
-    { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+    { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Guardar", accion:function(){ guardarMovimiento(id); } }
   ]);
   cablearContraparte(m);
@@ -5261,7 +5324,7 @@ function borrarMovimiento(id){
     "<p>¿Eliminar <b>" + esc(m.concepto) + "</b> del " + m.fecha.split("-").reverse().join("/") +
     " por <b>" + pesos(m.monto) + "</b>?</p>",
     [
-      { texto:"Cancelar", clase:"gris", accion:cerrarModal },
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Eliminar", clase:"peligro", accion:function(){
           ref("caja/" + id).remove().then(function(){
             delete ESTADO.caja[id];
@@ -5304,7 +5367,7 @@ $("btnGestionCuentas").onclick = function(){
 
   var botones = [];
   if (puedeEscribir()) botones.push({ texto:"+ Nueva cuenta", clase:"sec", accion:function(){ editarCuenta(null); } });
-  botones.push({ texto:"Cerrar", clase:"gris", accion:cerrarModal });
+  botones.push({ texto:"Cerrar", clase:"gris", accion:cerrarModalPedido });
 
   abrirModal("Cuentas", html, botones, "ancho");
 };
@@ -5372,7 +5435,7 @@ $("btnGestionProveedores").onclick = function(){
 
   var botones = [];
   if (puedeEscribir()) botones.push({ texto:"+ Nuevo proveedor", clase:"sec", accion:function(){ editarProveedor(null); } });
-  botones.push({ texto:"Cerrar", clase:"gris", accion:cerrarModal });
+  botones.push({ texto:"Cerrar", clase:"gris", accion:cerrarModalPedido });
 
   abrirModal("Proveedores", html, botones, "ancho");
 };
