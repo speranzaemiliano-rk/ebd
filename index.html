@@ -30,6 +30,10 @@
      si no carga, la importación por CSV sigue funcionando igual. -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 
+<!-- Lector de PDF (pdf.js). Solo se usa para leer las constancias de ARCA y
+     AGIP; si no carga, el alta a mano sigue funcionando igual. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
 <!-- ============================================================
      CSS PRINCIPAL — va SIEMPRE en el <head>.
      Nunca mover dentro de un div con display:none (rompe los tabs).
@@ -931,6 +935,7 @@ tbody tr:hover{background:#FAFAFC}
         <div class="card-head">
           <h2>Clientes</h2>
           <button class="btn sec chico" id="btnExportClientes">Exportar CSV</button>
+          <button class="btn sec" id="btnDesdeConstancia">📄 Desde una constancia</button>
           <button class="btn" id="btnNuevoCliente">+ Nuevo cliente</button>
         </div>
         <div class="filtros">
@@ -1460,7 +1465,7 @@ function esAdminRol(){ return ESTADO.rol === "admin"; }
 /* Botones fijos del HTML. Los que se arman con template strings se filtran
    dentro de cada render con puedeEscribir(). Al agregar un botón que guarde
    datos, sumarlo también a una de estas dos listas. */
-var BOTONES_ESCRITURA = ["btnNuevoCliente","btnCargaManual","btnRecalcularLiq",
+var BOTONES_ESCRITURA = ["btnNuevoCliente","btnDesdeConstancia","btnCargaManual","btnRecalcularLiq",
                          "btnEnviarMails","btnHonGenerar","btnHonActualizar","btnNuevoMovimiento",
                          "btnTraerArca","btnTraerPortal","btnSubirArchivo"];
 var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
@@ -2414,8 +2419,8 @@ function formCliente(c, idCliente){
    volver a sacar la foto del formulario: si no, esos valores puestos por el
    sistema cuentan como "cambios sin guardar" y preguntaría al cerrar sin que
    el usuario haya tocado nada. */
-function cargarClavesEnFicha(clienteId){
-  if (!ESTADO.claveMaestra || !clienteId){ marcarModalLimpio(); return; }
+function cargarClavesEnFicha(clienteId, noLimpiar){
+  if (!ESTADO.claveMaestra || !clienteId){ if (!noLimpiar) marcarModalLimpio(); return; }
   ref("credenciales/" + clienteId).once("value").then(function(s){
     var cred = s.val() || {};
     return Promise.all(ORGANISMOS.map(function(o){
@@ -2436,10 +2441,10 @@ function cargarClavesEnFicha(clienteId){
          que por defecto se usa el CUIT, y verlo repetido confunde. */
       u.value = (v.usuario && v.usuario.replace(/\D/g,"") !== String(cuit).replace(/\D/g,"")) ? v.usuario : "";
     });
-    marcarModalLimpio();
+    if (!noLimpiar) marcarModalLimpio();
   }).catch(function(){
     toast("No pude descifrar las claves guardadas: ¿la contraseña maestra es la correcta?", "error");
-    marcarModalLimpio();
+    if (!noLimpiar) marcarModalLimpio();
   });
 }
 
@@ -2479,8 +2484,10 @@ function abrirBovedaDesdeFicha(idCliente){
   pie.insertBefore(aviso, pie.firstChild);
 }
 
-function abrirFormCliente(id){
-  var c = id ? ESTADO.clientes[id] : null;
+/* `precarga` trae los datos leídos de una constancia. Tiene la misma forma que
+   un cliente, así que se usa tal cual para armar el formulario. */
+function abrirFormCliente(id, precarga){
+  var c = id ? ESTADO.clientes[id] : (precarga || null);
   abrirModal(id ? "Editar cliente" : "Nuevo cliente", formCliente(c, id), [
     { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Guardar",  accion:function(){ guardarFormCliente(id); } }
@@ -2492,7 +2499,9 @@ function abrirFormCliente(id){
     var v = this.value.replace(/\D/g,"");
     if (v.length === 11) this.value = formatCuit(v);
   };
-  cargarClavesEnFicha(id);
+  /* Con datos precargados el formulario arranca "sucio" a propósito: son
+     cambios que el usuario no quiere perder de un clic afuera. */
+  cargarClavesEnFicha(id, !!precarga);
 }
 function editarCliente(id){ abrirFormCliente(id); }
 
@@ -2577,6 +2586,233 @@ function guardarFormCliente(id){
     llenarSelectClientes($("verCompCliente"), false);
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
+
+/* ==========================================================================
+   LEER LA CONSTANCIA DE INSCRIPCIÓN (ARCA o AGIP) Y CARGAR EL CLIENTE
+
+   Se saca el texto del PDF con pdf.js y se buscan los datos con expresiones
+   regulares. Esto es frágil a propósito de reconocer: ARCA y AGIP cambian el
+   armado de la constancia cada tanto y no publican un formato estable. Por eso
+   NUNCA se crea el cliente solo: se muestra qué se encontró y qué no, y la
+   ficha se abre con esos datos para revisarlos antes de guardar.
+
+   Una constancia escaneada (una foto convertida a PDF) no tiene texto adentro,
+   sólo una imagen: ahí no hay nada que leer y se avisa en vez de devolver
+   campos vacíos sin explicación.
+   ========================================================================== */
+
+/* Saca todo el texto de un PDF, página por página. */
+function textoDePdf(archivo){
+  if (typeof pdfjsLib === "undefined"){
+    return Promise.reject(new Error("No se pudo cargar el lector de PDF. Probá recargar la página."));
+  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  return archivo.arrayBuffer().then(function(buf){
+    return pdfjsLib.getDocument({ data: buf }).promise;
+  }).then(function(pdf){
+    var paginas = [];
+    for (var i = 1; i <= pdf.numPages; i++) paginas.push(i);
+    return Promise.all(paginas.map(function(n){
+      return pdf.getPage(n).then(function(pg){ return pg.getTextContent(); })
+        .then(function(tc){ return tc.items.map(function(it){ return it.str; }).join(" "); });
+    })).then(function(partes){ return partes.join("\n"); });
+  });
+}
+
+/* Normaliza para poder buscar sin pelearse con tildes ni espacios dobles. */
+function _sinTildes(t){
+  return (t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+}
+
+var LETRAS_CAT = "ABCDEFGHIJK";
+
+/* Las etiquetas que usan las dos constancias. Sirven para saber dónde termina
+   un valor: pdf.js devuelve todo pegado con espacios simples, así que cortar
+   "por dos espacios" no funciona y el nombre se lleva puesto medio PDF. */
+var _ETIQ_CONST = "CUIT|CUIL|Estado|Domicilio|Impuestos?|Actividades?|Actividad Principal|Fecha|" +
+  "Clave|Monotributo|Categor[ií]a|R[eé]gimen|N[uú]mero|N[°º]|Apellido y Nombre|Denominaci[oó]n|" +
+  "Raz[oó]n Social|Per[ií]odo|Condici[oó]n|Inscripci[oó]n|Constancia|Emisi[oó]n|Sede|Anexo";
+
+/* Cosas que tampoco son parte de un valor aunque no sean etiquetas: el
+   régimen y el código de actividad aparecen sueltos, sin rótulo delante. */
+var _CORTES_EXTRA = "CONVENIO MULTILATERAL|REGIMEN SIMPLIFICADO|CONTRIBUYENTE LOCAL|\\d{6}\\s*[-\u2013]";
+
+/* Texto que sigue a una etiqueta, cortado en la etiqueta siguiente. */
+function _valorTrasEtiqueta(t, etiqueta){
+  var re = new RegExp(etiqueta + "\\s*:?\\s*([\\s\\S]*?)(?=\\s*(?:" + _ETIQ_CONST + "|" + _CORTES_EXTRA + ")|$)", "i");
+  var m = t.match(re);
+  if (!m) return "";
+  return m[1].replace(/[\s.;:,-]+$/, "").trim();
+}
+
+/* Devuelve { organismo, cuit, cuitDudoso, razonSocial, actividad,
+   codigoActividad, categoria, nroIIBB, regimen, encontrados, faltantes } */
+function parsearConstancia(texto){
+  var t = _sinTildes(texto);
+  var T = t.toUpperCase();
+  var out = { organismo:"", cuit:"", cuitDudoso:false, razonSocial:"", actividad:"",
+              codigoActividad:"", categoria:"", nroIIBB:"", regimen:"" };
+
+  /* Quién la emitió. AGIP nombra a la Ciudad y a Ingresos Brutos; ARCA y AFIP
+     nombran al monotributo o al organismo nacional. */
+  if (/AGIP|ADMINISTRACION GUBERNAMENTAL DE INGRESOS PUBLICOS|CIUDAD DE BUENOS AIRES/.test(T)) out.organismo = "agip";
+  else if (/ARCA|AFIP|ADMINISTRACION FEDERAL|MONOTRIBUTO/.test(T)) out.organismo = "arca";
+
+  /* CUIT: se descartan los del propio organismo, que vienen impresos en el
+     encabezado. Se prefiere uno con dígito verificador válido, pero si no hay
+     ninguno se toma el primero y se marca como dudoso: mejor mostrarlo para
+     que lo revisen que dejar el campo vacío sin explicación. */
+  var CUITS_ORGANISMO = ["33693450239", "34999032089", "33999242109"];
+  var cand = (t.match(/\b\d{2}-?\d{8}-?\d\b/g) || [])
+    .map(function(c){ return c.replace(/\D/g, ""); })
+    .filter(function(c){ return c.length === 11 && CUITS_ORGANISMO.indexOf(c) === -1; });
+  var validos = cand.filter(cuitValido);
+  if (validos.length) out.cuit = validos[0];
+  else if (cand.length){ out.cuit = cand[0]; out.cuitDudoso = true; }
+
+  /* Nombre: personas por "Apellido y Nombre", sociedades por "Denominación" o
+     "Razón Social". Se corta en la etiqueta siguiente. */
+  out.razonSocial = _valorTrasEtiqueta(t, "(?:Apellido y Nombre|Denominaci[oó]n(?: Social)?|Raz[oó]n Social)");
+  if (out.razonSocial.length > 120) out.razonSocial = out.razonSocial.slice(0, 120).trim();
+
+  /* Actividad: código de 6 dígitos y descripción, cortada en el código
+     siguiente, en una fecha o en la etiqueta que venga. El primero es el
+     principal en las dos constancias. */
+  var mAct = t.match(new RegExp(
+    "\\b(\\d{6})\\s*[-–]\\s*([A-Za-z][\\s\\S]*?)(?=\\s*(?:\\d{6}\\s*[-–]|\\d{2}/\\d{4}|\\d{2}/\\d{2}/\\d{4}|" +
+    _ETIQ_CONST + ")\\b|$)"));
+  if (mAct){
+    out.codigoActividad = mAct[1];
+    out.actividad = mAct[2].replace(/[\s.;:,-]+$/, "").trim().slice(0, 120);
+  }
+
+  /* Categoría de monotributo: una sola letra de la A a la K. */
+  var mCat = t.match(/Categor[ií]a\s*:?\s*"?([A-K])"?(?![A-Za-z])/i);
+  if (mCat && LETRAS_CAT.indexOf(mCat[1].toUpperCase()) !== -1) out.categoria = mCat[1].toUpperCase();
+
+  /* Número de ingresos brutos. Se exige la forma del número (901-123456-7 o
+     una tira de dígitos), nunca lo que siga a la etiqueta: "Fecha de
+     inscripcion: 01/2019" pasaba por número de inscripción. */
+  var mIIBB = t.match(/(?:N[uú]mero|N[°º])\s*(?:de\s*)?[Ii]nscripci[oó]n\s*:?\s*(\d{3}-\d{6}-\d|\d{8,13})\b/i);
+  if (mIIBB) out.nroIIBB = mIIBB[1];
+  if (!out.nroIIBB){
+    var suelto = t.match(/\b\d{3}-\d{6}-\d\b/);
+    if (suelto) out.nroIIBB = suelto[0];
+  }
+
+  if (/CONVENIO MULTILATERAL/.test(T))                                    out.regimen = "Convenio Multilateral";
+  else if (/REGIMEN SIMPLIFICADO/.test(T))                                out.regimen = "Régimen Simplificado";
+  else if (out.organismo === "agip" && /CONTRIBUYENTE LOCAL|\bLOCAL\b/.test(T)) out.regimen = "Local";
+
+  var campos = [
+    { clave:"cuit",        nombre:"CUIT" },
+    { clave:"razonSocial", nombre:"Razón social / Nombre" },
+    { clave:"actividad",   nombre:"Actividad" },
+    { clave:"categoria",   nombre:"Categoría de monotributo" },
+    { clave:"nroIIBB",     nombre:"Nº de Ingresos Brutos" }
+  ];
+  out.encontrados = campos.filter(function(c){ return out[c.clave]; });
+  out.faltantes   = campos.filter(function(c){ return !out[c.clave]; });
+  return out;
+}
+
+function abrirLeerConstancia(){
+  abrirModal("Cargar un cliente desde su constancia",
+    '<div class="aviso info"><span>📄</span><div>Subí la <b>constancia de inscripción</b> en PDF —la de ARCA o la de AGIP— ' +
+      "y el sistema saca los datos y abre la ficha con todo cargado, para que la revises antes de guardar.</div></div>" +
+    '<div class="campo"><label>Constancia en PDF</label>' +
+      '<input type="file" id="ctcFile" accept="application/pdf,.pdf"></div>' +
+    '<div id="ctcResultado"></div>' +
+    '<div class="ayuda">Tiene que ser el PDF que descargás del organismo. Si es una foto o un escaneo, ' +
+      "adentro no hay texto sino una imagen, y no hay nada que leer.</div>",
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+      { texto:"Leer la constancia", accion:leerConstancia }
+    ]);
+}
+
+var _constanciaLeida = null;
+
+function leerConstancia(){
+  var f = $("ctcFile").files[0];
+  if (!f){ toast("Elegí el PDF de la constancia", "error"); return; }
+
+  $("ctcResultado").innerHTML = '<div class="aviso info"><span>⏳</span><div>Leyendo el PDF…</div></div>';
+
+  textoDePdf(f).then(function(texto){
+    if (_sinTildes(texto).length < 40){
+      $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
+        "Este PDF no tiene texto adentro: es una imagen escaneada. Bajá la constancia otra vez " +
+        "desde la web del organismo, que la genera con el texto adentro.</div></div>";
+      return;
+    }
+    var d = parsearConstancia(texto);
+    _constanciaLeida = d;
+
+    if (!d.cuit && !d.razonSocial){
+      $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
+        "Pude leer el PDF pero no reconocí ni el CUIT ni el nombre, así que no parece una constancia " +
+        "de inscripción. Si lo es, cargá el cliente a mano y avisame para ajustar la lectura.</div></div>";
+      return;
+    }
+
+    var quien = d.organismo === "agip" ? "AGIP" : (d.organismo === "arca" ? "ARCA" : "un organismo que no reconocí");
+    var filas = d.encontrados.map(function(c){
+      var v = d[c.clave];
+      if (c.clave === "cuit") v = formatCuit(v);
+      if (c.clave === "actividad" && d.codigoActividad) v = d.codigoActividad + " — " + v;
+      return "<tr><td>" + c.nombre + '</td><td><b>' + esc(v) + "</b></td></tr>";
+    }).join("");
+
+    /* Un cliente ya cargado con ese CUIT se avisa antes, no después de que el
+       usuario complete toda la ficha de nuevo. */
+    var yaEsta = null;
+    Object.keys(ESTADO.clientes).forEach(function(id){
+      if (String(ESTADO.clientes[id].cuit || "").replace(/\D/g,"") === d.cuit) yaEsta = id;
+    });
+
+    $("ctcResultado").innerHTML =
+      '<div class="aviso ok"><span>✓</span><div>Constancia de <b>' + quien + "</b>. Esto es lo que encontré:</div></div>" +
+      '<div class="tabla-wrap"><table><tbody>' + filas + "</tbody></table></div>" +
+      (d.cuitDudoso
+        ? '<div class="aviso warn" style="margin-top:12px"><span>⚠️</span><div>Ese CUIT <b>no pasa el dígito ' +
+          "verificador</b>. Puede ser que lo haya leído mal: revisalo contra la constancia antes de guardar.</div></div>"
+        : "") +
+      (d.faltantes.length
+        ? '<div class="ayuda" style="margin-top:8px">No aparecen en esta constancia: ' +
+          esc(d.faltantes.map(function(c){ return c.nombre; }).join(", ")) + ". Los completás a mano.</div>"
+        : "") +
+      (yaEsta
+        ? '<div class="aviso warn" style="margin-top:12px"><span>⚠️</span><div>Ya tenés un cliente con ese CUIT: <b>' +
+          esc(nombreCliente(yaEsta)) + "</b>. Si seguís, vas a crear uno repetido.</div></div>"
+        : "");
+
+    _pintarPieModal([
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+      { texto:"Abrir la ficha con estos datos", accion:function(){ abrirFichaDesdeConstancia(); } }
+    ]);
+  }).catch(function(e){
+    $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(e.message) + "</div></div>";
+  });
+}
+
+function abrirFichaDesdeConstancia(){
+  var d = _constanciaLeida;
+  if (!d) return;
+  abrirFormCliente(null, {
+    razonSocial:   d.razonSocial,
+    cuit:          d.cuit,
+    nroIIBB:       d.nroIIBB,
+    categoriaActual: d.categoria,
+    actividadIIBB: d.actividad,
+    codigoNAES:    d.codigoActividad,
+    impuestos:     { arca: d.organismo !== "agip", agip: d.organismo === "agip" }
+  });
+}
+
+$("btnDesdeConstancia").onclick = abrirLeerConstancia;
 
 /* Ficha con el detalle mes a mes y el análisis de los dos cortes */
 function verFichaCliente(id){
@@ -4711,7 +4947,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v28";
+var VERSION_APP = "v29";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
