@@ -4711,7 +4711,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v27";
+var VERSION_APP = "v28";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
@@ -5976,6 +5976,7 @@ function cablearContraparte(m){
 }
 
 $("btnNuevoMovimiento").onclick = function(){
+  _impuDestino = "";
   abrirModal("Nuevo movimiento de caja", formMovimiento(null), [
     { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Guardar", accion:function(){ guardarMovimiento(null); } }
@@ -6011,6 +6012,11 @@ function editarMovimiento(id){
    le actualiza el importe al total acumulado, que es el mismo invariante que
    mantiene guardarCobro. */
 
+/* A qué mes va la plata: "" = del más viejo al más nuevo, o un período suelto.
+   Vive afuera porque el bloque se vuelve a dibujar con cada tecla del importe
+   y el desplegable se recrea. */
+var _impuDestino = "";
+
 function pintarImputacion(){
   var w = $("wrapImputar");
   if (!w) return;
@@ -6034,11 +6040,27 @@ function pintarImputacion(){
     return;
   }
 
+  /* Si el destino elegido ya no está entre los pendientes (cambió de cliente),
+     se vuelve al reparto normal en vez de quedar apuntando a la nada. */
+  if (_impuDestino && pend.indexOf(_impuDestino) === -1) _impuDestino = "";
+
+  /* El mes elegido va primero; lo que sobre sigue del más viejo al más nuevo. */
+  var orden = _impuDestino
+    ? [_impuDestino].concat(pend.filter(function(p){ return p !== _impuDestino; }))
+    : pend.slice();
+
   var resto = parseFloat($("mvMonto").value) || 0;
+  var reparto = {};
+  orden.forEach(function(p){
+    var sal = estadoHonorario(cid, p).saldo;
+    var sug = Math.min(resto, sal);
+    resto = Math.max(0, resto - sug);
+    reparto[p] = sug;
+  });
+
   var filas = pend.map(function(p){
     var e = estadoHonorario(cid, p);
-    var sug = Math.min(resto, e.saldo);
-    resto = Math.max(0, resto - sug);
+    var sug = reparto[p] || 0;
     var marcado = sug > 0.005;
     return '<tr><td style="width:38px"><input type="checkbox" class="impu-chk" data-per="' + p + '"' +
         (marcado ? " checked" : "") + ' style="width:17px;height:17px;accent-color:var(--azul);cursor:pointer"></td>' +
@@ -6053,12 +6075,22 @@ function pintarImputacion(){
     '<div class="aviso info"><span>ℹ️</span><div><b>' + esc(nombreCliente(cid)) + "</b> debe <b>" +
       pesos(deudaCliente(cid)) + "</b>. Los meses tildados se marcan cobrados y bajan del cuadro de deuda. " +
       "Destildá todo si este ingreso no es de honorarios.</div></div>" +
+    '<div class="campo"><label>¿A qué mes va este pago?</label><select id="impuDestino">' +
+      '<option value=""' + (_impuDestino ? "" : " selected") + ">Del mes más viejo al más nuevo</option>" +
+      pend.map(function(p){
+        return '<option value="' + p + '"' + (_impuDestino === p ? " selected" : "") + ">" + periodoLargo(p) + "</option>";
+      }).join("") +
+    "</select>" +
+    '<div class="ayuda">Por defecto se cancela primero lo más viejo. Si el cliente te dijo que paga un mes ' +
+      "en particular, elegilo acá y la plata va a ese; lo que sobre sigue con los más viejos.</div></div>" +
     '<div class="tabla-wrap"><table><thead><tr><th></th><th>Mes</th>' +
       '<th class="num">Debe</th><th class="num">Se imputa</th></tr></thead><tbody>' + filas + "</tbody></table></div>" +
     (resto > 0.005
       ? '<div class="ayuda" style="margin-top:8px">Sobran ' + pesos(resto) +
         ": se guardan como un ingreso aparte con el concepto que escribiste arriba.</div>"
       : "");
+
+  $("impuDestino").onchange = function(){ _impuDestino = this.value; pintarImputacion(); };
 }
 
 function imputacionesElegidas(){
@@ -6120,8 +6152,11 @@ function guardarMovimientoImputado(base, clienteId, impu, sobrante){
     });
     if (movSobrante) ESTADO.caja[movSobrante] = updates["caja/" + movSobrante];
     cerrarModal();
-    toast(impu.length === 1 ? "Ingreso cargado y mes marcado cobrado"
-                            : "Ingreso cargado y " + impu.length + " meses marcados cobrados", "ok");
+    /* Se nombran los meses: si la plata fue a un mes distinto del que el
+       cliente dijo pagar, tiene que verse en el momento y no dos semanas
+       después mirando el cuadro. */
+    var meses = impu.map(function(x){ return periodoLargo(x.periodo); }).join(", ");
+    toast("Ingreso cargado · cobrado " + meses, "ok");
     renderCaja(); renderHonorarios(); renderHome();
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
