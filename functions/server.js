@@ -443,10 +443,18 @@ const TIPOS_ADJUNTO = [
 ];
 
 app.post('/gemini', async (req, res) => {
-  if (!GEMINI_KEY) {
+  /* La clave sale de la variable de entorno; si no está, se acepta la que
+     mande el sistema. Esto último no es lo ideal —una clave en una variable de
+     entorno no la ve nadie, y esta otra viaja en cada pedido y queda guardada
+     en la base— pero es la diferencia entre que la función ande o no ande
+     cuando la variable, por lo que sea, no llega al contenedor.
+     El pedido igual exige X-App-Token, así que no queda abierto a cualquiera. */
+  const clave = GEMINI_KEY || limpiar(req.body && req.body.clave);
+  if (!clave) {
     return res.status(503).json({
-      error: 'Falta GEMINI_API_KEY en el backend',
-      detalle: 'Cargala en las variables de entorno de Railway y reiniciá el servicio.'
+      error: 'Falta la clave de Gemini',
+      detalle: 'Cargala en Railway como GEMINI_API_KEY, o desde el sistema en ' +
+               'Configuración → Asistente (IA), que la guarda en la base.'
     });
   }
 
@@ -477,7 +485,7 @@ app.post('/gemini', async (req, res) => {
 
   try {
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
-                encodeURIComponent(GEMINI_MODELO) + ':generateContent?key=' + encodeURIComponent(GEMINI_KEY);
+                encodeURIComponent(GEMINI_MODELO) + ':generateContent?key=' + encodeURIComponent(clave);
 
     const r = await fetch(url, {
       method: 'POST',
@@ -554,7 +562,7 @@ app.get('/diag', (req, res) => {
   if (entorno() !== 'production') avisos.push('ARCA en modo TESTING: las consultas van al ambiente de homologación, no a los datos reales.');
   if (!APP_TOKEN) avisos.push('APP_API_TOKEN sin configurar: el backend acepta pedidos de cualquiera.');
   if (!ORIGENES.length) avisos.push('ALLOWED_ORIGINS sin configurar: acepta llamadas desde cualquier dominio.');
-  if (!GEMINI_KEY) avisos.push('GEMINI_API_KEY sin configurar: no funcionan ni el lector de constancias con IA ni el asistente.');
+  if (!GEMINI_KEY) avisos.push('GEMINI_API_KEY sin configurar en Railway: el sistema va a usar la clave que tenga guardada, si cargaste una en Configuración → Asistente (IA).');
 
   res.json({
     certificadoCargado: !!cert,

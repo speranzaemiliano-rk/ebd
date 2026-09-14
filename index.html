@@ -1329,6 +1329,24 @@ tbody tr:hover{background:#FAFAFC}
         </div>
 
         <div class="card">
+          <h2>Asistente (IA)</h2>
+          <p class="desc">El asistente y la lectura de constancias con IA usan Gemini, de Google.
+            Lo mejor es cargar la clave en Railway como <span class="mono">GEMINI_API_KEY</span>: ahí no la ve nadie.
+            Si por lo que sea no se puede, pegala acá y el sistema se la manda al backend en cada consulta.</p>
+          <div class="campo"><label>Clave de Gemini</label>
+            <input type="password" id="cfgGeminiKey" placeholder="AIzaSy…">
+            <div class="ayuda">Se saca de <span class="mono">aistudio.google.com/apikey</span>.
+              Guardada acá queda en la base, en la misma rama protegida que las claves fiscales:
+              sólo la leen los administradores. Es menos seguro que la variable de entorno, pero es
+              la diferencia entre que la función ande o no ande.</div></div>
+          <div id="cfgGeminiEstado" style="margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn" id="btnGuardarGemini">Guardar</button>
+            <button class="btn sec" id="btnProbarGemini">Probar el asistente</button>
+          </div>
+        </div>
+
+        <div class="card">
           <h2>Bóveda de claves</h2>
           <p class="desc">Las claves fiscales se guardan cifradas con AES-256-GCM. La contraseña maestra nunca se guarda en ningún lado: se escribe al abrir la bóveda y vive solo en la memoria del navegador.</p>
           <div id="estadoBoveda"></div>
@@ -1614,7 +1632,7 @@ var BOTONES_ESCRITURA = ["btnNuevoCliente","btnDesdeConstancia","btnCargaManual"
                          "btnTraerArca","btnTraerPortal","btnSubirArchivo"];
 var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
                          "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
-                         "btnConfigBoveda","btnBoveda","btnGuardarBackend",
+                         "btnConfigBoveda","btnBoveda","btnGuardarBackend","btnGuardarGemini",
                          "btnNuevoSocio","tabBtnSocios"];
 
 /* Campos que solo un admin puede guardar: sin el botón al lado, dejarlos
@@ -1623,7 +1641,7 @@ var CAMPOS_ADMIN = ["cfgNombre","cfgCuit","cfgMail","cfgTel",
                     "cfgEjsService","cfgEjsTemplate","cfgEjsKey",
                     "escalaVigencia","escalaAlquileres",
                     "plantillaAsunto","plantillaCuerpo",
-                    "cfgBackUrl","cfgBackToken"];
+                    "cfgBackUrl","cfgBackToken","cfgGeminiKey"];
 
 function aplicarPermisos(){
   BOTONES_ESCRITURA.forEach(function(id){
@@ -3655,12 +3673,32 @@ function postAlBackend(ruta, cuerpo){
     });
 }
 
-/* Le pide algo a Gemini a través del backend, que es el único que tiene la
-   clave. `archivo` es opcional: un File del navegador (PDF o imagen). */
+/* La clave de Gemini guardada en la base, para cuando la variable de entorno
+   del backend no está. Vive bajo `credenciales`, que ya tiene publicada la
+   regla más estricta del sistema —sólo administradores leen y escriben—, así
+   que no hace falta tocar las reglas de Firebase para esto. */
+var _geminiClave = null;   /* null = no se leyó todavía; "" = no hay */
+
+function leerClaveGemini(){
+  if (_geminiClave !== null) return Promise.resolve(_geminiClave);
+  return ref("credenciales/__gemini").once("value")
+    .then(function(s){ _geminiClave = (s.val() || {}).key || ""; return _geminiClave; })
+    .catch(function(){ _geminiClave = ""; return ""; });   /* sin permiso: se sigue sin ella */
+}
+
+/* Le pide algo a Gemini a través del backend. `archivo` es opcional: un File
+   del navegador (PDF o imagen). */
 function preguntarAGemini(prompt, archivo, temperatura){
   var envio = { prompt: prompt };
   if (temperatura !== undefined) envio.temperatura = temperatura;
-  if (!archivo) return postAlBackend("/gemini", envio).then(function(r){ return r.texto; });
+  var conClave = function(e){
+    return leerClaveGemini().then(function(k){
+      if (k) e.clave = k;
+      return postAlBackend("/gemini", e).then(function(r){ return r.texto; });
+    });
+  };
+
+  if (!archivo) return conClave(envio);
 
   return new Promise(function(resolve, reject){
     var fr = new FileReader();
@@ -3674,9 +3712,7 @@ function preguntarAGemini(prompt, archivo, temperatura){
     };
     fr.onerror = function(){ reject(new Error("No pude leer el archivo")); };
     fr.readAsDataURL(archivo);
-  }).then(function(envio){
-    return postAlBackend("/gemini", envio);
-  }).then(function(r){ return r.texto; });
+  }).then(conClave);
 }
 
 /* Gemini devuelve el JSON casi siempre envuelto en ```json … ```, y a veces con
@@ -3912,6 +3948,32 @@ $("btnGuardarBackend").onclick = function(){
     $("cfgBackUrl").value = cfg.url;   // que se vea cómo quedó guardada
     toast("Conexión guardada", "ok");
   }).catch(function(e){ toast(explicarError(e), "error"); });
+};
+
+$("btnGuardarGemini").onclick = function(){
+  var k = $("cfgGeminiKey").value.trim();
+  ref("credenciales/__gemini").set(k ? { key: k, actualizado: new Date().toISOString() } : null)
+    .then(function(){
+      _geminiClave = k;
+      $("cfgGeminiEstado").innerHTML = '<div class="aviso ok"><span>✓</span><div>' +
+        (k ? "Clave guardada. Probala con el botón de al lado." : "Clave borrada.") + "</div></div>";
+    })
+    .catch(function(e){ toast(explicarError(e), "error"); });
+};
+
+/* Prueba de punta a punta: hace una consulta de verdad. Es la única forma de
+   saber si la clave sirve; que esté cargada no dice nada sobre si es válida. */
+$("btnProbarGemini").onclick = function(){
+  var cont = $("cfgGeminiEstado");
+  cont.innerHTML = '<div class="aviso info"><span>⏳</span><div>Preguntándole algo a Gemini…</div></div>';
+  var k = $("cfgGeminiKey").value.trim();
+  if (k) _geminiClave = k;   /* se prueba lo que está escrito, sin obligar a guardar antes */
+  preguntarAGemini("Contestá únicamente con la palabra LISTO.", null, 0).then(function(txt){
+    cont.innerHTML = '<div class="aviso ok"><span>✨</span><div><b>Anda.</b> Gemini contestó: ' +
+      esc(String(txt).slice(0, 60)) + "</div></div>";
+  }).catch(function(e){
+    cont.innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>No anda.</b><br>' + esc(e.message) + "</div></div>";
+  });
 };
 
 $("btnProbarBackend").onclick = function(){
@@ -4878,6 +4940,12 @@ function renderConfig(){
   $("cfgBackUrl").value   = back.url || "";
   $("cfgBackToken").value = back.token || "";
 
+  /* La clave de Gemini se lee aparte: vive en la rama de administradores y
+     para un rol menor la lectura falla, sin que eso rompa la pantalla. */
+  if (esAdminRol()) leerClaveGemini().then(function(k){
+    if ($("cfgGeminiKey")) $("cfgGeminiKey").value = k || "";
+  });
+
   pintarEstadoBoveda();
 
   ref("usuarios").once("value").then(function(s){
@@ -5408,7 +5476,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v34";
+var VERSION_APP = "v35";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
