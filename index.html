@@ -1711,6 +1711,9 @@ function cuotaActual(cli, fechaISO){
 /* Si se estaba cerrando uno y se abre otro enseguida —pasa cada vez que un
    modal lleva a otro—, hay que cancelar el cierre pendiente: si no, el
    temporizador del anterior apaga el que se acaba de abrir. */
+/* Motivo por el que no se pudo leer socios, o "" si se leyó bien. */
+var _sociosBloqueado = "";
+
 var _cierreModalPendiente = null;
 
 /* ---------- Cambios sin guardar ----------
@@ -1947,7 +1950,15 @@ function cargarTodo(){
     ref("caja").once("value"),
     ref("proveedores").once("value"),
     ref("cuentas").once("value"),
-    ref("socios").once("value")
+    /* Socios va aparte y tolerando el error a propósito. Es la rama más nueva
+       de las reglas y, si todavía no se publicó en la consola, Firebase
+       responde permission_denied: sin este catch ese rechazo voltea el
+       Promise.all entero y el sistema no carga NADA. Una pantalla que falta
+       no puede dejar sin datos a las otras diez. */
+    ref("socios").once("value").catch(function(e){
+      _sociosBloqueado = e && e.message ? e.message : "sin permiso";
+      return { val: function(){ return null; } };
+    })
   ]).then(function(s){
     ESTADO.clientes      = s[0].val() || {};
     ESTADO.totales       = s[1].val() || {};
@@ -4647,7 +4658,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v24";
+var VERSION_APP = "v25";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
@@ -5500,7 +5511,27 @@ function clientesDelReparto(){
   return Object.keys(set).sort(function(a,b){ return nombreCliente(a).localeCompare(nombreCliente(b)); });
 }
 
+var REGLA_SOCIOS = '"socios": {\n' +
+  '  ".read": "auth != null",\n' +
+  '  ".write": "auth != null && (auth.token.email === \'speranza.emiliano@gmail.com\' || root.child(\'estudioContable/usuarios/\' + auth.uid + \'/rol\').val() === \'admin\')"\n' +
+  "}";
+
 function renderSocios(){
+  if (_sociosBloqueado){
+    $("tablaSocios").innerHTML =
+      '<div class="aviso bad"><span>⚠️</span><div><b>Falta publicar la regla de la rama <code>socios</code></b> ' +
+        "en Firebase. El archivo del repositorio no se aplica solo: hay que pegarlo en la consola.</div></div>" +
+      '<div class="ayuda" style="margin-bottom:8px">Firebase → Realtime Database → <b>Reglas</b>, pegar esto dentro de ' +
+        "<code>estudioContable</code>, junto a las otras ramas, y <b>Publicar</b>:</div>" +
+      '<textarea readonly style="width:100%;min-height:120px;font-family:\'SF Mono\',SFMono-Regular,ui-monospace,Menlo,Consolas,monospace;' +
+        'font-size:12.5px;padding:12px 14px;border:1px solid var(--borde);border-radius:var(--r2)">' + esc(REGLA_SOCIOS) + "</textarea>" +
+      '<div class="ayuda" style="margin-top:8px">Mientras tanto el resto del sistema funciona normal. ' +
+        "Lo que respondió Firebase: <i>" + esc(_sociosBloqueado) + "</i></div>";
+    $("tablaRepartos").innerHTML = "";
+    ["kpiSocios","kpiSocPct","kpiSocSin","kpiSocCobrado"].forEach(function(k){ $(k).textContent = "—"; });
+    return;
+  }
+
   var sel = $("socAnio");
   if (!sel.options.length){
     var hoy = new Date().getFullYear(), out = "";
