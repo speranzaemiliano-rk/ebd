@@ -830,6 +830,8 @@ tbody tr:hover{background:#FAFAFC}
       </svg>
       <span class="logo-txt">Consultores</span>
     </div>
+    <span id="verApp" title="Versión del sistema que tenés cargada"
+          style="font-size:11.5px;color:var(--gris2);letter-spacing:-.01em">&nbsp;</span>
     <div class="sep"></div>
     <button class="btn sec chico oculto" id="btnInstalar" title="Instalar como aplicación">⬇ Instalar app</button>
     <button class="btn-icono" id="btnBoveda" title="Bóveda de claves">🔒</button>
@@ -1727,6 +1729,20 @@ var _cierreModalPendiente = null;
    es el único que se engancha a un gesto del usuario. */
 var _modalSucio   = false;
 var _modalBotones = [];
+var _modalFoto    = "";
+
+/* Escuchar input/change no alcanza: hay valores que los pone el propio
+   sistema (el link "Usar este importe" de la cuota de monotributo, por
+   ejemplo), y esos no disparan ningún evento. Se guarda una foto de todos los
+   campos al abrir y se compara al cerrar. Los eventos quedan igual, porque la
+   foto no ve un archivo elegido en un <input type=file>. */
+function _fotoModal(){
+  var out = [];
+  Array.prototype.forEach.call($("modalBody").querySelectorAll("input,select,textarea"), function(el){
+    out.push(el.type === "checkbox" || el.type === "radio" ? (el.checked ? "1" : "0") : el.value);
+  });
+  return out.join("\u0001");
+}
 
 function _pintarPieModal(botones){
   var pie = $("modalPie");
@@ -1753,6 +1769,7 @@ function abrirModal(titulo, html, botones, ancho){
   _modalSucio   = false;
   _modalBotones = botones || [];
   _pintarPieModal(_modalBotones);
+  _modalFoto    = _fotoModal();
 
   $("modalFondo").classList.add("abierto");
 }
@@ -1763,7 +1780,8 @@ $("modalBody").addEventListener("input",  function(){ _modalSucio = true; });
 $("modalBody").addEventListener("change", function(){ _modalSucio = true; });
 
 function hayCambiosSinGuardar(){
-  return _modalSucio && $("modalFondo").classList.contains("abierto");
+  if (!$("modalFondo").classList.contains("abierto")) return false;
+  return _modalSucio || _fotoModal() !== _modalFoto;
 }
 
 function cerrarModal(){
@@ -1779,15 +1797,17 @@ function cerrarModal(){
        hayCambiosSinGuardar(), que además exige que el modal esté abierto;
        esto es sólo higiene. */
     _modalSucio = false;
+    _modalFoto  = "";
   }, 160);
 }
 
 /* Cierre pedido por el usuario. Si hay algo cargado sin guardar, pregunta. */
 function cerrarModalPedido(){
   if (!hayCambiosSinGuardar()){ cerrarModal(); return; }
+  _modalSucio = true;   /* que no vuelva a preguntarse mientras está la pregunta */
   _pintarPieModal([
     { texto:"Seguir editando", clase:"sec", accion:function(){ _pintarPieModal(_modalBotones); } },
-    { texto:"Salir sin guardar", clase:"peligro", accion:function(){ _modalSucio = false; cerrarModal(); } }
+    { texto:"Salir sin guardar", clase:"peligro", accion:function(){ _modalSucio = false; _modalFoto = _fotoModal(); cerrarModal(); } }
   ]);
   var pie = $("modalPie");
   var aviso = document.createElement("div");
@@ -4529,9 +4549,19 @@ $("arcTipo").onchange    = pintarArchivos;
 
 /* Registro del service worker. Solo funciona sobre https o localhost:
    desde file:// el navegador lo bloquea, y no pasa nada — la app anda igual. */
+/* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
+   navegador está sirviendo una copia vieja: si no coincide con la última
+   publicada, hay que recargar. */
+var VERSION_APP = "v23";
+if ($("verApp")) $("verApp").textContent = VERSION_APP;
+
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
   window.addEventListener("load", function(){
     navigator.serviceWorker.register("sw.js").then(function(reg){
+      /* Se pregunta por una versión nueva en cada arranque: si no, el
+         navegador puede seguir sirviendo el sw.js viejo desde su propio caché
+         y el sistema queda clavado en una versión anterior sin avisar. */
+      try { reg.update(); } catch (e) { /* da igual si falla */ }
       /* Si mientras estás usando el sistema subimos una versión nueva,
          avisamos en vez de dejarte con la vieja sin que te enteres. */
       reg.addEventListener("updatefound", function(){
@@ -5712,6 +5742,7 @@ function renderCaja(){
 }
 
 function formMovimiento(m){
+  var nuevo = !m;
   m = m || {};
   var hoyISO = new Date().toISOString().slice(0,10);
   return '' +
@@ -5739,7 +5770,13 @@ function formMovimiento(m){
           return '<option value="' + x.clave + '"' + (m.medio === x.clave ? " selected" : "") + ">" + x.nombre + "</option>";
         }).join("") + "</select></div>" +
       '<div class="campo"><label>Cuenta *</label>' + selectCuentas("mvCuenta", m.cuentaId) + "</div>" +
-    "</div>";
+    "</div>" +
+    (nuevo
+      ? '<div id="wrapImputar"></div>'
+      : (m.origen === "honorario"
+          ? '<div class="aviso info"><span>ℹ️</span><div>Este movimiento es el cobro de un mes de honorarios. ' +
+            "Para cambiar el importe cobrado, editalo desde <b>Honorarios</b>: así el cuadro de deuda y la caja no quedan diciendo cosas distintas.</div></div>"
+          : ""));
 }
 
 function cablearContraparte(m){
@@ -5751,8 +5788,12 @@ function cablearContraparte(m){
     s.innerHTML = t === "cliente" ? opcionesClientes(m && m.contraparteId) : opcionesProveedores(m && m.contraparteId);
     if (!s.options.length) s.innerHTML = '<option value="">— no hay cargados todavía —</option>';
   }
-  $("mvContraparteTipo").onchange = pintar;
+  $("mvContraparteTipo").onchange = function(){ pintar(); pintarImputacion(); };
+  $("mvContraparteId").onchange   = pintarImputacion;
+  $("mvTipo").onchange            = pintarImputacion;
+  $("mvMonto").oninput            = pintarImputacion;
   pintar();
+  pintarImputacion();
 }
 
 $("btnNuevoMovimiento").onclick = function(){
@@ -5771,6 +5812,139 @@ function editarMovimiento(id){
     { texto:"Guardar", accion:function(){ guardarMovimiento(id); } }
   ]);
   cablearContraparte(m);
+}
+
+/* ---------- IMPUTAR UN INGRESO DE CAJA A HONORARIOS ----------
+
+   Hasta ahora la relación iba en un solo sentido: cobrar un mes en Honorarios
+   generaba el ingreso en Caja, pero cargar el ingreso en Caja no bajaba la
+   deuda. El que cobra suele entrar por Caja, así que la deuda quedaba inflada.
+
+   Acá, al elegir un cliente en un ingreso, aparecen sus meses impagos con el
+   importe ya repartido del más viejo al más nuevo, y al guardar se marcan
+   cobrados.
+
+   Decisión que importa: se graba UN MOVIMIENTO POR MES imputado, no uno solo
+   repartido entre varios. El resto del sistema asume que cada mes tiene su
+   propio movimiento (honorarios/<cli>/<per>/movimientoId); si un movimiento
+   cubriera tres meses, editar uno desde Honorarios borraría el ingreso de los
+   otros tres. Si el mes ya tenía un cobro parcial, se reusa su movimiento y se
+   le actualiza el importe al total acumulado, que es el mismo invariante que
+   mantiene guardarCobro. */
+
+function pintarImputacion(){
+  var w = $("wrapImputar");
+  if (!w) return;
+
+  var esIngreso = $("mvTipo").value === "ingreso";
+  var cid = $("mvContraparteTipo").value === "cliente" ? $("mvContraparteId").value : "";
+  if (!esIngreso || !cid || !ESTADO.clientes[cid]){ w.innerHTML = ""; return; }
+
+  /* Primero lo vencido, después lo que todavía no vence: pagar adelantado es
+     legítimo, pero no es lo que se imputa primero. */
+  var pend = periodosDe(cid).filter(function(p){
+    var e = estadoHonorario(cid, p);
+    return e.estado === "debe" || e.estado === "parcial";
+  });
+  var futuros = periodosDe(cid).filter(function(p){ return estadoHonorario(cid, p).estado === "porvenir"; });
+  pend = pend.concat(futuros);
+
+  if (!pend.length){
+    w.innerHTML = '<div class="aviso ok"><span>✓</span><div><b>' + esc(nombreCliente(cid)) +
+      "</b> no tiene honorarios impagos. El movimiento se guarda como un ingreso común.</div></div>";
+    return;
+  }
+
+  var resto = parseFloat($("mvMonto").value) || 0;
+  var filas = pend.map(function(p){
+    var e = estadoHonorario(cid, p);
+    var sug = Math.min(resto, e.saldo);
+    resto = Math.max(0, resto - sug);
+    var marcado = sug > 0.005;
+    return '<tr><td style="width:38px"><input type="checkbox" class="impu-chk" data-per="' + p + '"' +
+        (marcado ? " checked" : "") + ' style="width:17px;height:17px;accent-color:var(--azul);cursor:pointer"></td>' +
+      "<td>" + periodoLargo(p) + (e.estado === "porvenir" ? ' <span class="badge b-amar">no vence aún</span>' : "") +
+        (e.estado === "parcial" ? ' <span class="badge b-amar">pago parcial</span>' : "") + "</td>" +
+      '<td class="num">' + pesos(e.saldo) + "</td>" +
+      '<td class="num"><input type="number" step="0.01" id="impu_' + p + '" value="' + (marcado ? sug.toFixed(2) : "") + '"' +
+        ' style="width:120px;text-align:right;padding:6px 9px;border:1px solid var(--borde);border-radius:8px"></td></tr>';
+  }).join("");
+
+  w.innerHTML = '<div class="seccion-tit">Imputar a honorarios</div>' +
+    '<div class="aviso info"><span>ℹ️</span><div><b>' + esc(nombreCliente(cid)) + "</b> debe <b>" +
+      pesos(deudaCliente(cid)) + "</b>. Los meses tildados se marcan cobrados y bajan del cuadro de deuda. " +
+      "Destildá todo si este ingreso no es de honorarios.</div></div>" +
+    '<div class="tabla-wrap"><table><thead><tr><th></th><th>Mes</th>' +
+      '<th class="num">Debe</th><th class="num">Se imputa</th></tr></thead><tbody>' + filas + "</tbody></table></div>" +
+    (resto > 0.005
+      ? '<div class="ayuda" style="margin-top:8px">Sobran ' + pesos(resto) +
+        ": se guardan como un ingreso aparte con el concepto que escribiste arriba.</div>"
+      : "");
+}
+
+function imputacionesElegidas(){
+  var out = [];
+  Array.prototype.forEach.call(document.querySelectorAll(".impu-chk"), function(chk){
+    if (!chk.checked) return;
+    var per = chk.dataset.per;
+    var campo = $("impu_" + per);
+    var v = campo ? (parseFloat(campo.value) || 0) : 0;
+    if (v > 0.005) out.push({ periodo: per, importe: v });
+  });
+  return out;
+}
+
+function guardarMovimientoImputado(base, clienteId, impu, sobrante){
+  var updates = {}, enEstado = [];
+
+  impu.forEach(function(x){
+    var e = estadoHonorario(clienteId, x.periodo);
+    var previo = e.registro || {};
+    var pagado = (previo.montoPagado || 0) + x.importe;
+
+    /* Se reusa el movimiento del mes si ya existía: crear otro dejaría el
+       cobro parcial anterior contado dos veces en la caja. */
+    var movId = previo.movimientoId || ref("caja").push().key;
+    var mov = Object.assign({}, base, {
+      concepto: "Honorarios " + periodoLargo(x.periodo),
+      monto: pagado,
+      origen: "honorario",
+      refHonorario: clienteId + "/" + x.periodo
+    });
+    updates["caja/" + movId] = mov;
+
+    var reg = Object.assign({}, previo, {
+      monto: e.monto,
+      montoPagado: pagado,
+      pagado: e.monto > 0 && pagado >= e.monto - 0.005,
+      fechaPago: base.fecha,
+      medio: base.medio,
+      cuentaId: base.cuentaId,
+      movimientoId: movId,
+      actualizado: new Date().toISOString()
+    });
+    updates["honorarios/" + clienteId + "/" + x.periodo] = reg;
+    enEstado.push({ movId: movId, mov: mov, periodo: x.periodo, reg: reg });
+  });
+
+  var movSobrante = null;
+  if (sobrante > 0.005){
+    movSobrante = ref("caja").push().key;
+    updates["caja/" + movSobrante] = Object.assign({}, base, { monto: sobrante });
+  }
+
+  ref("").update(updates).then(function(){
+    if (!ESTADO.honorarios[clienteId]) ESTADO.honorarios[clienteId] = {};
+    enEstado.forEach(function(x){
+      ESTADO.caja[x.movId] = x.mov;
+      ESTADO.honorarios[clienteId][x.periodo] = x.reg;
+    });
+    if (movSobrante) ESTADO.caja[movSobrante] = updates["caja/" + movSobrante];
+    cerrarModal();
+    toast(impu.length === 1 ? "Ingreso cargado y mes marcado cobrado"
+                            : "Ingreso cargado y " + impu.length + " meses marcados cobrados", "ok");
+    renderCaja(); renderHonorarios(); renderHome();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
 function guardarMovimiento(id){
@@ -5798,6 +5972,22 @@ function guardarMovimiento(id){
     origen: "manual",
     creado: (ESTADO.caja[id] || {}).creado || new Date().toISOString()
   };
+
+  /* Sólo en el alta: editar un movimiento ya imputado se hace desde
+     Honorarios, para no tener dos pantallas moviendo el mismo número. */
+  if (!id && datos.tipo === "ingreso" && tipoCp === "cliente" && cpId){
+    var impu = imputacionesElegidas();
+    if (impu.length){
+      var suma = 0;
+      impu.forEach(function(x){ suma += x.importe; });
+      if (suma > monto + 0.005){
+        toast("Lo imputado a honorarios (" + pesos(suma) + ") supera el importe del movimiento", "error");
+        return;
+      }
+      guardarMovimientoImputado(datos, cpId, impu, monto - suma);
+      return;
+    }
+  }
 
   var p;
   if (id){ p = ref("caja/" + id).set(datos); }
