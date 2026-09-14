@@ -533,6 +533,24 @@ tbody tr:hover{background:#FAFAFC}
   border-top:1px solid var(--pelo);margin-top:6px;
 }
 
+/* ---------- BARRA DE VERSIÓN VIEJA ----------
+   No es un toast: un aviso que se va solo se pierde, y quedarse con una
+   versión vieja no es un detalle, es perder datos. Empuja el contenido hacia
+   abajo para que no haya forma de no verla. */
+#barraVersion{
+  display:none;position:sticky;top:0;z-index:200;
+  background:#FF9500;color:#1D1D1F;
+  padding:11px 20px;font-size:14px;letter-spacing:-.016em;
+  display:none;align-items:center;gap:12px;flex-wrap:wrap;
+}
+#barraVersion.ver{display:flex}
+#barraVersion b{font-weight:600}
+#barraVersion button{
+  background:#1D1D1F;color:#fff;border-radius:999px;padding:7px 16px;font-size:13.5px;
+  letter-spacing:-.014em;transition:transform .09s ease-out;
+}
+#barraVersion button:active{transform:scale(.97)}
+
 /* ---------- ASISTENTE ----------
    Panel lateral, no un modal: el asistente se consulta MIENTRAS se mira una
    pantalla, y un modal taparía justo lo que se está preguntando. */
@@ -1304,6 +1322,12 @@ tbody tr:hover{background:#FAFAFC}
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-pie" id="modalPie"></div>
   </div>
+</div>
+
+<div id="barraVersion" role="status">
+  <span>⬆️</span>
+  <div style="flex:1;min-width:200px">Hay una <b>versión nueva</b> del sistema. La que tenés abierta es vieja y puede no tener los últimos arreglos.</div>
+  <button type="button" id="btnActualizarYa">Actualizar ahora</button>
 </div>
 
 <div id="panelAsistente" aria-label="Asistente">
@@ -5280,8 +5304,51 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v31";
+var VERSION_APP = "v32";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
+
+/* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
+
+   El service worker avisa cuando se entera, pero se entera recién en una
+   recarga, y el navegador además puede servir el sw.js viejo desde su propio
+   caché HTTP. Resultado: alguien podía quedarse días con una versión anterior
+   creyendo que tenía la última, y volver a perder lo que ya estaba arreglado.
+
+   Acá se pregunta directo por el archivo, sin pasar por ningún caché, y se
+   compara el número con el que está corriendo. Al arrancar y cada cinco
+   minutos, que es barato: es un archivo de tres kilobytes. */
+function chequearVersionPublicada(){
+  fetch("sw.js?t=" + Date.now(), { cache: "no-store" })
+    .then(function(r){ return r.text(); })
+    .then(function(t){
+      var m = t.match(/var VERSION\s*=\s*"([^"]+)"/);
+      if (m && m[1] !== VERSION_APP) $("barraVersion").classList.add("ver");
+    })
+    .catch(function(){ /* sin internet no se puede saber; no molestamos */ });
+}
+
+/* Actualizar de verdad: se borra todo lo guardado por el service worker y se
+   recarga. Un F5 común puede volver a servir la copia vieja. */
+function actualizarAhora(){
+  var listo = Promise.resolve();
+  if (window.caches){
+    listo = caches.keys()
+      .then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })
+      .catch(function(){});
+  }
+  if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations){
+    listo = listo.then(function(){
+      return navigator.serviceWorker.getRegistrations()
+        .then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); })
+        .catch(function(){});
+    });
+  }
+  listo.then(function(){ location.reload(); });
+}
+
+$("btnActualizarYa").onclick = actualizarAhora;
+chequearVersionPublicada();
+setInterval(chequearVersionPublicada, 5 * 60 * 1000);
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
   window.addEventListener("load", function(){
