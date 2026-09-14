@@ -533,6 +533,41 @@ tbody tr:hover{background:#FAFAFC}
   border-top:1px solid var(--pelo);margin-top:6px;
 }
 
+/* ---------- ASISTENTE ----------
+   Panel lateral, no un modal: el asistente se consulta MIENTRAS se mira una
+   pantalla, y un modal taparía justo lo que se está preguntando. */
+#panelAsistente{
+  position:fixed;top:0;right:0;bottom:0;width:420px;max-width:100vw;z-index:8500;
+  background:rgba(255,255,255,.92);
+  backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
+  border-left:1px solid var(--pelo);box-shadow:-8px 0 40px rgba(0,0,0,.10);
+  display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
+}
+#panelAsistente.abierto{transform:none}
+#panelAsistente .as-head{
+  padding:16px 20px;border-bottom:1px solid var(--pelo);display:flex;align-items:center;gap:10px;
+}
+#panelAsistente .as-head h3{font-size:17px;flex:1;letter-spacing:-.02em}
+#asChat{flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.as-msg{max-width:88%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.5;letter-spacing:-.014em;white-space:pre-wrap}
+.as-msg.yo{align-self:flex-end;background:var(--azul);color:#fff;border-bottom-right-radius:5px}
+.as-msg.ia{align-self:flex-start;background:var(--fondo);color:var(--texto);border-bottom-left-radius:5px}
+.as-msg.error{align-self:flex-start;background:var(--rojo-bg);color:var(--rojo)}
+.as-pie{padding:14px 20px;border-top:1px solid var(--pelo);display:flex;gap:9px;align-items:flex-end}
+.as-pie textarea{
+  flex:1;resize:none;min-height:42px;max-height:130px;padding:11px 14px;font-size:14.5px;
+  border:1px solid var(--borde);border-radius:var(--r2);outline:none;font-family:inherit;letter-spacing:-.016em;
+}
+.as-pie textarea:focus{border-color:var(--azul);box-shadow:0 0 0 4px rgba(0,113,227,.22)}
+.as-sug{display:flex;gap:7px;flex-wrap:wrap;padding:0 20px 14px}
+.as-sug button{
+  font-size:12.5px;padding:6px 12px;border-radius:999px;background:var(--fondo);
+  color:var(--texto);letter-spacing:-.012em;
+}
+.as-sug button:hover{background:rgba(0,0,0,.09)}
+@media(max-width:640px){ #panelAsistente{width:100vw} }
+
 /* ---------- VARIOS ---------- */
 .vacio{text-align:center;padding:60px 20px;color:var(--gris);font-size:15px;letter-spacing:-.016em}
 .vacio .ico{font-size:44px;margin-bottom:12px;opacity:.3}
@@ -838,6 +873,7 @@ tbody tr:hover{background:#FAFAFC}
           style="font-size:11.5px;color:var(--gris2);letter-spacing:-.01em">&nbsp;</span>
     <div class="sep"></div>
     <button class="btn sec chico oculto" id="btnInstalar" title="Instalar como aplicación">⬇ Instalar app</button>
+    <button class="btn-icono" id="btnAsistente" title="Asistente (IA)">✨</button>
     <button class="btn-icono" id="btnBoveda" title="Bóveda de claves">🔒</button>
     <div class="chip-user">
       <div class="avatar" id="avatarUser">?</div>
@@ -1267,6 +1303,20 @@ tbody tr:hover{background:#FAFAFC}
     <div class="modal-head"><h3 id="modalTitulo">Título</h3><button class="btn-icono" id="modalCerrar">✕</button></div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-pie" id="modalPie"></div>
+  </div>
+</div>
+
+<div id="panelAsistente" aria-label="Asistente">
+  <div class="as-head">
+    <span style="font-size:19px">✨</span>
+    <h3>Asistente</h3>
+    <button class="btn-icono" id="asCerrar" title="Cerrar">✕</button>
+  </div>
+  <div id="asChat"></div>
+  <div class="as-sug" id="asSugerencias"></div>
+  <div class="as-pie">
+    <textarea id="asTexto" rows="1" placeholder="Preguntá algo sobre los clientes, la deuda, el monotributo…"></textarea>
+    <button class="btn" id="asEnviar">Enviar</button>
   </div>
 </div>
 
@@ -2722,14 +2772,23 @@ function abrirLeerConstancia(){
   abrirModal("Cargar un cliente desde su constancia",
     '<div class="aviso info"><span>📄</span><div>Subí la <b>constancia de inscripción</b> en PDF —la de ARCA o la de AGIP— ' +
       "y el sistema saca los datos y abre la ficha con todo cargado, para que la revises antes de guardar.</div></div>" +
-    '<div class="campo"><label>Constancia en PDF</label>' +
-      '<input type="file" id="ctcFile" accept="application/pdf,.pdf"></div>' +
+    '<div class="campo"><label>Constancia: PDF o foto</label>' +
+      '<input type="file" id="ctcFile" accept="application/pdf,.pdf,image/*">' +
+      '<div class="ayuda">Sirve el PDF que descargás del organismo y también una foto o captura. ' +
+        "<b>Leer con IA</b> entiende cualquiera de los dos, incluso un escaneo; <b>Leer el PDF</b> " +
+        "busca el texto adentro del archivo, no usa internet y es instantáneo, pero necesita un PDF con texto.</div></div>" +
     '<div id="ctcResultado"></div>' +
-    '<div class="ayuda">Tiene que ser el PDF que descargás del organismo. Si es una foto o un escaneo, ' +
-      "adentro no hay texto sino una imagen, y no hay nada que leer.</div>",
+    '<div class="seccion-tit" style="margin-top:22px">…o pegá el texto a mano</div>' +
+    '<div class="ayuda" style="margin-bottom:8px">Si el PDF no se deja leer, abrilo, seleccioná todo (Ctrl+A), ' +
+      "copiá (Ctrl+C) y pegá acá abajo. El sistema busca los datos igual. Si al seleccionar no se te marca " +
+      "nada de texto, entonces sí es una imagen y no hay forma de leerlo.</div>" +
+    '<div class="campo"><textarea id="ctcTexto" style="min-height:110px" ' +
+      'placeholder="CONSTANCIA DE INSCRIPCION  CUIT: 20-12345678-9  Apellido y Nombre: …"></textarea></div>',
     [
       { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
-      { texto:"Leer la constancia", accion:leerConstancia }
+      { texto:"Leer lo pegado", clase:"sec", accion:function(){ usarTextoConstancia($("ctcTexto").value, "lo que pegaste"); } },
+      { texto:"Leer el PDF", clase:"sec", accion:leerConstancia },
+      { texto:"✨ Leer con IA", accion:leerConstanciaConIA }
     ]);
 }
 
@@ -2742,60 +2801,131 @@ function leerConstancia(){
   $("ctcResultado").innerHTML = '<div class="aviso info"><span>⏳</span><div>Leyendo el PDF…</div></div>';
 
   textoDePdf(f).then(function(texto){
-    if (_sinTildes(texto).length < 40){
+    var limpio = _sinTildes(texto);
+    if (limpio.length < 40){
+      /* Se dice cuántos caracteres salieron: 0 es una imagen de verdad, 20 es
+         un PDF raro que sí tiene texto y conviene intentar pegándolo. */
       $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
-        "Este PDF no tiene texto adentro: es una imagen escaneada. Bajá la constancia otra vez " +
-        "desde la web del organismo, que la genera con el texto adentro.</div></div>";
+        "De este PDF sólo pude sacar <b>" + limpio.length + " caracteres</b> de texto, así que no hay nada " +
+        "que leer: lo más probable es que sea un escaneo o una foto, o que el PDF guarde el texto como dibujo." +
+        "<div style=\"margin-top:8px\">Probá abrirlo, seleccionar todo con <b>Ctrl+A</b>, copiar con <b>Ctrl+C</b> " +
+        "y pegarlo en el recuadro de abajo. Si al seleccionar no se marca ningún texto, es una imagen y ahí sí " +
+        "hay que bajar la constancia de nuevo desde la web del organismo.</div></div></div>";
       return;
     }
-    var d = parsearConstancia(texto);
-    _constanciaLeida = d;
+    usarTextoConstancia(texto, "el PDF");
+  }).catch(function(e){
+    $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(e.message) +
+      " Probá pegando el texto en el recuadro de abajo.</div></div>";
+  });
+}
 
-    if (!d.cuit && !d.razonSocial){
-      $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
-        "Pude leer el PDF pero no reconocí ni el CUIT ni el nombre, así que no parece una constancia " +
-        "de inscripción. Si lo es, cargá el cliente a mano y avisame para ajustar la lectura.</div></div>";
-      return;
-    }
+/* Lectura con IA: se le manda el archivo a Gemini —PDF o foto— y se le pide
+   el dato ya ordenado. Sirve para lo que las expresiones regulares no pueden:
+   un escaneo, una captura de pantalla, o una constancia con un armado nuevo.
 
-    var quien = d.organismo === "agip" ? "AGIP" : (d.organismo === "arca" ? "ARCA" : "un organismo que no reconocí");
-    var filas = d.encontrados.map(function(c){
-      var v = d[c.clave];
-      if (c.clave === "cuit") v = formatCuit(v);
-      if (c.clave === "actividad" && d.codigoActividad) v = d.codigoActividad + " — " + v;
-      return "<tr><td>" + c.nombre + '</td><td><b>' + esc(v) + "</b></td></tr>";
-    }).join("");
+   El resultado se mete por el mismo camino que el resto, así la pantalla de
+   revisión y el aviso de CUIT repetido son los mismos. Tampoco acá se crea el
+   cliente solo: la IA se equivoca igual que una expresión regular, sólo que de
+   otra manera. */
+function leerConstanciaConIA(){
+  var f = $("ctcFile").files[0];
+  var pegado = $("ctcTexto").value.trim();
+  if (!f && !pegado){ toast("Elegí el archivo o pegá el texto de la constancia", "error"); return; }
 
-    /* Un cliente ya cargado con ese CUIT se avisa antes, no después de que el
-       usuario complete toda la ficha de nuevo. */
-    var yaEsta = null;
-    Object.keys(ESTADO.clientes).forEach(function(id){
-      if (String(ESTADO.clientes[id].cuit || "").replace(/\D/g,"") === d.cuit) yaEsta = id;
-    });
+  $("ctcResultado").innerHTML = '<div class="aviso info"><span>✨</span><div>Leyendo con IA… puede tardar unos segundos.</div></div>';
 
-    $("ctcResultado").innerHTML =
-      '<div class="aviso ok"><span>✓</span><div>Constancia de <b>' + quien + "</b>. Esto es lo que encontré:</div></div>" +
-      '<div class="tabla-wrap"><table><tbody>' + filas + "</tbody></table></div>" +
-      (d.cuitDudoso
-        ? '<div class="aviso warn" style="margin-top:12px"><span>⚠️</span><div>Ese CUIT <b>no pasa el dígito ' +
-          "verificador</b>. Puede ser que lo haya leído mal: revisalo contra la constancia antes de guardar.</div></div>"
-        : "") +
-      (d.faltantes.length
-        ? '<div class="ayuda" style="margin-top:8px">No aparecen en esta constancia: ' +
-          esc(d.faltantes.map(function(c){ return c.nombre; }).join(", ")) + ". Los completás a mano.</div>"
-        : "") +
-      (yaEsta
-        ? '<div class="aviso warn" style="margin-top:12px"><span>⚠️</span><div>Ya tenés un cliente con ese CUIT: <b>' +
-          esc(nombreCliente(yaEsta)) + "</b>. Si seguís, vas a crear uno repetido.</div></div>"
-        : "");
+  var consigna =
+    "Sos un asistente de un estudio contable argentino. Te paso una CONSTANCIA DE INSCRIPCIÓN " +
+    "de ARCA (ex AFIP) o de AGIP (ingresos brutos de la Ciudad de Buenos Aires). " +
+    "Devolvé SOLO un objeto JSON, sin texto alrededor, con estas claves exactas:\n" +
+    '{"organismo":"arca|agip","cuit":"11 dígitos sin guiones","razonSocial":"","actividad":"descripción de la actividad principal",' +
+    '"codigoActividad":"6 dígitos","categoria":"letra A a K del monotributo","nroIIBB":"","regimen":""}\n' +
+    "Reglas: si un dato no está en la constancia, poné cadena vacía. No inventes nada. " +
+    "El CUIT es el del contribuyente, NO el del organismo que emite la constancia. " +
+    "La categoría es la del monotributo, una sola letra." +
+    (pegado ? "\n\nTexto de la constancia:\n" + pegado : "");
 
-    _pintarPieModal([
-      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
-      { texto:"Abrir la ficha con estos datos", accion:function(){ abrirFichaDesdeConstancia(); } }
-    ]);
+  preguntarAGemini(consigna, f, 0).then(function(txt){
+    var d = jsonDeGemini(txt);
+    /* Se normaliza lo que vuelve: la IA a veces manda el CUIT con guiones y la
+       categoría en minúscula. */
+    d.cuit = String(d.cuit || "").replace(/\D/g, "");
+    d.categoria = String(d.categoria || "").toUpperCase().slice(0, 1);
+    if (LETRAS_CAT.indexOf(d.categoria) === -1) d.categoria = "";
+    d.cuitDudoso = !!(d.cuit && !cuitValido(d.cuit));
+
+    var campos = [
+      { clave:"cuit", nombre:"CUIT" }, { clave:"razonSocial", nombre:"Razón social / Nombre" },
+      { clave:"actividad", nombre:"Actividad" }, { clave:"categoria", nombre:"Categoría de monotributo" },
+      { clave:"nroIIBB", nombre:"Nº de Ingresos Brutos" }
+    ];
+    d.encontrados = campos.filter(function(c){ return d[c.clave]; });
+    d.faltantes   = campos.filter(function(c){ return !d[c.clave]; });
+
+    mostrarConstanciaLeida(d, "la IA");
   }).catch(function(e){
     $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(e.message) + "</div></div>";
   });
+}
+
+/* Interpreta el texto venga de donde venga: del PDF o pegado a mano. */
+function usarTextoConstancia(texto, origen){
+  if (_sinTildes(texto).length < 40){
+    $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
+      "Pegá el texto de la constancia en el recuadro: lo que hay es muy corto para buscar algo.</div></div>";
+    return;
+  }
+
+  var d = parsearConstancia(texto);
+  if (!d.cuit && !d.razonSocial){
+    $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
+      "Leí " + origen + " pero no reconocí ni el CUIT ni el nombre, así que no parece una constancia " +
+      "de inscripción. Probá con <b>✨ Leer con IA</b>, que entiende armados que las reglas fijas no.</div></div>";
+    return;
+  }
+  mostrarConstanciaLeida(d, origen);
+}
+
+function mostrarConstanciaLeida(d, origen){
+  _constanciaLeida = d;
+
+  var quien = d.organismo === "agip" ? "AGIP" : (d.organismo === "arca" ? "ARCA" : "un organismo que no reconocí");
+  var filas = d.encontrados.map(function(c){
+    var v = d[c.clave];
+    if (c.clave === "cuit") v = formatCuit(v);
+    if (c.clave === "actividad" && d.codigoActividad) v = d.codigoActividad + " — " + v;
+    return "<tr><td>" + c.nombre + '</td><td><b>' + esc(v) + "</b></td></tr>";
+  }).join("");
+
+  /* Un cliente ya cargado con ese CUIT se avisa antes, no después de que el
+     usuario complete toda la ficha de nuevo. */
+  var yaEsta = null;
+  Object.keys(ESTADO.clientes).forEach(function(id){
+    if (String(ESTADO.clientes[id].cuit || "").replace(/\D/g,"") === d.cuit) yaEsta = id;
+  });
+
+  $("ctcResultado").innerHTML =
+    '<div class="aviso ok"><span>✓</span><div>Constancia de <b>' + quien + "</b>, leída por " + esc(origen) +
+      ". Esto es lo que encontré:</div></div>" +
+    '<div class="tabla-wrap"><table><tbody>' + filas + "</tbody></table></div>" +
+    (d.cuitDudoso
+      ? '<div class="aviso warn" style="margin-top:12px"><span>⚠️</span><div>Ese CUIT <b>no pasa el dígito ' +
+        "verificador</b>. Puede ser que lo haya leído mal: revisalo contra la constancia antes de guardar.</div></div>"
+      : "") +
+    (d.faltantes.length
+      ? '<div class="ayuda" style="margin-top:8px">No aparecen en esta constancia: ' +
+        esc(d.faltantes.map(function(c){ return c.nombre; }).join(", ")) + ". Los completás a mano.</div>"
+      : "") +
+    (yaEsta
+      ? '<div class="aviso warn" style="margin-top:12px"><span>⚠️</span><div>Ya tenés un cliente con ese CUIT: <b>' +
+        esc(nombreCliente(yaEsta)) + "</b>. Si seguís, vas a crear uno repetido.</div></div>"
+      : "");
+
+  _pintarPieModal([
+  { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+  { texto:"Abrir la ficha con estos datos", accion:function(){ abrirFichaDesdeConstancia(); } }
+  ]);
 }
 
 function abrirFichaDesdeConstancia(){
@@ -2813,6 +2943,162 @@ function abrirFichaDesdeConstancia(){
 }
 
 $("btnDesdeConstancia").onclick = abrirLeerConstancia;
+
+/* ==========================================================================
+   ASISTENTE — preguntarle a Gemini sobre los datos del estudio
+
+   La gracia no es tener un chat: es que conteste sobre ESTE estudio. Por eso
+   cada pregunta viaja con un resumen del estado —clientes, deuda, situación
+   frente al monotributo, liquidaciones del mes— armado en el momento.
+
+   Qué se manda y qué no:
+   - Va lo necesario para contestar: nombres, CUIT, categorías, importes.
+   - NO van las claves fiscales. La bóveda está cifrada y la contraseña maestra
+     vive sólo en el navegador de quien la escribió; mandarlas a un tercero
+     sería tirar por la borda todo eso.
+   - Se recorta a los 60 clientes más relevantes: un prompt gigante sale caro,
+     tarda, y Gemini igual lo trunca.
+   ========================================================================== */
+
+var _asHistorial = [];   /* [{ rol:'yo'|'ia', texto }] */
+var _asPensando  = false;
+
+var AS_SUGERENCIAS = [
+  "¿Quiénes deben honorarios y cuánto?",
+  "¿Quién tiene que recategorizarse?",
+  "¿A quién le falta liquidar este mes?",
+  "Resumime cómo viene el año"
+];
+
+/* Resumen del estado, en texto plano. Se arma con los mismos cálculos que usan
+   las pantallas, así el asistente no puede decir un número distinto del que se
+   ve en el cuadro. */
+function _contextoAsistente(){
+  var hoy = periodoHoy();
+  var corte = cortesDisponibles()[0];
+  var lineas = [];
+
+  lineas.push("Fecha de hoy: " + periodoLargo(hoy) + ".");
+  lineas.push("Estudio contable argentino. Liquida monotributo (ARCA), ingresos brutos (ARBA/AGIP) y tasas municipales.");
+
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+
+  /* Se ordena por deuda para que, si hay que recortar, quede lo que importa. */
+  ids.sort(function(a,b){ return deudaCliente(b) - deudaCliente(a); });
+  var recortado = ids.length > 60;
+  ids = ids.slice(0, 60);
+
+  lineas.push("");
+  lineas.push("CLIENTES (" + ids.length + (recortado ? " de " + Object.keys(ESTADO.clientes).length + ", los de mayor deuda" : "") + "):");
+
+  ids.forEach(function(id){
+    var c = ESTADO.clientes[id];
+    var an = corte ? analizar(id, corte.valor) : null;
+    var partes = ["- " + (c.razonSocial || "") + " (CUIT " + formatCuit(c.cuit || "") + ")"];
+    if (c.categoriaActual) partes.push("categoría " + c.categoriaActual);
+    if (an && an.facturado)  partes.push("facturado 12 meses " + pesos(an.facturado));
+    if (an && an.estado === "sube")  partes.push("DEBE RECATEGORIZAR a " + an.categoriaSugerida);
+    if (an && an.estado === "baja")  partes.push("puede bajar a " + an.categoriaSugerida);
+    if (an && an.estado === "excluido") partes.push("EXCLUIDO: se pasó del tope");
+    if (c.honorarioMensual) partes.push("honorario " + pesos(c.honorarioMensual) + " por mes");
+    var d = deudaCliente(id);
+    if (d > 0.005) partes.push("DEBE " + pesos(d) + " de honorarios");
+    var imp = [];
+    if (c.impuestos){
+      if (c.impuestos.arca) imp.push("ARCA");
+      if (c.impuestos.arba) imp.push(exentoDe(c, "arba") ? "ARBA (exento)" : "ARBA");
+      if (c.impuestos.agip) imp.push(exentoDe(c, "agip") ? "AGIP (exento)" : "AGIP");
+      if (c.impuestos.municipal) imp.push("tasa municipal");
+    }
+    if (imp.length) partes.push("liquida " + imp.join(", "));
+    var liq = liqDe(id, hoy);
+    if (!totalLiq(c, liq)) partes.push("SIN LIQUIDAR " + periodoLargo(hoy));
+    lineas.push(partes.join("; ") + ".");
+  });
+
+  var socios = sociosOrdenados(true);
+  if (socios.length){
+    lineas.push("");
+    lineas.push("SOCIOS: " + socios.map(function(sid){
+      return ESTADO.socios[sid].nombre + " " + (Number(ESTADO.socios[sid].porcentaje) || 0) + "%";
+    }).join(", ") + ".");
+  }
+
+  return lineas.join("\n");
+}
+
+function abrirAsistente(){
+  $("panelAsistente").classList.add("abierto");
+  if (!_asHistorial.length){
+    _asPintarChat([{ rol:"ia", texto:
+      "Hola. Puedo contestarte sobre los clientes que tenés cargados: quién debe, quién tiene que " +
+      "recategorizarse, a quién le falta liquidar. También sobre monotributo e ingresos brutos en general.\n\n" +
+      "Ojo: contesto con lo que hay en el sistema. Si un dato no está cargado, no lo sé." }]);
+  }
+  setTimeout(function(){ $("asTexto").focus(); }, 300);
+}
+
+function cerrarAsistente(){ $("panelAsistente").classList.remove("abierto"); }
+
+function _asPintarChat(extra){
+  var cont = $("asChat");
+  var todos = _asHistorial.concat(extra || []);
+  cont.innerHTML = todos.map(function(m){
+    return '<div class="as-msg ' + (m.rol === "yo" ? "yo" : (m.rol === "error" ? "error" : "ia")) + '">' +
+      esc(m.texto) + "</div>";
+  }).join("") + (_asPensando ? '<div class="as-msg ia">Pensando…</div>' : "");
+  cont.scrollTop = cont.scrollHeight;
+
+  /* Las sugerencias sólo al principio: después estorban. */
+  $("asSugerencias").innerHTML = _asHistorial.length ? "" : AS_SUGERENCIAS.map(function(q){
+    return '<button type="button" onclick="asPreguntar(' + JSON.stringify(q).replace(/"/g, "&quot;") + ')">' + esc(q) + "</button>";
+  }).join("");
+}
+
+function asPreguntar(texto){
+  texto = String(texto || "").trim();
+  if (!texto || _asPensando) return;
+
+  _asHistorial.push({ rol:"yo", texto: texto });
+  _asPensando = true;
+  $("asTexto").value = "";
+  _asPintarChat();
+
+  /* Se manda la conversación entera para que se pueda repreguntar sin repetir
+     el contexto, pero sólo las últimas seis vueltas: el resumen del estudio ya
+     ocupa bastante. */
+  var charla = _asHistorial.slice(-12).map(function(m){
+    return (m.rol === "yo" ? "CONTADOR: " : "ASISTENTE: ") + m.texto;
+  }).join("\n");
+
+  var consigna =
+    "Sos el asistente de un estudio contable argentino. Contestá en español rioplatense, " +
+    "directo y breve, sin saludos de más. Usá SOLO los datos que te paso: si algo no está, " +
+    "decí que no está cargado en el sistema en vez de inventarlo. Los importes van en pesos.\n\n" +
+    "Cuando te pregunten por normativa (monotributo, ingresos brutos), podés explicar en general, " +
+    "pero aclarando que hay que verificarlo contra la norma vigente.\n\n" +
+    "=== DATOS DEL ESTUDIO ===\n" + _contextoAsistente() +
+    "\n\n=== CONVERSACIÓN ===\n" + charla + "\nASISTENTE:";
+
+  preguntarAGemini(consigna, null, 0.4).then(function(txt){
+    _asPensando = false;
+    _asHistorial.push({ rol:"ia", texto: txt });
+    _asPintarChat();
+  }).catch(function(e){
+    _asPensando = false;
+    _asHistorial.push({ rol:"error", texto: "No pude contestar: " + e.message });
+    _asPintarChat();
+  });
+}
+
+$("btnAsistente").onclick = abrirAsistente;
+$("asCerrar").onclick     = cerrarAsistente;
+$("asEnviar").onclick     = function(){ asPreguntar($("asTexto").value); };
+$("asTexto").onkeydown = function(e){
+  /* Enter manda, Shift+Enter hace renglón: es lo que espera cualquiera que
+     haya usado un chat. */
+  if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); asPreguntar(this.value); }
+};
 
 /* Ficha con el detalle mes a mes y el análisis de los dos cortes */
 function verFichaCliente(id){
@@ -3240,6 +3526,53 @@ function pedirAlBackend(ruta){
         return datos;
       });
     });
+}
+
+function postAlBackend(ruta, cuerpo){
+  var b = backendConfig();
+  if (!b.url) return Promise.reject(new Error("Falta configurar la URL del backend en Configuración."));
+  var headers = { "Content-Type": "application/json" };
+  if (b.token) headers["X-App-Token"] = b.token;
+  return fetch(b.url + ruta, { method:"POST", headers: headers, body: JSON.stringify(cuerpo) })
+    .then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(datos){
+        if (!r.ok) throw new Error((datos.detalle || datos.error || ("El backend respondió " + r.status)));
+        return datos;
+      });
+    });
+}
+
+/* Le pide algo a Gemini a través del backend, que es el único que tiene la
+   clave. `archivo` es opcional: un File del navegador (PDF o imagen). */
+function preguntarAGemini(prompt, archivo, temperatura){
+  var envio = { prompt: prompt };
+  if (temperatura !== undefined) envio.temperatura = temperatura;
+  if (!archivo) return postAlBackend("/gemini", envio).then(function(r){ return r.texto; });
+
+  return new Promise(function(resolve, reject){
+    var fr = new FileReader();
+    fr.onload = function(e){
+      /* El data: URL viene como "data:<mime>;base64,<datos>"; Gemini quiere
+         el mime y los datos por separado. */
+      var s = String(e.target.result);
+      var coma = s.indexOf(",");
+      envio.archivo = { mime: (archivo.type || "application/octet-stream"), datos: s.slice(coma + 1) };
+      resolve(envio);
+    };
+    fr.onerror = function(){ reject(new Error("No pude leer el archivo")); };
+    fr.readAsDataURL(archivo);
+  }).then(function(envio){
+    return postAlBackend("/gemini", envio);
+  }).then(function(r){ return r.texto; });
+}
+
+/* Gemini devuelve el JSON casi siempre envuelto en ```json … ```, y a veces con
+   una frase antes. Se busca el primer objeto y se corta ahí. */
+function jsonDeGemini(texto){
+  var t = String(texto || "").replace(/```json/gi, "```").split("```").join("\n");
+  var ini = t.indexOf("{"), fin = t.lastIndexOf("}");
+  if (ini === -1 || fin <= ini) throw new Error("La IA no devolvió datos en el formato esperado");
+  return JSON.parse(t.slice(ini, fin + 1));
 }
 
 /* Notas de crédito: el backend las manda con importe positivo y las resta solo
@@ -4947,7 +5280,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v30";
+var VERSION_APP = "v31";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
