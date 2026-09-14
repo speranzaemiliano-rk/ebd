@@ -1711,6 +1711,9 @@ function cuotaActual(cli, fechaISO){
 /* Si se estaba cerrando uno y se abre otro enseguida —pasa cada vez que un
    modal lleva a otro—, hay que cancelar el cierre pendiente: si no, el
    temporizador del anterior apaga el que se acaba de abrir. */
+/* Motivo por el que no se pudo leer socios, o "" si se leyó bien. */
+var _sociosBloqueado = "";
+
 var _cierreModalPendiente = null;
 
 /* ---------- Cambios sin guardar ----------
@@ -1778,6 +1781,13 @@ function abrirModal(titulo, html, botones, ancho){
    sirve para lo que ya está y para lo que se agregue después. */
 $("modalBody").addEventListener("input",  function(){ _modalSucio = true; });
 $("modalBody").addEventListener("change", function(){ _modalSucio = true; });
+
+/* Vuelve a tomar la foto: para cuando el propio sistema llena campos después
+   de abrir el modal y eso no tiene que contar como cambio del usuario. */
+function marcarModalLimpio(){
+  _modalSucio = false;
+  _modalFoto  = _fotoModal();
+}
 
 function hayCambiosSinGuardar(){
   if (!$("modalFondo").classList.contains("abierto")) return false;
@@ -1940,7 +1950,15 @@ function cargarTodo(){
     ref("caja").once("value"),
     ref("proveedores").once("value"),
     ref("cuentas").once("value"),
-    ref("socios").once("value")
+    /* Socios va aparte y tolerando el error a propósito. Es la rama más nueva
+       de las reglas y, si todavía no se publicó en la consola, Firebase
+       responde permission_denied: sin este catch ese rechazo voltea el
+       Promise.all entero y el sistema no carga NADA. Una pantalla que falta
+       no puede dejar sin datos a las otras diez. */
+    ref("socios").once("value").catch(function(e){
+      _sociosBloqueado = e && e.message ? e.message : "sin permiso";
+      return { val: function(){ return null; } };
+    })
   ]).then(function(s){
     ESTADO.clientes      = s[0].val() || {};
     ESTADO.totales       = s[1].val() || {};
@@ -2164,6 +2182,15 @@ function badgeEstado(an){
 }
 
 /* ---------- 12. CLIENTES ---------- */
+/* La etiqueta del impuesto es además el acceso al organismo: se toca y el
+   sistema copia las claves de la bóveda y abre el sitio. Es un <button> y no
+   un <span> para que funcione con el teclado y se lea como lo que es. */
+function etiquetaImpuesto(clienteId, clave, claseColor, texto){
+  return '<button class="badge ' + claseColor + '" style="cursor:pointer;border:none"' +
+    ' title="Entrar a ' + esc(texto) + ' con las claves de este cliente"' +
+    ' onclick="accesoRapido(\'' + clienteId + "','" + clave + '\')">' + esc(texto) + " ↗</button>";
+}
+
 function renderClientes(){
   var q    = ($("filtroCliente").value || "").toLowerCase().trim();
   var imp  = $("filtroImpuesto").value;
@@ -2200,14 +2227,14 @@ function renderClientes(){
     var an = analizar(id, corte ? corte.valor : periodoHoy());
     var tags = [];
     if (c.impuestos){
-      if (c.impuestos.arca)      tags.push('<span class="badge b-azul">ARCA</span>');
+      if (c.impuestos.arca)      tags.push(etiquetaImpuesto(id, "arca", "b-azul", "ARCA"));
       if (c.impuestos.arba)      tags.push(exentoDe(c, "arba")
         ? '<span class="badge b-gris" title="Exento">ARBA exento</span>'
-        : '<span class="badge b-viol">ARBA</span>');
+        : etiquetaImpuesto(id, "arba", "b-viol", "ARBA"));
       if (c.impuestos.agip)      tags.push(exentoDe(c, "agip")
         ? '<span class="badge b-gris" title="Exento">AGIP exento</span>'
-        : '<span class="badge b-amar">AGIP</span>');
-      if (c.impuestos.municipal) tags.push('<span class="badge b-gris">' + esc(c.municipio || "Municipal") + "</span>");
+        : etiquetaImpuesto(id, "agip", "b-amar", "AGIP"));
+      if (c.impuestos.municipal) tags.push(etiquetaImpuesto(id, "municipal", "b-gris", c.municipio || "Municipal"));
     }
     var actTxt = c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios");
 
@@ -2361,7 +2388,77 @@ function formCliente(c){
     '<div class="campo"><label>Cuenta donde ingresa</label>' + selectCuentas("fcHonCuenta", c.honorarioCuenta) + "</div>" +
   "</div>" +
 
+  '<div class="seccion-tit">Claves de acceso a los organismos</div>' +
+  (ESTADO.claveMaestra
+    ? '<div class="aviso info"><span>🔒</span><div>Se guardan <b>cifradas</b> en la bóveda, junto con el resto. ' +
+        "El usuario es el CUIT salvo que pongas otro, así no hay que cargarlo dos veces. " +
+        "Dejá la clave vacía para no guardar nada de ese organismo.</div></div>" +
+      ORGANISMOS.map(function(o){
+        return '<div class="grid g2">' +
+          '<div class="campo"><label>' + esc(o.nombre) + ' — clave</label>' +
+            '<input type="password" id="fcCred_' + o.clave + '_p" value=""></div>' +
+          '<div class="campo"><label>Usuario, si no es el CUIT</label>' +
+            '<input type="text" id="fcCred_' + o.clave + '_u" value="" placeholder="se usa el CUIT"></div>' +
+        "</div>";
+      }).join("")
+    : '<div class="aviso warn"><span>🔒</span><div>La <b>bóveda está cerrada</b>, así que acá no se pueden cargar claves: ' +
+      'sin la contraseña maestra no hay con qué cifrarlas. Abrila desde el candado 🔒 de arriba y volvé a entrar a esta ficha.</div></div>') +
+
   '<label class="check"><input type="checkbox" id="fcActivo"' + (c.activo !== false ? " checked" : "") + "> Cliente activo</label>";
+}
+
+/* Las claves guardadas se descifran después de abrir el modal, porque
+   descifrar es asincrónico y el formulario se arma de una. Al terminar hay que
+   volver a sacar la foto del formulario: si no, esos valores puestos por el
+   sistema cuentan como "cambios sin guardar" y preguntaría al cerrar sin que
+   el usuario haya tocado nada. */
+function cargarClavesEnFicha(clienteId){
+  if (!ESTADO.claveMaestra || !clienteId){ marcarModalLimpio(); return; }
+  ref("credenciales/" + clienteId).once("value").then(function(s){
+    var cred = s.val() || {};
+    return Promise.all(ORGANISMOS.map(function(o){
+      var c = cred[o.clave];
+      if (!c) return Promise.resolve({ clave:o.clave, usuario:"", pass:"" });
+      return Promise.all([
+        c.usuario ? descifrar(ESTADO.claveMaestra, c.usuario) : Promise.resolve(""),
+        c.pass    ? descifrar(ESTADO.claveMaestra, c.pass)    : Promise.resolve("")
+      ]).then(function(r){ return { clave:o.clave, usuario:r[0], pass:r[1] }; });
+    }));
+  }).then(function(vals){
+    var cuit = (ESTADO.clientes[clienteId] || {}).cuit || "";
+    vals.forEach(function(v){
+      var u = $("fcCred_" + v.clave + "_u"), p = $("fcCred_" + v.clave + "_p");
+      if (!u || !p) return;
+      p.value = v.pass;
+      /* Si el usuario guardado es el CUIT, se deja vacío: el campo ya dice
+         que por defecto se usa el CUIT, y verlo repetido confunde. */
+      u.value = (v.usuario && v.usuario.replace(/\D/g,"") !== String(cuit).replace(/\D/g,"")) ? v.usuario : "";
+    });
+    marcarModalLimpio();
+  }).catch(function(){
+    toast("No pude descifrar las claves guardadas: ¿la contraseña maestra es la correcta?", "error");
+    marcarModalLimpio();
+  });
+}
+
+/* Guarda en la bóveda lo cargado en la ficha. Sólo corre si la bóveda estaba
+   abierta cuando se armó el formulario; si no, los campos no existen y las
+   claves que ya estuvieran guardadas no se tocan. */
+function guardarClavesDeFicha(clienteId, cuit){
+  if (!ESTADO.claveMaestra || !$("fcCred_arca_p")) return Promise.resolve();
+  return Promise.all(ORGANISMOS.map(function(o){
+    var p = $("fcCred_" + o.clave + "_p").value;
+    var u = $("fcCred_" + o.clave + "_u").value.trim() || cuit;
+    if (!p) return Promise.resolve({ clave:o.clave, valor:null });
+    return Promise.all([ cifrar(ESTADO.claveMaestra, u), cifrar(ESTADO.claveMaestra, p) ])
+      .then(function(r){
+        return { clave:o.clave, valor:{ usuario:r[0], pass:r[1], actualizado:new Date().toISOString() } };
+      });
+  })).then(function(vals){
+    var obj = {};
+    vals.forEach(function(v){ obj[v.clave] = v.valor; });
+    return ref("credenciales/" + clienteId).set(obj);
+  });
 }
 
 function abrirFormCliente(id){
@@ -2377,6 +2474,7 @@ function abrirFormCliente(id){
     var v = this.value.replace(/\D/g,"");
     if (v.length === 11) this.value = formatCuit(v);
   };
+  cargarClavesEnFicha(id);
 }
 function editarCliente(id){ abrirFormCliente(id); }
 
@@ -2448,6 +2546,12 @@ function guardarFormCliente(id){
   }
   p.then(function(){
     ESTADO.clientes[id] = Object.assign(ESTADO.clientes[id] || {}, datos);
+    /* Las claves van después: si fallaran, el cliente ya quedó guardado y se
+       avisa sólo por las claves, en vez de perder toda la carga. */
+    return guardarClavesDeFicha(id, cuit).catch(function(e){
+      toast("El cliente se guardó, pero las claves no: " + e.message, "error");
+    });
+  }).then(function(){
     cerrarModal();
     toast("Cliente guardado", "ok");
     renderClientes(); renderHome();
@@ -4342,7 +4446,8 @@ function editarCredenciales(clienteId){
         var v = mapa[o.clave];
         return '<div class="seccion-tit">' + esc(o.nombre) + "</div>" +
           '<div class="grid g2">' +
-            '<div class="campo"><label>Usuario / CUIT</label><input type="text" id="cr_' + o.clave + '_u" value="' + esc(v.usuario) + '"></div>' +
+            '<div class="campo"><label>Usuario / CUIT</label><input type="text" id="cr_' + o.clave + '_u" value="' + esc(v.usuario) +
+              '" placeholder="' + esc(formatCuit(ESTADO.clientes[clienteId].cuit || "")) + '"></div>' +
             '<div class="campo"><label>Clave</label><input type="password" id="cr_' + o.clave + '_p" value="' + esc(v.pass) + '"></div>' +
           "</div>";
       }).join("");
@@ -4358,9 +4463,10 @@ function editarCredenciales(clienteId){
 }
 
 function guardarCredenciales(clienteId){
+  var cuitCli = (ESTADO.clientes[clienteId] || {}).cuit || "";
   var tareas = ORGANISMOS.map(function(o){
-    var u = $("cr_" + o.clave + "_u").value.trim();
     var p = $("cr_" + o.clave + "_p").value;
+    var u = $("cr_" + o.clave + "_u").value.trim() || (p ? cuitCli : "");
     if (!u && !p) return Promise.resolve({ clave:o.clave, valor:null });
     return Promise.all([
       u ? cifrar(ESTADO.claveMaestra, u) : Promise.resolve(null),
@@ -4552,7 +4658,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v23";
+var VERSION_APP = "v25";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 if ("serviceWorker" in navigator && location.protocol !== "file:"){
@@ -5405,7 +5511,27 @@ function clientesDelReparto(){
   return Object.keys(set).sort(function(a,b){ return nombreCliente(a).localeCompare(nombreCliente(b)); });
 }
 
+var REGLA_SOCIOS = '"socios": {\n' +
+  '  ".read": "auth != null",\n' +
+  '  ".write": "auth != null && (auth.token.email === \'speranza.emiliano@gmail.com\' || root.child(\'estudioContable/usuarios/\' + auth.uid + \'/rol\').val() === \'admin\')"\n' +
+  "}";
+
 function renderSocios(){
+  if (_sociosBloqueado){
+    $("tablaSocios").innerHTML =
+      '<div class="aviso bad"><span>⚠️</span><div><b>Falta publicar la regla de la rama <code>socios</code></b> ' +
+        "en Firebase. El archivo del repositorio no se aplica solo: hay que pegarlo en la consola.</div></div>" +
+      '<div class="ayuda" style="margin-bottom:8px">Firebase → Realtime Database → <b>Reglas</b>, pegar esto dentro de ' +
+        "<code>estudioContable</code>, junto a las otras ramas, y <b>Publicar</b>:</div>" +
+      '<textarea readonly style="width:100%;min-height:120px;font-family:\'SF Mono\',SFMono-Regular,ui-monospace,Menlo,Consolas,monospace;' +
+        'font-size:12.5px;padding:12px 14px;border:1px solid var(--borde);border-radius:var(--r2)">' + esc(REGLA_SOCIOS) + "</textarea>" +
+      '<div class="ayuda" style="margin-top:8px">Mientras tanto el resto del sistema funciona normal. ' +
+        "Lo que respondió Firebase: <i>" + esc(_sociosBloqueado) + "</i></div>";
+    $("tablaRepartos").innerHTML = "";
+    ["kpiSocios","kpiSocPct","kpiSocSin","kpiSocCobrado"].forEach(function(k){ $(k).textContent = "—"; });
+    return;
+  }
+
   var sel = $("socAnio");
   if (!sel.options.length){
     var hoy = new Date().getFullYear(), out = "";
