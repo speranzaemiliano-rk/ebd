@@ -2771,7 +2771,11 @@ function textoDePdf(archivo){
     return Promise.all(paginas.map(function(n){
       return pdf.getPage(n).then(function(pg){ return pg.getTextContent(); })
         .then(function(tc){ return tc.items.map(function(it){ return it.str; }).join(" "); });
-    })).then(function(partes){ return partes.join("\n"); });
+    })).then(function(partes){
+      /* Se devuelve también la cantidad de páginas: sirve para distinguir
+         "no pude abrir el PDF" de "lo abrí bien y adentro no hay texto". */
+      return { texto: partes.join("\n"), paginas: pdf.numPages };
+    });
   });
 }
 
@@ -2904,17 +2908,18 @@ function leerConstancia(){
 
   $("ctcResultado").innerHTML = '<div class="aviso info"><span>⏳</span><div>Leyendo el PDF…</div></div>';
 
-  textoDePdf(f).then(function(texto){
-    var limpio = _sinTildes(texto);
+  textoDePdf(f).then(function(r){
+    var texto = r.texto, limpio = _sinTildes(r.texto);
     if (limpio.length < 40){
       /* Se dice cuántos caracteres salieron: 0 es una imagen de verdad, 20 es
          un PDF raro que sí tiene texto y conviene intentar pegándolo. */
       $("ctcResultado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
-        "De este PDF sólo pude sacar <b>" + limpio.length + " caracteres</b> de texto, así que no hay nada " +
-        "que leer: lo más probable es que sea un escaneo o una foto, o que el PDF guarde el texto como dibujo." +
-        "<div style=\"margin-top:8px\">Probá abrirlo, seleccionar todo con <b>Ctrl+A</b>, copiar con <b>Ctrl+C</b> " +
-        "y pegarlo en el recuadro de abajo. Si al seleccionar no se marca ningún texto, es una imagen y ahí sí " +
-        "hay que bajar la constancia de nuevo desde la web del organismo.</div></div></div>";
+        "Abrí el PDF bien (" + r.paginas + (r.paginas === 1 ? " página" : " páginas") + ") pero adentro sólo hay <b>" +
+        limpio.length + " caracteres</b> de texto. Es una <b>constancia escaneada</b>: lo que ves es un dibujo, " +
+        "no letras, y por eso no hay nada que leer por este camino." +
+        "<div style=\"margin-top:8px\">Para este archivo, usá <b>✨ Leer con IA</b>, que sí entiende imágenes. " +
+        "También podés abrirlo, seleccionar todo con <b>Ctrl+A</b> y pegarlo abajo: si al seleccionar no se te " +
+        "marca ningún texto, queda confirmado que es una imagen.</div></div></div>";
       return;
     }
     usarTextoConstancia(texto, "el PDF");
@@ -3932,6 +3937,21 @@ $("btnProbarBackend").onclick = function(){
           "<b>" + (listo ? "El backend responde y tiene el certificado cargado." : "El backend responde, pero todavía no puede consultar ARCA.") + "</b>" +
           "<br>Ambiente: <b>" + esc(d.ambiente || "?") + "</b>" +
           (lista ? '<ul style="margin:6px 0 0 18px">' + lista + "</ul>" : "") +
+          "</div></div>" +
+          /* La IA se informa aparte y con los pasos adentro: es lo que más se
+             consulta y mandar a buscar la instrucción a otro lado no sirve. */
+          '<div class="aviso ' + (d.geminiConfigurado ? "ok" : "bad") + '" style="margin-top:10px"><span>' +
+            (d.geminiConfigurado ? "✨" : "⚠️") + "</span><div><b>Asistente y lectura con IA: " +
+            (d.geminiConfigurado
+              ? "andando</b> (modelo " + esc(d.geminiModelo || "?") + ")."
+              : "no funcionan todavía.</b> Falta la variable <span class=mono>GEMINI_API_KEY</span> " +
+                "en el backend. En Railway: entrá al proyecto, hacé clic en el servicio, pestaña " +
+                "<b>Variables</b>, <b>+ New Variable</b>, nombre <span class=mono>GEMINI_API_KEY</span> " +
+                "y de valor la clave que sacás de aistudio.google.com/apikey." +
+                "<br><br>Si ya la cargaste y sigue diciendo esto, revisá tres cosas: que el nombre esté " +
+                "escrito igual (sin espacios ni otra variante), que la hayas puesto en el <b>mismo servicio</b> " +
+                "que corre este backend, y que Railway haya terminado de redesplegar (en Deployments tiene que " +
+                "figurar uno posterior al cambio).") +
           "</div></div>";
       });
     })
@@ -5388,7 +5408,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v33";
+var VERSION_APP = "v34";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
