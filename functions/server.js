@@ -532,7 +532,15 @@ app.get('/', (req, res) => res.json({
   listo: {
     arca:   !!(leerPem(process.env.AFIP_CERT) && leerPem(process.env.AFIP_KEY)),
     gemini: !!GEMINI_KEY
-  }
+  },
+  /* Los NOMBRES de las variables que contienen "GEMINI", nunca los valores.
+     Es la única forma de distinguir los dos motivos por los que la clave puede
+     no andar, que se arreglan distinto:
+       - la lista viene vacía  -> la variable no llega al contenedor
+       - aparece el nombre     -> llega, pero con el valor vacío (típico de una
+                                  referencia ${{...}} que no resuelve)
+     Un nombre de variable no es un secreto; el valor sí, y no se expone. */
+  vars: Object.keys(process.env).filter(function(k){ return /GEMINI/i.test(k); })
 }));
 
 /* Qué hay configurado y qué falta. Nunca devuelve el valor de nada secreto:
