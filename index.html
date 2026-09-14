@@ -551,6 +551,39 @@ tbody tr:hover{background:#FAFAFC}
 }
 #barraVersion button:active{transform:scale(.97)}
 
+/* ---------- BOTÓN FLOTANTE DEL ASISTENTE ----------
+   Va con el logo del estudio y no con un ícono genérico: el asistente contesta
+   sobre ESTOS clientes, no es un chat cualquiera pegado encima.
+   Queda sobre el fondo oscuro de la marca para que el logo blanco se lea, y se
+   esconde cuando el panel está abierto: si no, tapa lo que uno vino a leer. */
+#fabAsistente{
+  position:fixed;right:22px;bottom:22px;z-index:8400;
+  width:58px;height:58px;border-radius:50%;
+  background:linear-gradient(160deg,#0A3D96,#05215C);
+  box-shadow:0 6px 22px rgba(5,33,92,.38), 0 1px 3px rgba(0,0,0,.2);
+  display:none;align-items:center;justify-content:center;cursor:pointer;
+  transition:transform .16s cubic-bezier(.2,.8,.2,1), box-shadow .16s, opacity .2s;
+}
+/* El botón vive fuera de #app —tiene que quedar por encima de todo—, así que
+   se prende desde el mismo lugar que muestra la app, no con un selector
+   descendiente que nunca iba a matchear. */
+#fabAsistente.ver{display:flex}
+#fabAsistente:hover{transform:scale(1.06);box-shadow:0 10px 30px rgba(5,33,92,.45)}
+#fabAsistente:active{transform:scale(.95)}
+#fabAsistente svg{width:40px;height:40px;display:block}
+#fabAsistente.oculto{opacity:0;pointer-events:none;transform:scale(.8)}
+/* La chispa marca que atrás hay una IA, sin tapar la marca. */
+#fabAsistente .chispa{
+  position:absolute;top:-3px;right:-3px;width:22px;height:22px;border-radius:50%;
+  background:var(--azul);color:#fff;font-size:11px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
+}
+@media(max-width:640px){
+  #fabAsistente{width:52px;height:52px;right:16px;bottom:16px}
+  #fabAsistente svg{width:35px;height:35px}
+}
+
 /* ---------- ASISTENTE ----------
    Panel lateral, no un modal: el asistente se consulta MIENTRAS se mira una
    pantalla, y un modal taparía justo lo que se está preguntando. */
@@ -891,7 +924,6 @@ tbody tr:hover{background:#FAFAFC}
           style="font-size:11.5px;color:var(--gris2);letter-spacing:-.01em">&nbsp;</span>
     <div class="sep"></div>
     <button class="btn sec chico oculto" id="btnInstalar" title="Instalar como aplicación">⬇ Instalar app</button>
-    <button class="btn-icono" id="btnAsistente" title="Asistente (IA)">✨</button>
     <button class="btn-icono" id="btnBoveda" title="Bóveda de claves">🔒</button>
     <div class="chip-user">
       <div class="avatar" id="avatarUser">?</div>
@@ -1329,6 +1361,44 @@ tbody tr:hover{background:#FAFAFC}
   <div style="flex:1;min-width:200px">Hay una <b>versión nueva</b> del sistema. La que tenés abierta es vieja y puede no tener los últimos arreglos.</div>
   <button type="button" id="btnActualizarYa">Actualizar ahora</button>
 </div>
+
+<button id="fabAsistente" type="button" title="Asistente de EBD" aria-label="Abrir el asistente">
+  <svg viewBox="10 28 100 64" role="img" aria-hidden="true">
+    <defs>
+      <linearGradient id="caraF" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CBE0FF"/>
+      </linearGradient>
+      <linearGradient id="cantoF" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#0A3D96"/><stop offset="1" stop-color="#05215C"/>
+      </linearGradient>
+      <linearGradient id="aroF" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#FFFFFF" stop-opacity=".18"/>
+        <stop offset=".32" stop-color="#FFFFFF" stop-opacity="1"/>
+        <stop offset=".70" stop-color="#B4D5FF" stop-opacity=".92"/>
+        <stop offset="1" stop-color="#FFFFFF" stop-opacity=".18"/>
+      </linearGradient>
+      <clipPath id="delanteF"><rect x="0" y="63" width="120" height="57"/></clipPath>
+    </defs>
+    <g transform="rotate(-24 60 60)">
+      <ellipse cx="60" cy="60" rx="50" ry="21.5" fill="none"
+               stroke="url(#aroF)" stroke-width="3.2" opacity=".55"/>
+    </g>
+    <g font-family="-apple-system, BlinkMacSystemFont, Inter, Helvetica Neue, Arial, sans-serif"
+       font-size="38" font-weight="800" letter-spacing="-1.4" text-anchor="middle">
+      <g fill="url(#cantoF)">
+        <text x="60.4" y="72.4">EBD</text><text x="60.8" y="72.8">EBD</text>
+        <text x="61.2" y="73.2">EBD</text><text x="61.6" y="73.6">EBD</text>
+        <text x="62.0" y="74.0">EBD</text><text x="62.4" y="74.4">EBD</text>
+      </g>
+      <text x="60" y="72" fill="url(#caraF)">EBD</text>
+    </g>
+    <g transform="rotate(-24 60 60)" clip-path="url(#delanteF)">
+      <ellipse cx="60" cy="60" rx="50" ry="21.5" fill="none"
+               stroke="url(#aroF)" stroke-width="3.2"/>
+    </g>
+  </svg>
+  <span class="chispa">✨</span>
+</button>
 
 <div id="panelAsistente" aria-label="Asistente">
   <div class="as-head">
@@ -1951,6 +2021,7 @@ auth.onAuthStateChanged(function(u){
        usa grid de dos columnas y en celular pasa a una sola. */
     $("pantallaLogin").style.display = "";
     $("app").classList.remove("visible");
+    $("fabAsistente").classList.remove("ver");
     $("btnLogin").disabled = false;
     $("btnLogin").textContent = "Ingresar";
     return;
@@ -1986,6 +2057,7 @@ auth.onAuthStateChanged(function(u){
     $("avatarUser").textContent = nom.charAt(0).toUpperCase();
     $("pantallaLogin").style.display = "none";
     $("app").classList.add("visible");
+    $("fabAsistente").classList.add("ver");
 
     aplicarPermisos();
 
@@ -2010,6 +2082,7 @@ auth.onAuthStateChanged(function(u){
         : "<b>No se pudo leer la base.</b><br>" + esc(msg)) + "</div></div>";
     $("pantallaLogin").style.display = "";
     $("app").classList.remove("visible");
+    $("fabAsistente").classList.remove("ver");
     $("btnLogin").disabled = false;
     $("btnLogin").textContent = "Ingresar";
     auth.signOut();
@@ -2102,7 +2175,14 @@ Array.prototype.forEach.call($("navTabs").children, function(b){
 });
 $("modalCerrar").onclick = cerrarModalPedido;
 $("modalFondo").onclick = function(e){ if (e.target === this) cerrarModalPedido(); };
-document.addEventListener("keydown", function(e){ if (e.key === "Escape") cerrarModalPedido(); });
+document.addEventListener("keydown", function(e){
+  if (e.key !== "Escape") return;
+  /* Si el asistente está abierto, Escape lo cierra a él: es lo que está
+     adelante y lo que el usuario tiene en la cabeza. */
+  if ($("panelAsistente").classList.contains("abierto") &&
+      !$("modalFondo").classList.contains("abierto")){ cerrarAsistente(); return; }
+  cerrarModalPedido();
+});
 
 /* Última red: recargar o cerrar la pestaña con un formulario a medio cargar.
    El navegador muestra su propio cartel; el texto no lo elige la página. */
@@ -3053,6 +3133,7 @@ function _contextoAsistente(){
 
 function abrirAsistente(){
   $("panelAsistente").classList.add("abierto");
+  $("fabAsistente").classList.add("oculto");
   if (!_asHistorial.length){
     _asPintarChat([{ rol:"ia", texto:
       "Hola. Puedo contestarte sobre los clientes que tenés cargados: quién debe, quién tiene que " +
@@ -3062,7 +3143,10 @@ function abrirAsistente(){
   setTimeout(function(){ $("asTexto").focus(); }, 300);
 }
 
-function cerrarAsistente(){ $("panelAsistente").classList.remove("abierto"); }
+function cerrarAsistente(){
+  $("panelAsistente").classList.remove("abierto");
+  $("fabAsistente").classList.remove("oculto");
+}
 
 function _asPintarChat(extra){
   var cont = $("asChat");
@@ -3115,8 +3199,8 @@ function asPreguntar(texto){
   });
 }
 
-$("btnAsistente").onclick = abrirAsistente;
-$("asCerrar").onclick     = cerrarAsistente;
+$("fabAsistente").onclick = abrirAsistente;
+$("asCerrar").onclick      = cerrarAsistente;
 $("asEnviar").onclick     = function(){ asPreguntar($("asTexto").value); };
 $("asTexto").onkeydown = function(e){
   /* Enter manda, Shift+Enter hace renglón: es lo que espera cualquiera que
@@ -5304,7 +5388,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v32";
+var VERSION_APP = "v33";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
