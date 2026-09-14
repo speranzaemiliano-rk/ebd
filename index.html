@@ -2141,8 +2141,12 @@ function renderClientes(){
     var tags = [];
     if (c.impuestos){
       if (c.impuestos.arca)      tags.push('<span class="badge b-azul">ARCA</span>');
-      if (c.impuestos.arba)      tags.push('<span class="badge b-viol">ARBA</span>');
-      if (c.impuestos.agip)      tags.push('<span class="badge b-amar">AGIP</span>');
+      if (c.impuestos.arba)      tags.push(exentoDe(c, "arba")
+        ? '<span class="badge b-gris" title="Exento">ARBA exento</span>'
+        : '<span class="badge b-viol">ARBA</span>');
+      if (c.impuestos.agip)      tags.push(exentoDe(c, "agip")
+        ? '<span class="badge b-gris" title="Exento">AGIP exento</span>'
+        : '<span class="badge b-amar">AGIP</span>');
       if (c.impuestos.municipal) tags.push('<span class="badge b-gris">' + esc(c.municipio || "Municipal") + "</span>");
     }
     var actTxt = c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios");
@@ -2228,17 +2232,40 @@ function formCliente(c){
 
   /* Con la alícuota cargada, la liquidación mensual se calcula sola sobre lo
      facturado. El mínimo es opcional: vacío significa que no tiene. */
-  '<div class="seccion-tit">Alícuotas de ingresos brutos y tasa</div>' +
-  '<div class="ayuda" style="margin-bottom:10px">Se aplican sobre el total facturado del mes. Si el cálculo da menos que el mínimo, se paga el mínimo.</div>' +
+  '<div class="seccion-tit">Ingresos brutos y tasa municipal</div>' +
+  '<div class="grid g2">' +
+    '<div class="campo"><label>Actividad que desarrolla</label>' +
+      '<input type="text" id="fcActIIBB" value="' + esc(c.actividadIIBB || "") + '" placeholder="Servicios jurídicos">' +
+      '<div class="ayuda">Es la que define el tratamiento en cada jurisdicción. Por ejemplo, en CABA el ejercicio de una profesión universitaria no organizado en forma de empresa está exento de ingresos brutos.</div></div>' +
+    '<div class="campo"><label>Código de actividad (NAES)</label>' +
+      '<input type="text" id="fcNaes" value="' + esc(c.codigoNAES || "") + '" placeholder="691001">' +
+      '<div class="ayuda">El mismo código se usa en ARBA y en AGIP.</div></div>' +
+  '</div>' +
+  /* Sugerencias para el motivo, sin encerrarlo: es un campo libre. */
+  '<datalist id="motivosExencion">' +
+    '<option value="Profesión universitaria no organizada en forma de empresa"></option>' +
+    '<option value="Actividad exenta por el Código Fiscal"></option>' +
+    '<option value="Exención otorgada por resolución"></option>' +
+    '<option value="No desarrolla actividad en la jurisdicción"></option>' +
+  '</datalist>' +
+  '<div class="ayuda" style="margin:16px 0 12px">Las alícuotas se aplican sobre el total facturado del mes. Si el cálculo da menos que el mínimo, se paga el mínimo.</div>' +
   ["arba", "agip", "municipal"].map(function(k){
     var conf = (c.iibb || {})[k] || {};
     var etiq = { arba:"ARBA", agip:"AGIP", municipal:"Tasa municipal" }[k];
-    return '<div class="grid g2">' +
-      '<div class="campo"><label>' + etiq + ' — alícuota %</label>' +
-        '<input type="number" step="0.001" id="fcAlic_' + k + '" value="' + (conf.alicuota || "") + '" placeholder="3,5"></div>' +
-      '<div class="campo"><label>' + etiq + ' — mínimo mensual</label>' +
-        '<input type="number" step="0.01" id="fcMin_' + k + '" value="' + (conf.minimo || "") + '" placeholder="sin mínimo"></div>' +
-    "</div>";
+    return '<div style="border:1px solid var(--pelo);border-radius:var(--r2);padding:14px 16px 4px;margin-bottom:12px">' +
+      '<label class="check" style="padding-top:0"><input type="checkbox" id="fcExento_' + k + '"' +
+        (conf.exento ? " checked" : "") + ' onchange="toggleExento(\'' + k + '\')"> <b>Exento de ' + etiq + "</b></label>" +
+      '<div id="wrapExento_' + k + '"' + (conf.exento ? "" : ' style="display:none"') + '>' +
+        '<div class="campo" style="margin-top:12px"><label>Motivo de la exención</label>' +
+          '<input type="text" id="fcMotivo_' + k + '" list="motivosExencion" value="' + esc(conf.motivoExencion || "") + '" placeholder="Profesión universitaria no organizada en forma de empresa">' +
+          '<div class="ayuda">Aparece en la liquidación de cada mes, para saber por qué no se paga.</div></div>' +
+      "</div>" +
+      '<div class="grid g2" id="wrapAlic_' + k + '"' + (conf.exento ? ' style="display:none"' : "") + '>' +
+        '<div class="campo" style="margin-top:12px"><label>Alícuota %</label>' +
+          '<input type="number" step="0.001" id="fcAlic_' + k + '" value="' + (conf.alicuota || "") + '" placeholder="3,5"></div>' +
+        '<div class="campo" style="margin-top:12px"><label>Mínimo mensual</label>' +
+          '<input type="number" step="0.01" id="fcMin_' + k + '" value="' + (conf.minimo || "") + '" placeholder="sin mínimo"></div>' +
+      "</div></div>";
   }).join("") +
 
   '<div class="seccion-tit">Delegación de servicios</div>' +
@@ -2331,10 +2358,16 @@ function guardarFormCliente(id){
       municipal: $("fcMuni").checked
     },
     municipio: $("fcMunicipio") ? $("fcMunicipio").value.trim() : "",
+    actividadIIBB: $("fcActIIBB").value.trim(),
+    codigoNAES: $("fcNaes").value.trim(),
     iibb: ["arba", "agip", "municipal"].reduce(function(acc, k){
+      /* La alícuota se guarda aunque esté exento: si mañana deja de estarlo,
+         el número sigue ahí y no hay que volver a buscarlo. */
       acc[k] = {
         alicuota: parseFloat($("fcAlic_" + k).value) || null,
-        minimo:   parseFloat($("fcMin_" + k).value)  || null
+        minimo:   parseFloat($("fcMin_" + k).value)  || null,
+        exento:   $("fcExento_" + k).checked,
+        motivoExencion: $("fcMotivo_" + k).value.trim()
       };
       return acc;
     }, {}),
@@ -3306,6 +3339,23 @@ var IMPUESTOS = [
   { clave:"municipal", nombre:"Tasa municipal",   corto:"Municipal" }
 ];
 
+/* Muestra el motivo o la alícuota según corresponda. Están los dos en el HTML
+   siempre: así al destildar vuelve lo que había cargado. */
+function toggleExento(k){
+  var on = $("fcExento_" + k).checked;
+  $("wrapExento_" + k).style.display = on ? "" : "none";
+  $("wrapAlic_" + k).style.display   = on ? "none" : "";
+}
+
+/* La exención se carga una vez en la ficha y vale para todos los períodos: no
+   se paga, no se calcula y no cuenta como pendiente. */
+function exentoDe(cli, clave){
+  return !!((((cli || {}).iibb || {})[clave] || {}).exento);
+}
+function motivoExencion(cli, clave){
+  return (((((cli || {}).iibb || {})[clave] || {}).motivoExencion) || "").trim();
+}
+
 function liqDe(clienteId, periodo){
   return (ESTADO.liquidaciones[clienteId] || {})[periodo] || {};
 }
@@ -3343,6 +3393,8 @@ function renderLiquidacion(){
     IMPUESTOS.forEach(function(i){
       if (!(c.impuestos && c.impuestos[i.clave])){
         html += '<td class="num" style="color:var(--gris2)">—</td>';
+      } else if (exentoDe(c, i.clave)){
+        html += '<td class="num"><span class="badge b-verde">exento</span></td>';
       } else {
         var m = (liq[i.clave] && liq[i.clave].monto) || 0;
         totales[i.clave] += m;
@@ -3351,7 +3403,10 @@ function renderLiquidacion(){
     });
 
     var veps = IMPUESTOS.filter(function(i){ return liq[i.clave] && liq[i.clave].vep; }).length;
-    var pedidos = IMPUESTOS.filter(function(i){ return c.impuestos && c.impuestos[i.clave]; }).length;
+    /* De los exentos no se espera ningún VEP, así que no cuentan en el total. */
+    var pedidos = IMPUESTOS.filter(function(i){
+      return c.impuestos && c.impuestos[i.clave] && !exentoDe(c, i.clave);
+    }).length;
 
     html += '<td class="num"><b>' + pesos(tot) + "</b></td>" +
       "<td>" + (veps ? '<span class="badge b-verde">' + veps + "/" + pedidos + "</span>" : '<span class="badge b-gris">0/' + pedidos + "</span>") + "</td>" +
@@ -3392,6 +3447,13 @@ function pintarCalculoIIBB(clave){
 
 function textoCalculoIIBB(c, clienteId, periodo, clave, d){
   var conf = (c.iibb || {})[clave] || {};
+
+  if (conf.exento){
+    var mot = motivoExencion(c, clave);
+    return '<div class="aviso ok"><span>✓</span><div><b>Exento</b>' + (mot ? " — " + esc(mot) : "") +
+      ". No corresponde ingresar el impuesto. Si igual hay que presentar la declaración jurada, va en cero.</div></div>";
+  }
+
   if (!conf.alicuota){
     return '<div class="ayuda" style="margin-bottom:8px">Sin alícuota cargada en la ficha del cliente: el importe va a mano.</div>';
   }
