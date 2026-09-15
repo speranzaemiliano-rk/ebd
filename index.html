@@ -751,6 +751,11 @@ tbody tr:hover{background:#FAFAFC}
 
 /* El nombre del cliente es un botón: tocarlo abre la ficha. Se ve como texto
    porque es texto, pero se comporta como lo que es. */
+/* Una dirección web larga no tiene un solo espacio donde cortar, así que
+   estira la tarjeta que la contiene y, en el teléfono, se lleva puesta a la
+   pantalla entera —las tarjetas de una grilla no bajan de su min-content—. */
+.link-url{word-break:break-all;overflow-wrap:anywhere}
+
 .lnk-cliente{
   font:inherit;font-weight:600;letter-spacing:inherit;color:var(--texto);
   text-align:left;padding:0;background:none;border:none;cursor:pointer;
@@ -1262,6 +1267,10 @@ tbody tr:hover{background:#FAFAFC}
     <button data-tab="tabConfig">Configuración</button>
   </nav>
 
+  <!-- Los municipios cargados, para que escribir el nombre dos veces distinto
+       no termine en dos municipios de los cuales uno se queda sin link. -->
+  <datalist id="listaMunicipios"></datalist>
+
   <main>
 
     <!-- ---------- INICIO ---------- -->
@@ -1669,6 +1678,19 @@ tbody tr:hover{background:#FAFAFC}
         </div>
 
         <div class="card">
+          <h2>Municipios</h2>
+          <p class="desc">La tasa municipal es el único impuesto sin una web única: ARCA, ARBA y AGIP tienen una sola cada uno, pero cada municipio tiene la suya. Cargá el link una vez y lo usan todos los clientes que tengan ese municipio en su ficha — en la liquidación y en la bóveda de claves.</p>
+          <div id="cfgMunicipios" style="margin-bottom:14px"></div>
+          <div class="grid g2">
+            <div class="campo"><label>Municipio</label>
+              <input type="text" id="cfgMuniNombre" list="listaMunicipios" placeholder="Avellaneda"></div>
+            <div class="campo"><label>Link del sitio</label>
+              <input type="url" id="cfgMuniUrl" placeholder="https://…"></div>
+          </div>
+          <button class="btn" id="btnGuardarMuni">Guardar el municipio</button>
+        </div>
+
+        <div class="card">
           <h2>EmailJS</h2>
           <p class="desc">Servicio que permite mandar los mails desde el sistema sin backend. Creá una cuenta en emailjs.com, conectá la casilla del estudio y pegá acá las tres claves.</p>
           <div class="campo"><label>Service ID</label><input type="text" id="cfgEjsService" placeholder="service_xxxxxxx"></div>
@@ -1937,6 +1959,13 @@ function subirPapelAlToque(clave, tipo){
   campo.click();
 }
 
+/* El municipio con el que arranca la lista. La llave es el slug del nombre
+   (ver _slugMuni): es con lo que después se busca el link desde la ficha del
+   cliente. Se siembra una sola vez, si la tabla está vacía. */
+var MUNICIPIOS_SEMILLA = {
+  avellaneda: { nombre:"Avellaneda", url:"https://trimu.mda.gob.ar/index.php" }
+};
+
 /* Cuentas que se crean solas la primera vez que arranca el sistema. */
 var CUENTAS_SEMILLA = {
   efectivo: { nombre:"Efectivo", tipo:"efectivo", saldoInicial:0, activa:true, orden:1 },
@@ -2057,7 +2086,7 @@ function esAdminRol(){ return ESTADO.rol === "admin"; }
    datos, sumarlo también a una de estas dos listas. */
 var BOTONES_ESCRITURA = ["btnNuevoCliente","btnDesdeConstancia","btnCargaManual","btnRecalcularLiq",
                          "btnEnviarMails","btnHonGenerar","btnHonActualizar","btnNuevoMovimiento",
-                         "btnTraerArca","btnTraerPortal","btnSubirArchivo"];
+                         "btnTraerArca","btnTraerPortal","btnSubirArchivo","btnGuardarMuni"];
 var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
                          "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
                          "btnConfigBoveda","btnBoveda","btnGuardarBackend","btnGuardarGemini",
@@ -2557,7 +2586,7 @@ function cargarTodo(){
        viniera con el arranque, cada pantalla del sistema pagaría el peso de
        una tabla que se usa en dos. Se carga sola cuando hace falta
        (asegurarAlicuotas). */
-    Promise.all(["estudio","emailjs","plantilla","backend","boveda"].map(function(k){
+    Promise.all(["estudio","emailjs","plantilla","backend","boveda","municipios"].map(function(k){
       return ref("config/" + k).once("value").then(function(s){ return [k, s.val()]; });
     })).then(function(pares){
       var cfg = {};
@@ -2605,6 +2634,16 @@ function cargarTodo(){
       ESTADO.config.plantilla = PLANTILLA_DEFECTO;
       ref("config/plantilla").set(PLANTILLA_DEFECTO);
     }
+
+    /* Primera vez: el municipio con el que arrancó el estudio, para que la
+       tabla no esté vacía el primer día. Se agrega sólo si no hay ninguno;
+       después la lista es del usuario y el sistema no la vuelve a tocar. */
+    if (!ESTADO.config.municipios || !Object.keys(ESTADO.config.municipios).length){
+      ESTADO.config.municipios = JSON.parse(JSON.stringify(MUNICIPIOS_SEMILLA));
+      ref("config/municipios").set(ESTADO.config.municipios);
+    }
+    pintarDatalistMunicipios();
+
     inicializarUI();
   }).catch(function(e){
     toast("Error al leer la base: " + e.message, "error");
@@ -3465,7 +3504,8 @@ function formCliente(c, idCliente){
     '<label class="check"><input type="checkbox" id="fcMuni"' + (imp.municipal ? " checked" : "") + '> Tasa municipal</label>' +
   '</div>' +
   '<div class="campo" id="wrapMuni"' + (imp.municipal ? "" : ' style="display:none"') + '>' +
-    '<label>Municipio</label><input type="text" id="fcMunicipio" value="' + esc(c.municipio || "") + '" placeholder="Avellaneda">' +
+    '<label>Municipio</label><input type="text" id="fcMunicipio" list="listaMunicipios" value="' + esc(c.municipio || "") + '" placeholder="Avellaneda">' +
+    '<div class="ayuda">El sitio donde se paga la tasa se carga una vez por municipio, en Configuración → Municipios.</div>' +
   "</div>" +
 
   /* Con la alícuota cargada, la liquidación mensual se calcula sola sobre lo
@@ -6307,6 +6347,74 @@ var IMPUESTOS = [
   { clave:"municipal", nombre:"Tasa municipal",   corto:"Municipal" }
 ];
 
+/* ---------- LOS MUNICIPIOS Y SU SITIO ----------
+   La tasa municipal es el único impuesto sin una web única: ARCA, ARBA y AGIP
+   tienen una sola cada uno y están escritas en ORGANISMOS, pero cada municipio
+   tiene la suya. El link se carga UNA VEZ por municipio —el nombre que está en
+   la ficha del cliente— y lo usan todos los clientes de ese municipio, así no
+   hay que pegarlo cliente por cliente.
+
+   Vive en `config/municipios/<slug>` y no en una rama nueva A PROPÓSITO: las
+   reglas publicadas ya contemplan `config`, y una rama nueva no se lee hasta
+   que alguien se acuerde de publicarlas a mano en la consola de Firebase. */
+function _slugMuni(nombre){
+  return _sinTildes(String(nombre || "")).toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/* El link termina adentro de un href, así que sólo se acepta http o https.
+   Sin esto, pegar `javascript:…` dejaría un enlace que ejecuta código. */
+function _urlSegura(u){
+  var t = String(u || "").trim();
+  if (!t) return "";
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(t)) t = "https://" + t;   /* pegó www.algo.gob.ar */
+  return /^https?:\/\//i.test(t) ? t : "";
+}
+
+function municipiosOrdenados(){
+  var m = ESTADO.config.municipios || {};
+  return Object.keys(m).map(function(k){
+    return { slug:k, nombre:(m[k] || {}).nombre || k, url:(m[k] || {}).url || "" };
+  }).sort(function(a, b){ return a.nombre.localeCompare(b.nombre, "es"); });
+}
+
+function urlDeMunicipio(nombre){
+  var m = (ESTADO.config.municipios || {})[_slugMuni(nombre)];
+  return _urlSegura(m && m.url);
+}
+
+/* Guarda el link de un municipio. Devuelve una promesa para poder repintar
+   recién cuando quedó guardado de verdad. */
+function guardarMunicipio(nombre, url){
+  var slug = _slugMuni(nombre);
+  if (!slug) return Promise.reject(new Error("Falta el nombre del municipio"));
+  var limpia = _urlSegura(url);
+  if (url && !limpia) return Promise.reject(new Error("El link tiene que empezar con http:// o https://"));
+  var dato = { nombre: String(nombre).trim(), url: limpia };
+  return ref("config/municipios/" + slug).set(dato).then(function(){
+    if (!ESTADO.config.municipios) ESTADO.config.municipios = {};
+    ESTADO.config.municipios[slug] = dato;
+    return dato;
+  });
+}
+
+function borrarMunicipio(slug){
+  return ref("config/municipios/" + slug).remove().then(function(){
+    if (ESTADO.config.municipios) delete ESTADO.config.municipios[slug];
+  });
+}
+
+/* Para el <datalist> del campo Municipio de la ficha y para el de la
+   liquidación: escribir «Avellaneda» dos veces distinto crearía dos
+   municipios, y uno de los dos se quedaría sin link. */
+function pintarDatalistMunicipios(){
+  var dl = $("listaMunicipios");
+  if (!dl) return;
+  dl.innerHTML = municipiosOrdenados().map(function(m){
+    return '<option value="' + esc(m.nombre) + '">';
+  }).join("");
+}
+
 /* Muestra el motivo o la alícuota según corresponda. Están los dos en el HTML
    siempre: así al destildar vuelve lo que había cargado. */
 function toggleExento(k){
@@ -6599,6 +6707,89 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
 /* ---------- EL VEP EN PDF ----------
    Se guarda con la liquidación para tenerlo a mano cuando el cliente lo pide
    o cuando hay que adjuntarlo al mail. */
+/* ---------- EL SITIO DEL MUNICIPIO, A MANO ----------
+   Los otros tres impuestos se pagan siempre en la misma web y el sistema la
+   sabe. El municipio no: es el único donde hay que acordarse de a dónde
+   entrar. El link se pega una vez —desde acá o desde Configuración— y queda
+   para todos los clientes de ese municipio.
+
+   Si el cliente todavía no tiene municipio en su ficha, se piden las dos
+   cosas juntas: mandarlo a editar la ficha para volver después es perder el
+   hilo de lo que estaba haciendo. */
+function bloqueSitioMunicipio(clienteId){
+  var c = ESTADO.clientes[clienteId] || {};
+  var muni = c.municipio || "";
+  var url  = urlDeMunicipio(muni);
+  var puede = puedeEscribir();
+
+  if (url){
+    return '<div class="aviso info"><span>🏛️</span><div class="crece">Sitio de <b>' + esc(muni) + "</b>: " +
+      '<a class="link-url" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(url) + " ↗</a>" +
+      (puede ? ' · <a href="#" onclick="cambiarSitioMunicipio();return false;">cambiar</a>' : "") +
+      "</div></div>";
+  }
+
+  if (!puede){
+    return '<div class="ayuda">El sitio de este municipio todavía no está cargado.</div>';
+  }
+
+  return '<div class="aviso warn"><span>🏛️</span><div class="crece">' +
+    (muni ? "<b>" + esc(muni) + "</b> no tiene cargado su sitio. Pegá el link una vez y queda para todos los clientes de ese municipio."
+          : "Este cliente no tiene municipio en su ficha. Poné el nombre y el link: se guardan los dos.") +
+    '<div class="grid g2" style="margin-top:10px">' +
+      (muni ? "" : '<div class="campo" style="margin-bottom:0"><label>Municipio</label>' +
+        '<input type="text" id="lqMuniNombre" list="listaMunicipios" placeholder="Avellaneda"></div>') +
+      '<div class="campo" style="margin-bottom:0"><label>Link del sitio</label>' +
+        '<input type="url" id="lqMuniUrl" placeholder="https://…"></div>' +
+    "</div>" +
+    '<div style="margin-top:10px"><button type="button" class="btn sec chico" onclick="guardarSitioMunicipioDesdeLiq()">Guardar el link</button></div>' +
+    "</div></div>";
+}
+
+/* Vuelve a mostrar los campos para pisar el link que ya estaba. */
+function cambiarSitioMunicipio(){
+  var c = ESTADO.clientes[_liqActual && _liqActual.clienteId] || {};
+  var cont = $("lqSitioMuni");
+  if (!cont) return;
+  cont.innerHTML = '<div class="aviso info"><span>🏛️</span><div class="crece">Nuevo link para <b>' +
+    esc(c.municipio || "") + "</b>:" +
+    '<div class="campo" style="margin:10px 0 0"><input type="url" id="lqMuniUrl" value="' +
+      esc(urlDeMunicipio(c.municipio)) + '" placeholder="https://…"></div>' +
+    '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button type="button" class="btn sec chico" onclick="guardarSitioMunicipioDesdeLiq()">Guardar</button>' +
+      '<button type="button" class="btn gris chico" onclick="_repintarSitioMunicipio()">Cancelar</button>' +
+    "</div></div></div>";
+}
+
+function _repintarSitioMunicipio(){
+  var cont = $("lqSitioMuni");
+  if (cont && _liqActual) cont.innerHTML = bloqueSitioMunicipio(_liqActual.clienteId);
+}
+
+/* Guarda sin cerrar la liquidación: repinta sólo este bloque, así no se
+   pierde nada de lo que ya se escribió en los otros impuestos. */
+function guardarSitioMunicipioDesdeLiq(){
+  if (!_liqActual) return;
+  var id = _liqActual.clienteId, c = ESTADO.clientes[id] || {};
+  var nombre = c.municipio || (($("lqMuniNombre") || {}).value || "").trim();
+  var url = (($("lqMuniUrl") || {}).value || "").trim();
+  if (!nombre){ toast("Falta el nombre del municipio", "error"); return; }
+  if (!url){ toast("Falta el link", "error"); return; }
+
+  guardarMunicipio(nombre, url).then(function(){
+    /* Si el cliente no tenía municipio, se le pone el que acaba de escribir:
+       el nombre es la llave con la que después se encuentra el link. */
+    if (c.municipio === nombre) return null;
+    return ref("clientes/" + id).update({ municipio: nombre }).then(function(){
+      ESTADO.clientes[id].municipio = nombre;
+    });
+  }).then(function(){
+    pintarDatalistMunicipios();
+    _repintarSitioMunicipio();
+    toast("Sitio del municipio guardado", "ok");
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
+
 /* ---------- LOS PAPELES DE UN IMPUESTO, EN SU LIQUIDACIÓN ----------
    No todo lo que respalda un impuesto es un VEP: ARBA tiene su declaración
    jurada y su comprobante de pago, el municipio manda una factura, y a veces
@@ -6914,6 +7105,7 @@ function editarLiquidacion(clienteId, periodo){
           '<div class="ayuda">Se descuenta del cálculo para llegar al saldo a pagar.</div></div>') +
       '<div class="campo"><label>Link al VEP (opcional)</label>' +
         '<input type="text" id="lq_' + i.clave + '_link" value="' + esc(d.link || "") + '" placeholder="https://…"></div>' +
+      (i.clave === "municipal" ? '<div id="lqSitioMuni">' + bloqueSitioMunicipio(clienteId) + "</div>" : "") +
       bloqueVepArchivo(i.clave, d);
   });
 
@@ -8418,6 +8610,7 @@ function renderConfig(){
   });
 
   pintarEstadoBoveda();
+  pintarMunicipios();
 
   ref("usuarios").once("value").then(function(s){
     var us = s.val() || {};
@@ -8439,6 +8632,68 @@ $("btnGuardarEstudio").onclick = function(){
     ESTADO.config.estudio = cfg; toast("Datos guardados", "ok");
   });
 };
+/* ---------- LA TABLA DE MUNICIPIOS EN CONFIGURACIÓN ---------- */
+function pintarMunicipios(){
+  var cont = $("cfgMunicipios");
+  if (!cont) return;
+  pintarDatalistMunicipios();
+
+  var lista = municipiosOrdenados();
+  if (!lista.length){
+    cont.innerHTML = '<div class="ayuda">Todavía no hay ningún municipio cargado.</div>';
+    return;
+  }
+  var puede = puedeEscribir();
+  cont.innerHTML = '<ul class="lista-simple">' + lista.map(function(m){
+    return "<li>" + (m.url ? '<span class="badge b-verde">con link</span>' : '<span class="badge b-amar">sin link</span>') +
+      '<div class="crece"><div class="tit">' + esc(m.nombre) + "</div>" +
+      (m.url ? '<div class="sub"><a class="link-url" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + esc(m.url) + " ↗</a></div>" : "") +
+      "</div>" +
+      (puede ? '<button type="button" class="btn-icono" title="Editar" onclick="editarMunicipio(\'' + esc(m.slug) + '\')">✏️</button>' +
+               '<button type="button" class="btn-icono" title="Borrar" onclick="pedirBorrarMunicipio(\'' + esc(m.slug) + '\')">🗑️</button>' : "") +
+      "</li>";
+  }).join("") + "</ul>";
+}
+
+/* Editar es traer los dos campos de arriba: el nombre es la llave, así que
+   guardar con el mismo nombre pisa el link viejo y no crea otro municipio. */
+function editarMunicipio(slug){
+  var m = (ESTADO.config.municipios || {})[slug];
+  if (!m) return;
+  $("cfgMuniNombre").value = m.nombre || slug;
+  $("cfgMuniUrl").value    = m.url || "";
+  $("cfgMuniNombre").focus();
+}
+
+function pedirBorrarMunicipio(slug){
+  var m = (ESTADO.config.municipios || {})[slug] || {};
+  var usan = Object.keys(ESTADO.clientes).filter(function(id){
+    return _slugMuni(ESTADO.clientes[id].municipio) === slug;
+  }).length;
+  abrirModal("Borrar municipio",
+    "<p>¿Borrar <b>" + esc(m.nombre || slug) + "</b> de la lista?</p>" +
+    (usan ? '<div class="aviso warn"><span>⚠️</span><div>Lo tienen <b>' + usan +
+      (usan === 1 ? "</b> cliente en su ficha" : "</b> clientes en su ficha") +
+      ". No se les toca nada: sólo se pierde el link, y el botón para entrar al sitio deja de aparecer.</div></div>" : ""),
+    [{ texto:"Cancelar", clase:"gris", accion:cerrarModal },
+     { texto:"Borrar", clase:"peligro", accion:function(){
+        borrarMunicipio(slug).then(function(){ cerrarModal(); pintarMunicipios(); toast("Municipio borrado", "ok"); })
+          .catch(function(e){ toast(explicarError(e), "error"); });
+     }}]);
+}
+
+$("btnGuardarMuni").onclick = function(){
+  var nombre = $("cfgMuniNombre").value.trim();
+  var url    = $("cfgMuniUrl").value.trim();
+  if (!nombre){ toast("Falta el nombre del municipio", "error"); return; }
+  guardarMunicipio(nombre, url).then(function(){
+    $("cfgMuniNombre").value = "";
+    $("cfgMuniUrl").value = "";
+    pintarMunicipios();
+    toast("Municipio guardado", "ok");
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+};
+
 $("btnGuardarEjs").onclick = function(){
   var ejs = { serviceId:$("cfgEjsService").value.trim(), templateId:$("cfgEjsTemplate").value.trim(),
               publicKey:$("cfgEjsKey").value.trim() };
@@ -8670,11 +8925,19 @@ function mostrarAccesoRapido(cli, org, usuario, pass){
      sitio con el dato ya en el portapapeles y alcanza con pegar. Copiar y
      abrir tienen que pasar dentro del mismo gesto del usuario o el navegador
      toma la pestaña por un pop-up. */
-  var abrir = org.url
-    ? '<a class="btn" href="' + esc(org.url) + '" target="_blank" rel="noopener" ' +
+  /* El municipio no tiene una web fija en ORGANISMOS: sale de la tabla de
+     municipios, por el nombre que tiene el cliente en su ficha. */
+  var destino = org.clave === "municipal" ? urlDeMunicipio(cli.municipio) : org.url;
+  var comoSeLlama = org.clave === "municipal" && cli.municipio ? cli.municipio : org.nombre;
+
+  var abrir = destino
+    ? '<a class="btn" href="' + esc(destino) + '" target="_blank" rel="noopener" ' +
       'onclick="arCopiar(\'arUsuario\',\'CUIT\')" ' +
-      'style="display:inline-block;padding:10px 18px">Copiar el CUIT y abrir ' + esc(org.nombre) + ' ↗</a>'
-    : '<div class="ayuda">Cada municipio tiene su propia web, así que este no tiene enlace directo.</div>';
+      'style="display:inline-block;padding:10px 18px">Copiar el CUIT y abrir ' + esc(comoSeLlama) + ' ↗</a>'
+    : '<div class="ayuda">' + (org.clave === "municipal"
+        ? "Cada municipio tiene su propia web. Cargá la de <b>" + esc(cli.municipio || "este cliente") +
+          "</b> en <b>Configuración → Municipios</b> —o desde la liquidación— y el botón para entrar aparece acá."
+        : "Este organismo no tiene enlace directo.") + "</div>";
 
   var html =
     '<div class="aviso warn"><span>⚠️</span><div><b>' + esc(org.nombre) + " te va a mostrar el último CUIT que usaste " +
@@ -9142,7 +9405,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v54";
+var VERSION_APP = "v55";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
