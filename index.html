@@ -1879,11 +1879,19 @@ var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
    (ver REF de archivosContenido) para que el listado abra liviano. */
 var TIPOS_ARCHIVO = [
   { clave:"ddjj",       nombre:"Declaración jurada" },
-  { clave:"vep",        nombre:"VEP / comprobante de pago" },
+  { clave:"vep",        nombre:"VEP" },
+  { clave:"pago",       nombre:"Comprobante de pago" },
+  { clave:"factura",    nombre:"Factura" },
   { clave:"resumen",    nombre:"Resumen bancario" },
   { clave:"constancia", nombre:"Constancia de inscripción" },
   { clave:"otro",       nombre:"Otro" }
 ];
+
+/* Lo que se adjunta en la liquidación de cada impuesto. El VEP es el único que
+   se guarda adentro de la liquidación —viene de antes y el sistema lo usa para
+   contar cuántos faltan—; el resto va a los papeles del cliente, en el mes que
+   corresponde, que es donde después se los busca y desde donde se los manda. */
+var TIPOS_LIQ = ["vep", "ddjj", "pago", "factura", "resumen", "otro"];
 
 /* Cuentas que se crean solas la primera vez que arranca el sistema. */
 var CUENTAS_SEMILLA = {
@@ -5465,14 +5473,38 @@ function leerConfGemini(){
 
 /* Le pide algo a Gemini a través del backend. `archivo` es opcional: un File
    del navegador (PDF o imagen). */
-function preguntarAGemini(prompt, archivo, temperatura){
+/* Cuando el modelo está saturado Google contesta "high demand", 503 o 429. No
+   es un error del archivo ni de la clave: es esperar. Se reintenta solo antes
+   de molestar a nadie, con una pausa que crece. Vale para todo lo que usa IA
+   —leer el VEP, la constancia, clasificar papeles, el asistente—, que es
+   donde único se sentía. */
+function _geminiSaturado(e){
+  var m = String((e && e.message) || e).toLowerCase();
+  return ["high demand", "overload", "unavailable", "try again", "rate limit",
+          "quota", " 503", " 429", "resource_exhausted"].some(function(t){
+    return m.indexOf(t) !== -1;
+  });
+}
+var ESPERAS_GEMINI = [3000, 8000];   /* dos reintentos, 3 s y 8 s */
+
+function preguntarAGemini(prompt, archivo, temperatura, alReintentar){
   var envio = { prompt: prompt };
   if (temperatura !== undefined) envio.temperatura = temperatura;
   var conClave = function(e){
     return leerConfGemini().then(function(c){
       if (c.key)    e.clave  = c.key;
       if (c.modelo) e.modelo = c.modelo;
-      return postAlBackend("/gemini", e).then(function(r){ return r.texto; });
+      var intento = 0;
+      var probar = function(){
+        return postAlBackend("/gemini", e).then(function(r){ return r.texto; })
+          .catch(function(err){
+            if (intento >= ESPERAS_GEMINI.length || !_geminiSaturado(err)) throw err;
+            var espera = ESPERAS_GEMINI[intento++];
+            if (alReintentar) alReintentar(intento, Math.round(espera / 1000));
+            return new Promise(function(sigue){ setTimeout(sigue, espera); }).then(probar);
+          });
+      };
+      return probar();
     });
   };
 
@@ -6230,21 +6262,95 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
 /* ---------- EL VEP EN PDF ----------
    Se guarda con la liquidación para tenerlo a mano cuando el cliente lo pide
    o cuando hay que adjuntarlo al mail. */
+/* ---------- LOS PAPELES DE UN IMPUESTO, EN SU LIQUIDACIÓN ----------
+   No todo lo que respalda un impuesto es un VEP: ARBA tiene su declaración
+   jurada y su comprobante de pago, el municipio manda una factura, y a veces
+   hace falta el resumen del banco. Se adjuntan todos acá, con el tipo al lado,
+   y caen en los papeles del cliente del mes que corresponde: ahí se los busca
+   después y desde ahí se los manda. El VEP sigue viviendo adentro de la
+   liquidación porque el sistema lo usa para contar cuántos faltan. */
 function bloqueVepArchivo(clave, d){
-  var a = d.vepArchivo;
-  return '<div class="campo"><label>VEP en PDF</label>' +
-    (a && a.contenido
-      ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-          '<span class="badge b-verde">📎 ' + esc(a.nombre || "VEP.pdf") + "</span>" +
-          '<button type="button" class="btn sec chico" onclick="verVep(\'' + clave + '\')">Ver / descargar</button>' +
-          '<button type="button" class="btn sec chico" onclick="quitarVep(\'' + clave + '\')">Quitar</button>' +
-        "</div>"
-      : "") +
-    '<input type="file" accept="application/pdf,image/*" id="lq_' + clave + '_file" style="margin-top:6px"' +
-      ' onchange="leerPapelDeLiquidacion(\'' + clave + '\')">' +
-    '<div class="ayuda">Hasta 3 MB. Queda guardado con la liquidación del mes. ' +
-      "Al elegirlo, la IA lo lee y completa el importe, el número y el vencimiento.</div>" +
+  return '<div class="campo"><label>Papeles de este impuesto</label>' +
+    '<div id="lqPapeles_' + clave + '">' + listaPapelesImpuesto(clave) + "</div>" +
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">' +
+      '<select class="pill" id="lq_' + clave + '_tipo" style="height:34px;line-height:32px;font-size:13.5px">' +
+        TIPOS_LIQ.map(function(t){
+          return '<option value="' + t + '">' + esc(nombreTipoArchivo(t)) + "</option>";
+        }).join("") + "</select>" +
+      '<input type="file" accept="application/pdf,image/*" id="lq_' + clave + '_file"' +
+        ' onchange="leerPapelDeLiquidacion(\'' + clave + '\')">' +
+    "</div>" +
+    '<div class="ayuda">Hasta 3 MB. Al elegirlo, la IA lo lee y completa el importe, el número y el vencimiento. ' +
+      "El VEP queda con la liquidación; lo demás va a los papeles del cliente, en este mes.</div>" +
     '<div id="lqIA_' + clave + '" style="margin-top:8px"></div></div>';
+}
+
+/* Lo ya adjuntado: el VEP de la liquidación y los papeles del cliente que son
+   de este mes y de este impuesto. */
+function listaPapelesImpuesto(clave){
+  var out = [];
+  var v = _vepsDelModal[clave];
+  if (v && v.contenido){
+    out.push('<li><span class="badge b-verde">VEP</span>' +
+      '<div class="crece"><div class="tit mono">' + esc(v.nombre || "VEP.pdf") + "</div></div>" +
+      '<button type="button" class="btn-icono" title="Ver" onclick="verVep(\'' + clave + '\')">📄</button>' +
+      '<button type="button" class="btn-icono" title="Quitar" onclick="quitarVep(\'' + clave + '\')">🗑️</button></li>');
+  }
+  (_papelesDelImpuesto[clave] || []).forEach(function(p, i){
+    out.push('<li><span class="badge b-azul">' + esc(nombreTipoArchivo(p.tipo)) + "</span>" +
+      '<div class="crece"><div class="tit mono">' + esc(p.nombre) + "</div></div>" +
+      '<button type="button" class="btn-icono" title="Ver" onclick="verArchivo(\'' +
+        _liqActual.clienteId + "','" + p.id + '\')">📄</button></li>');
+  });
+  return out.length
+    ? '<ul class="lista-simple" style="margin-top:6px">' + out.join("") + "</ul>"
+    : '<div class="ayuda" style="margin-top:4px">Todavía no hay papeles adjuntos de este impuesto.</div>';
+}
+
+/* Los papeles del cliente que corresponden a este mes y a este impuesto. Se
+   leen al abrir la liquidación y se refrescan al adjuntar uno nuevo. */
+var _papelesDelImpuesto = {};
+
+function cargarPapelesDelMesEnLiquidacion(){
+  if (!_liqActual) return Promise.resolve();
+  var id = _liqActual.clienteId, per = _liqActual.periodo;
+  return ref("archivos/" + id).once("value").then(function(s){
+    var todo = s.val() || {}, porImp = {};
+    Object.keys(todo).forEach(function(k){
+      var a = todo[k];
+      if ((a.periodo || "") !== per) return;
+      var imp = a.organismo || "otro";
+      (porImp[imp] = porImp[imp] || []).push({ id:k, nombre:a.nombre || "", tipo:a.tipo || "otro" });
+    });
+    _papelesDelImpuesto = porImp;
+    IMPUESTOS.forEach(function(i){
+      var cont = $("lqPapeles_" + i.clave);
+      if (cont) cont.innerHTML = listaPapelesImpuesto(i.clave);
+    });
+  }).catch(function(){ /* sin papeles no se rompe nada */ });
+}
+
+/* Guarda el adjunto donde corresponde según su tipo. */
+function guardarPapelDeImpuesto(clave, file, tipo){
+  var id = _liqActual.clienteId, per = _liqActual.periodo;
+  return leerArchivo($("lq_" + clave + "_file"), 3).then(function(leido){
+    if (!leido) return null;
+    if (tipo === "vep"){
+      _vepsDelModal[clave] = leido;                 /* se graba al guardar la liquidación */
+      $("lqPapeles_" + clave).innerHTML = listaPapelesImpuesto(clave);
+      return "vep";
+    }
+    var nuevo = ref("archivos/" + id).push().key;
+    var updates = {};
+    updates["archivos/" + id + "/" + nuevo] = {
+      tipo: tipo, organismo: clave, periodo: per,
+      nombre: file.name, nota: "", peso: file.size || 0, subido: new Date().toISOString()
+    };
+    updates["archivosContenido/" + nuevo] = leido.contenido;
+    return ref("").update(updates).then(function(){
+      return cargarPapelesDelMesEnLiquidacion();
+    }).then(function(){ return "papel"; });
+  });
 }
 
 /* ---------- LEER EL VEP O LA DDJJ Y COMPLETAR SOLO ----------
@@ -6256,7 +6362,8 @@ function bloqueVepArchivo(clave, d){
    se muestra qué dice el papel y se ofrece el cambio. Un importe escrito por
    una persona puede estar corrigiendo al papel a propósito —una compensación,
    un plan de pagos— y la IA no tiene manera de saberlo. */
-var _papelLeido = {};   /* clave de impuesto -> lo que devolvió la IA */
+var _papelLeido  = {};   /* clave de impuesto -> lo que devolvió la IA */
+var _ultimoPapel = {};   /* el último archivo elegido, para poder reintentar */
 
 var CAMPOS_VEP = [
   { dato:"importe",     campo:"monto", rotulo:"Importe" },
@@ -6264,14 +6371,25 @@ var CAMPOS_VEP = [
   { dato:"vencimiento", campo:"vto",   rotulo:"Vencimiento" }
 ];
 
-function leerPapelDeLiquidacion(clave){
+function leerPapelDeLiquidacion(clave, reintento){
   var campo = $("lq_" + clave + "_file");
-  var f = campo && campo.files && campo.files[0];
+  var f = reintento ? _ultimoPapel[clave] : (campo && campo.files && campo.files[0]);
   var est = $("lqIA_" + clave);
   if (!f || !est) return;
+  _ultimoPapel[clave] = f;
 
   var corto = (IMPUESTOS.filter(function(i){ return i.clave === clave; })[0] || {}).corto || clave;
   est.innerHTML = '<div class="aviso info"><span>⏳</span><div>Leyendo <b>' + esc(f.name) + "</b>…</div></div>";
+
+  /* Guardar primero y leer después: si la IA está caída el papel igual queda
+     adjunto, que es lo que de verdad no se puede perder. Después se vacía el
+     campo para que el guardado de la liquidación no lo tome otra vez. */
+  if (!reintento){
+    var tipo = ($("lq_" + clave + "_tipo") || {}).value || "vep";
+    guardarPapelDeImpuesto(clave, f, tipo).then(function(){
+      if (campo) campo.value = "";
+    }).catch(function(e){ toast(explicarError(e), "error"); });
+  }
 
   var prompt = "Te paso un papel de impuestos argentino: puede ser un VEP (volante electrónico de pago), " +
     "una declaración jurada o un comprobante de pago. Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
@@ -6281,13 +6399,24 @@ function leerPapelDeLiquidacion(clave){
     "vencimiento: la fecha de vencimiento o de pago en formato AAAA-MM-DD. periodo: el período fiscal en AAAAMM. " +
     "Lo que no figure en el papel va en null. No inventes ningún número.";
 
-  preguntarAGemini(prompt, f, 0).then(function(r){
+  preguntarAGemini(prompt, f, 0, function(intento, segundos){
+    est.innerHTML = '<div class="aviso warn"><span>⏳</span><div>La IA está saturada en este momento. ' +
+      "Reintento " + intento + " de " + ESPERAS_GEMINI.length + ", en " + segundos + " segundos…</div></div>";
+  }).then(function(r){
     var d = jsonDeGemini(r);
     _papelLeido[clave] = d;
     est.innerHTML = _avisoPapelLeido(clave, corto, d);
   }).catch(function(e){
-    est.innerHTML = '<div class="aviso warn"><span>⚠️</span><div>No pude leerlo: ' +
-      esc(e.message || String(e)) + ". El archivo igual queda adjunto; los datos van a mano.</div></div>";
+    var saturado = _geminiSaturado(e);
+    est.innerHTML = '<div class="aviso warn"><span>⚠️</span><div>' +
+      (saturado
+        ? "<b>La IA está saturada.</b> No es tu archivo ni la clave: es Google, que por momentos no da abasto. " +
+          "Lo intenté " + (ESPERAS_GEMINI.length + 1) + " veces."
+        : "No pude leerlo: " + esc(e.message || String(e))) +
+      " El archivo igual queda adjunto; los datos van a mano. " +
+      '<a href="#" onclick="leerPapelDeLiquidacion(\'' + clave + '\',true);return false;">Probar de nuevo</a>' +
+      (saturado ? '<div class="ayuda" style="margin-top:6px">Si sigue pasando, en <b>Configuración → Asistente (IA)</b> ' +
+        "podés poner otro modelo.</div>" : "") + "</div></div>";
   });
 }
 
@@ -6400,6 +6529,8 @@ function editarLiquidacion(clienteId, periodo){
   _liqActual = { clienteId: clienteId, periodo: periodo, c: c };
   _vepsDelModal = {};
   _papelLeido  = {};
+  _ultimoPapel = {};
+  _papelesDelImpuesto = {};
   IMPUESTOS.forEach(function(i){
     var d = liq[i.clave] || {};
     if (d.vepArchivo) _vepsDelModal[i.clave] = d.vepArchivo;
@@ -6431,6 +6562,15 @@ function editarLiquidacion(clienteId, periodo){
 
   if (!html) html = '<div class="aviso warn"><span>⚠️</span><div>Este cliente no tiene ningún impuesto tildado en su ficha.</div></div>';
 
+  if (html){
+    html += '<div class="seccion-tit">Mandarle los papeles</div>' +
+      '<div class="aviso info"><span>📧</span><div>Junta <b>todos</b> los papeles de ' + periodoLargo(periodo) +
+        " —los de acá y los que estén cargados en la ficha del cliente—, los descarga y abre el correo con el " +
+        "texto listo. Los adjuntos se arrastran a mano: el navegador no puede adjuntarlos solo." +
+        '<div style="margin-top:10px"><button type="button" class="btn sec chico" onclick="enviarPapelesDelMes(\'' +
+          clienteId + "','" + periodo + '\')">📧 Enviar los papeles del mes</button></div></div></div>';
+  }
+
   html += '<div class="seccion-tit">Observaciones para el mail</div>' +
     '<div class="campo"><textarea id="lqObs" style="min-height:80px" placeholder="Texto opcional que se agrega al mail de este cliente…">' + esc(liq.observaciones || "") + "</textarea></div>";
 
@@ -6446,6 +6586,9 @@ function editarLiquidacion(clienteId, periodo){
     { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Guardar", accion:function(){ guardarLiquidacion(clienteId, periodo); } }
   ], "ancho");
+
+  /* Los papeles que ya tenga cargados de este mes, para no volver a subirlos. */
+  cargarPapelesDelMesEnLiquidacion();
 }
 
 function guardarLiquidacion(clienteId, periodo){
@@ -8604,7 +8747,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v49";
+var VERSION_APP = "v50";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
