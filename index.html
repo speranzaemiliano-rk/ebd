@@ -959,6 +959,7 @@ tbody tr:hover{background:#FAFAFC}
     <button data-tab="tabMails">Mails</button>
     <button data-tab="tabArchivos">Archivos</button>
     <button data-tab="tabEscalas">Escalas ARCA</button>
+    <button data-tab="tabAlicuotas">Alícuotas IIBB</button>
     <button data-tab="tabConfig">Configuración</button>
   </nav>
 
@@ -1305,6 +1306,57 @@ tbody tr:hover{background:#FAFAFC}
       </div>
     </section>
 
+    <!-- ---------- ALÍCUOTAS IIBB ---------- -->
+    <section class="panel" id="tabAlicuotas">
+      <div class="card">
+        <div class="card-head">
+          <h2>Alícuotas de Ingresos Brutos</h2>
+          <select id="selJurisAlic" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px">
+            <option value="arba">ARBA — Provincia de Buenos Aires</option>
+            <option value="agip">AGIP — Ciudad de Buenos Aires</option>
+          </select>
+          <button class="btn sec chico" id="btnImportarAlic">Cargar la tabla</button>
+          <button class="btn sec chico" id="btnNuevaFilaAlic">+ Actividad</button>
+          <button class="btn sec chico" id="btnBajarAlic">Bajar a Excel</button>
+          <button class="btn" id="btnGuardarAlic">Guardar cambios</button>
+        </div>
+        <div class="aviso info">
+          <span>ℹ️</span>
+          <div>La alícuota de ingresos brutos depende de la <b>actividad</b> —el código NAIIB en ARBA, el mismo NAES en AGIP— y la fija cada año la <b>Ley Impositiva</b> de la jurisdicción.
+            Por eso la tabla no viene cargada de fábrica: la cargás una vez con el anexo oficial y de ahí en más el sistema saca la alícuota de cada cliente por su código, sin que la escribas cliente por cliente.
+            <b>Cargar la tabla</b> toma el Excel del nomenclador, el texto pegado del anexo o un PDF leído con IA.</div>
+        </div>
+        <div id="avisoRolAlic"></div>
+        <div class="grid g4" style="margin-bottom:4px">
+          <div class="campo">
+            <label>Vigencia</label>
+            <input type="text" id="alicVigencia" placeholder="2026">
+            <div class="ayuda">El año de la ley, o desde cuándo rige.</div>
+          </div>
+          <div class="campo">
+            <label>Alícuota general %</label>
+            <input type="number" step="0.001" id="alicGeneral" placeholder="3,5">
+            <div class="ayuda">La subsidiaria: se usa cuando la actividad no figura en la tabla.</div>
+          </div>
+          <div class="campo">
+            <label>Mínimo mensual general</label>
+            <input type="number" step="0.01" id="alicMinimo" placeholder="sin mínimo">
+            <div class="ayuda">Opcional. Vacío = sin mínimo.</div>
+          </div>
+          <div class="campo">
+            <label>Fuente</label>
+            <input type="text" id="alicFuente" placeholder="Ley Impositiva 2026, Anexo — arba.gob.ar">
+            <div class="ayuda">De dónde salió, para poder volver a chequearlo.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 12px">
+          <input type="search" id="alicBuscar" placeholder="Buscar por código o por actividad" style="flex:1;min-width:220px;padding:9px 13px;border:1px solid var(--borde);border-radius:999px">
+          <span class="ayuda" id="alicConteo"></span>
+        </div>
+        <div id="tablaAlicuotas"></div>
+      </div>
+    </section>
+
     <!-- ---------- CONFIGURACIÓN ---------- -->
     <section class="panel" id="tabConfig">
       <div id="avisoRolConfig"></div>
@@ -1527,7 +1579,7 @@ var ESTADO = {
 /* Todos los IDs de panel. Si agregás un tab nuevo, sumalo acá o se rompe la navegación. */
 var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
                 "tabLiquidacion","tabHonorarios","tabSocios","tabCaja","tabMails",
-                "tabArchivos","tabEscalas","tabConfig"];
+                "tabArchivos","tabEscalas","tabAlicuotas","tabConfig"];
 
 /* Papeles que se guardan por cliente. El archivo en sí va aparte de la ficha
    (ver REF de archivosContenido) para que el listado abra liviano. */
@@ -1654,7 +1706,8 @@ var BOTONES_ESCRITURA = ["btnNuevoCliente","btnDesdeConstancia","btnCargaManual"
 var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio",
                          "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
                          "btnConfigBoveda","btnBoveda","btnGuardarBackend","btnGuardarGemini",
-                         "btnNuevoSocio","tabBtnSocios"];
+                         "btnNuevoSocio","tabBtnSocios",
+                         "btnImportarAlic","btnNuevaFilaAlic","btnGuardarAlic"];
 
 /* Campos que solo un admin puede guardar: sin el botón al lado, dejarlos
    editables invita a escribir algo que después se pierde. */
@@ -1662,7 +1715,8 @@ var CAMPOS_ADMIN = ["cfgNombre","cfgCuit","cfgMail","cfgTel",
                     "cfgEjsService","cfgEjsTemplate","cfgEjsKey",
                     "escalaVigencia","escalaAlquileres",
                     "plantillaAsunto","plantillaCuerpo",
-                    "cfgBackUrl","cfgBackToken","cfgGeminiKey","cfgGeminiModelo"];
+                    "cfgBackUrl","cfgBackToken","cfgGeminiKey","cfgGeminiModelo",
+                    "alicVigencia","alicGeneral","alicMinimo","alicFuente"];
 
 function aplicarPermisos(){
   BOTONES_ESCRITURA.forEach(function(id){
@@ -1681,7 +1735,7 @@ function aplicarPermisos(){
   var aviso = esAdminRol() ? "" :
     '<div class="aviso info"><span>🔒</span><div>Entraste con rol <b>' + esc(ESTADO.rol) +
     "</b>: podés mirar esta pantalla, pero solo un <b>admin</b> puede cambiarla.</div></div>";
-  ["avisoRolConfig","avisoRolEscalas"].forEach(function(id){
+  ["avisoRolConfig","avisoRolEscalas","avisoRolAlic"].forEach(function(id){
     var el = $(id);
     if (el) el.innerHTML = aviso;
   });
@@ -2207,6 +2261,7 @@ function irA(tabId){
   if (tabId === "tabMails")        renderMails();
   if (tabId === "tabArchivos")     renderArchivos();
   if (tabId === "tabEscalas")      renderEscala();
+  if (tabId === "tabAlicuotas")    renderAlicuotas();
   if (tabId === "tabConfig")       renderConfig();
 }
 Array.prototype.forEach.call($("navTabs").children, function(b){
@@ -2552,7 +2607,13 @@ function formCliente(c, idCliente){
           '<input type="number" step="0.001" id="fcAlic_' + k + '" value="' + (conf.alicuota || "") + '" placeholder="3,5"></div>' +
         '<div class="campo" style="margin-top:12px"><label>Mínimo mensual</label>' +
           '<input type="number" step="0.01" id="fcMin_' + k + '" value="' + (conf.minimo || "") + '" placeholder="sin mínimo"></div>' +
-      "</div></div>";
+      "</div>" +
+      /* Lo que dice la tabla de alícuotas para el código de actividad cargado
+         arriba. Es sugerencia, no imposición: el valor de la ficha siempre
+         gana, pero al menos no hay que ir a buscarlo a otra pantalla. */
+      (k === "municipal" ? "" : '<div class="ayuda" id="sugAlic_' + k + '" style="margin:8px 0 10px' +
+        (conf.exento ? ";display:none" : "") + '"></div>') +
+      "</div>";
   }).join("") +
 
   '<div class="seccion-tit">Delegación de servicios</div>' +
@@ -2694,6 +2755,10 @@ function abrirFormCliente(id, precarga){
     var v = this.value.replace(/\D/g,"");
     if (v.length === 11) this.value = formatCuit(v);
   };
+  /* La alícuota de IIBB depende del código de actividad, así que la sugerencia
+     se repinta a medida que lo escriben. */
+  $("fcNaes").oninput = pintarSugAlic;
+  pintarSugAlic();
   /* Con datos precargados el formulario arranca "sucio" a propósito: son
      cambios que el usuario no quiere perder de un clic afuera. */
   cargarClavesEnFicha(id, !!precarga);
@@ -3611,19 +3676,29 @@ function fichaPdfCliente(id){
 
   titulo("Impuestos que liquida");
   var imp = c.impuestos || {}, iibb = c.iibb || {};
-  function lineaImp(nombre, activo, conf){
+  function lineaImp(nombre, activo, conf, clave){
     if (!activo) return;
     doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(NEGRO[0], NEGRO[1], NEGRO[2]);
     var txt = nombre;
-    if (conf && conf.exento) txt += "  —  EXENTO" + (conf.motivoExencion ? ": " + conf.motivoExencion : "");
-    else if (conf && conf.alicuota) txt += "  —  alícuota " + conf.alicuota + "%" + (conf.minimo ? ", mínimo " + pesos(conf.minimo) : "");
+    if (conf && conf.exento){
+      txt += "  —  EXENTO" + (conf.motivoExencion ? ": " + conf.motivoExencion : "");
+    } else {
+      /* La alícuota que realmente se va a usar, sea la de la ficha o la que
+         sale de la tabla por el código de actividad. En la ficha impresa
+         conviene que figure la que se aplica, no sólo la escrita a mano. */
+      var ef = clave ? alicuotaEfectiva(c, clave) : null;
+      if (ef && ef.exento) txt += "  —  exento según la tabla de " + _cortoJuris(clave);
+      else if (ef) txt += "  —  alícuota " + ef.alicuota + "%" +
+        (ef.minimo ? ", mínimo " + pesos(ef.minimo) : "") +
+        (ef.origen === "ficha" ? "" : " (" + origenAlicuota(ef, clave) + ")");
+    }
     doc.text(doc.splitTextToSize(txt, ANCHO), M, y);
     y += 16;
   }
-  lineaImp("ARCA — Monotributo", imp.arca !== false, null);
-  lineaImp("ARBA — IIBB Provincia de Buenos Aires", imp.arba, iibb.arba);
-  lineaImp("AGIP — IIBB Ciudad de Buenos Aires", imp.agip, iibb.agip);
-  lineaImp("Tasa municipal" + (c.municipio ? " — " + c.municipio : ""), imp.municipal, iibb.municipal);
+  lineaImp("ARCA — Monotributo", imp.arca !== false, null, null);
+  lineaImp("ARBA — IIBB Provincia de Buenos Aires", imp.arba, iibb.arba, "arba");
+  lineaImp("AGIP — IIBB Ciudad de Buenos Aires", imp.agip, iibb.agip, "agip");
+  lineaImp("Tasa municipal" + (c.municipio ? " — " + c.municipio : ""), imp.municipal, iibb.municipal, "municipal");
   if (!imp.arca && !imp.arba && !imp.agip && !imp.municipal){
     doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(GRIS[0], GRIS[1], GRIS[2]);
     doc.text("Ninguno tildado en la ficha.", M, y); y += 16;
@@ -4751,6 +4826,7 @@ function toggleExento(k){
   var on = $("fcExento_" + k).checked;
   $("wrapExento_" + k).style.display = on ? "" : "none";
   $("wrapAlic_" + k).style.display   = on ? "none" : "";
+  if ($("sugAlic_" + k)) $("sugAlic_" + k).style.display = on ? "none" : "";
 }
 
 /* La exención se carga una vez en la ficha y vale para todos los períodos: no
@@ -4860,8 +4936,26 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
       ". No corresponde ingresar el impuesto. Si igual hay que presentar la declaración jurada, va en cero.</div></div>";
   }
 
-  if (!conf.alicuota){
-    return '<div class="ayuda" style="margin-bottom:8px">Sin alícuota cargada en la ficha del cliente: el importe va a mano.</div>';
+  /* La alícuota puede salir de la ficha o de la tabla de la jurisdicción, por
+     el código de actividad. De donde salga se dice abajo del cálculo: en una
+     liquidación de impuestos importa tanto el número como su procedencia. */
+  var ef = alicuotaEfectiva(c, clave);
+
+  if (!ef){
+    var sinTabla = (clave === "arba" || clave === "agip") &&
+                   !Object.keys(alicFilas(clave)).length && !alicTabla(clave).general;
+    return '<div class="ayuda" style="margin-bottom:8px">Sin alícuota: ni en la ficha del cliente' +
+      (clave === "municipal" ? "" : " ni en la tabla de " + _cortoJuris(clave)) +
+      ". El importe va a mano." +
+      (sinTabla ? " Si cargás la tabla de " + _cortoJuris(clave) + " en <b>Alícuotas IIBB</b>, " +
+                  "sale sola por el código de actividad." : "") + "</div>";
+  }
+
+  if (ef.exento){
+    return '<div class="aviso warn"><span>⚠️</span><div>En la tabla de ' + _cortoJuris(clave) +
+      ", el código " + esc(ef.fila.codigo) + (ef.fila.desc ? " (" + esc(ef.fila.desc) + ")" : "") +
+      " figura como <b>exento</b>, pero en la ficha del cliente la exención no está tildada. " +
+      "Si corresponde, tildala en la ficha y no se le vuelve a pedir el impuesto.</div></div>";
   }
 
   var t = (ESTADO.totales[clienteId] || {})[periodo];
@@ -4871,20 +4965,22 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
   }
 
   var ventas   = t.emitido;
-  var porAlic  = ventas * conf.alicuota / 100;
-  var base     = (conf.minimo && porAlic < conf.minimo) ? conf.minimo : porAlic;
+  var porAlic  = ventas * ef.alicuota / 100;
+  var base     = (ef.minimo && porAlic < ef.minimo) ? ef.minimo : porAlic;
   var usoMinimo = base !== porAlic;
   var ret      = parseFloat(d.retenciones) || 0;
   var aPagar   = Math.max(0, base - ret);
 
-  var detalle = pesos(ventas) + " × " + conf.alicuota + "% = <b>" + pesos(porAlic) + "</b>";
-  if (usoMinimo) detalle += "; como es menor al mínimo de " + pesos(conf.minimo) + ", se toma el mínimo";
+  var detalle = pesos(ventas) + " × " + ef.alicuota + "% = <b>" + pesos(porAlic) + "</b>";
+  if (usoMinimo) detalle += "; como es menor al mínimo de " + pesos(ef.minimo) + ", se toma el mínimo";
   if (ret)       detalle += "; menos " + pesos(ret) + " de retenciones";
 
   return '<div class="aviso info"><span>🧮</span><div>' + detalle +
     " → <b>" + pesos(aPagar) + "</b> " +
     '<a href="#" onclick="document.getElementById(\'lq_' + clave + '_monto\').value=' + aPagar.toFixed(2) +
-    ';return false;">Usar este importe</a></div></div>';
+    ';return false;">Usar este importe</a>' +
+    (ef.origen === "ficha" ? "" : '<div class="ayuda" style="margin-top:6px">' + esc(origenAlicuota(ef, clave)) + "</div>") +
+    "</div></div>";
 }
 
 /* ---------- EL VEP EN PDF ----------
@@ -5387,6 +5483,701 @@ $("btnNuevaEscala").onclick = function(){
         } }
     ]);
 };
+
+/* ---------- 17b. ALÍCUOTAS DE INGRESOS BRUTOS ----------
+
+   La alícuota de IIBB no depende del cliente sino de la ACTIVIDAD: el código
+   NAIIB en ARBA (alineado al NAES), el mismo NAES en AGIP. Y el porcentaje de
+   cada código lo fija la Ley Impositiva de cada año.
+
+   La tabla no viene sembrada a propósito. Inventar un porcentaje de impuesto es
+   peor que no tener ninguno: el número tiene que salir del anexo oficial. Se
+   carga una vez (Excel del nomenclador, texto pegado del anexo o PDF leído con
+   IA) y de ahí en más cada cliente saca su alícuota por el código, en vez de
+   escribirla a mano ficha por ficha.
+
+   Vive en `config/alicuotas/<juris>` y no en una rama nueva A PROPÓSITO: la
+   regla de `config` ya está publicada en la consola (lee cualquiera, escribe
+   admin), así que esto funciona sin tener que tocar las reglas de Firebase
+   —que es justo lo que dejó la pantalla de Socios a medias—. */
+
+var JURIS_ALIC = [
+  { clave:"arba", nombre:"ARBA — Provincia de Buenos Aires", corto:"ARBA" },
+  { clave:"agip", nombre:"AGIP — Ciudad de Buenos Aires",    corto:"AGIP" }
+];
+function _cortoJuris(j){
+  for (var i = 0; i < JURIS_ALIC.length; i++) if (JURIS_ALIC[i].clave === j) return JURIS_ALIC[i].corto;
+  return String(j || "").toUpperCase();
+}
+
+function alicTabla(juris){ return ((ESTADO.config.alicuotas || {})[juris]) || {}; }
+function alicFilas(juris){ return alicTabla(juris).filas || {}; }
+
+/* El id de la fila es el código pelado. Así reimportar el anexo del año que
+   viene actualiza los porcentajes en vez de duplicar mil actividades. */
+function _alicClave(codigo){ return String(codigo || "").replace(/\D/g, ""); }
+
+/* Lee un número escrito como lo escribe un argentino: "5,00" es cinco y
+   "1.839.000.000" son mil ochocientos treinta y nueve millones. */
+function _numAr(s){
+  if (typeof s === "number") return isNaN(s) ? null : s;
+  var t = String(s == null ? "" : s).replace(/%/g, "").replace(/\s/g, "").trim();
+  if (!t) return null;
+  if (t.indexOf(",") !== -1) t = t.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+  var n = parseFloat(t);
+  return isNaN(n) ? null : n;
+}
+
+/* Busca la actividad en la tabla. Si el código completo no está, prueba con los
+   primeros dígitos: los anexos muchas veces traen el renglón agrupado por
+   división ("620000 — servicios informáticos") y el cliente tiene el de seis. */
+function buscarAlicuota(juris, codigo){
+  var cod = _alicClave(codigo);
+  if (!cod) return null;
+  var filas = alicFilas(juris);
+  if (filas[cod]) return Object.assign({}, filas[cod], { codigo: cod, exacto: true });
+  for (var n = cod.length - 1; n >= 2; n--){
+    var pre = cod.slice(0, n);
+    if (filas[pre]) return Object.assign({}, filas[pre], { codigo: pre, exacto: false });
+    /* En los nomencladores el renglón agrupado suele venir completado con
+       ceros: 620000 en vez de 62. */
+    var conCeros = pre + new Array(cod.length - n + 1).join("0");
+    if (filas[conCeros]) return Object.assign({}, filas[conCeros], { codigo: conCeros, exacto: false });
+  }
+  return null;
+}
+
+/* La alícuota que se usa para calcular, en orden de prioridad:
+   1) la de la ficha del cliente —la puso una persona, manda siempre—,
+   2) la de la tabla, por el código de actividad,
+   3) la general (subsidiaria) de la jurisdicción.
+   Devuelve null si no hay ninguna: ahí el importe va a mano, como antes. */
+function alicuotaEfectiva(cli, clave){
+  var conf = ((cli || {}).iibb || {})[clave] || {};
+  if (conf.alicuota) return { alicuota: conf.alicuota, minimo: conf.minimo || null, origen: "ficha" };
+  if (clave !== "arba" && clave !== "agip") return null;   /* la tasa municipal no tiene tabla */
+
+  var f = buscarAlicuota(clave, (cli || {}).codigoNAES);
+  if (f && f.exento) return { alicuota: 0, minimo: null, origen: "tabla", fila: f, exento: true };
+  if (f && f.alicuota){
+    return { alicuota: f.alicuota, minimo: (conf.minimo || f.minimo || null), origen: "tabla", fila: f };
+  }
+  var t = alicTabla(clave);
+  if (t.general) return { alicuota: t.general, minimo: (conf.minimo || t.minimo || null), origen: "general" };
+  return null;
+}
+
+/* Texto corto para decir de dónde salió el porcentaje. En una liquidación de
+   impuestos importa tanto el número como su procedencia. */
+function origenAlicuota(ef, juris){
+  if (!ef) return "";
+  if (ef.origen === "ficha")  return "alícuota de la ficha del cliente";
+  if (ef.origen === "general") return "alícuota general de " + _cortoJuris(juris) +
+    (alicTabla(juris).vigencia ? " " + alicTabla(juris).vigencia : "") + " (la actividad no figura en la tabla)";
+  var f = ef.fila || {};
+  return "tabla de " + _cortoJuris(juris) + (alicTabla(juris).vigencia ? " " + alicTabla(juris).vigencia : "") +
+    ", código " + f.codigo + (f.exacto ? "" : " (renglón general del rubro)") +
+    (f.desc ? " — " + f.desc : "");
+}
+
+/* ---------- LA PANTALLA ---------- */
+/* Ediciones pendientes de guardar: código -> fila nueva, o null para borrarla.
+   Se guarda por diferencia, igual que el resto del sistema: una tabla de mil
+   actividades no se reescribe entera para cambiar un renglón. */
+var _alicEdit = {};
+
+function renderAlicuotas(){
+  var juris = $("selJurisAlic").value || "arba";
+  var t = alicTabla(juris);
+  $("alicVigencia").value = t.vigencia || "";
+  $("alicGeneral").value  = t.general  || "";
+  $("alicMinimo").value   = t.minimo   || "";
+  $("alicFuente").value   = t.fuente   || "";
+  pintarAlicuotas();
+}
+
+function _alicFilaDe(juris, cod){
+  return (_alicEdit[cod] !== undefined) ? _alicEdit[cod] : (alicFilas(juris)[cod] || null);
+}
+
+function _alicCodigosVista(juris){
+  var filas = alicFilas(juris), codigos = Object.keys(filas);
+  Object.keys(_alicEdit).forEach(function(c){
+    if (_alicEdit[c] && codigos.indexOf(c) === -1) codigos.push(c);
+  });
+  var q = _sinTildes($("alicBuscar").value || "").toLowerCase();
+  var out = codigos.filter(function(c){
+    var f = _alicFilaDe(juris, c);
+    if (!f) return false;                                   /* borrada sin guardar todavía */
+    if (!q) return true;
+    if (c.indexOf(q.replace(/\D/g, "")) === 0 && /\d/.test(q)) return true;
+    return _sinTildes(f.desc || "").toLowerCase().indexOf(q) !== -1;
+  });
+  out.sort();
+  return out;
+}
+
+var ALIC_TOPE_VISTA = 300;
+
+function pintarAlicuotas(){
+  var juris = $("selJurisAlic").value || "arba";
+  var corto = _cortoJuris(juris);
+  var codigos = _alicCodigosVista(juris);
+  var cargadas = Object.keys(alicFilas(juris)).length;
+  var mostrados = codigos.slice(0, ALIC_TOPE_VISTA);
+  var pendientes = Object.keys(_alicEdit).length;
+
+  $("alicConteo").innerHTML =
+    (cargadas ? cargadas + " actividad" + (cargadas === 1 ? "" : "es") + " en la tabla de " + corto : "Tabla de " + corto + " vacía") +
+    (codigos.length !== cargadas ? " · " + codigos.length + " en pantalla" : "") +
+    (mostrados.length < codigos.length ? " · se muestran las primeras " + ALIC_TOPE_VISTA + ", afiná la búsqueda" : "") +
+    (pendientes ? ' · <b style="color:var(--amar)">' + pendientes + " sin guardar</b>" : "");
+
+  if (!mostrados.length){
+    $("tablaAlicuotas").innerHTML = '<div class="vacio"><div class="ico">📊</div>' +
+      "<div>" + (cargadas ? "Ninguna actividad coincide con la búsqueda."
+                          : "Todavía no cargaste la tabla de " + corto + ".") + "</div>" +
+      (cargadas ? "" : '<div class="ayuda" style="max-width:520px;margin:10px auto 0">' +
+        "Bajá el nomenclador o el anexo de alícuotas del sitio del organismo y usá <b>Cargar la tabla</b>. " +
+        "Mientras no esté, cada cliente sigue usando la alícuota que tenga escrita en su ficha.</div>") +
+      "</div>";
+    return;
+  }
+
+  var puede = esAdminRol();
+  var est = 'text-align:right;padding:6px 9px;border:1px solid var(--borde);border-radius:6px';
+  var html = '<div class="tabla-wrap"><table><thead><tr>' +
+    "<th>Código</th><th>Actividad</th><th class=num>Alícuota %</th><th class=num>Mínimo</th>" +
+    "<th>Exenta</th><th>Notas</th>" + (puede ? "<th></th>" : "") + "</tr></thead><tbody>";
+
+  mostrados.forEach(function(cod){
+    var f = _alicFilaDe(juris, cod) || {};
+    var sucia = _alicEdit[cod] !== undefined;
+    html += '<tr' + (sucia ? ' style="background:#FFFBE6"' : "") + '>' +
+      "<td><b>" + esc(cod) + "</b></td>" +
+      '<td><input type="text" data-cod="' + cod + '" data-campo="desc" value="' + esc(f.desc || "") +
+        '" style="width:100%;min-width:220px;padding:6px 9px;border:1px solid var(--borde);border-radius:6px"></td>' +
+      '<td class="num"><input type="number" step="0.001" data-cod="' + cod + '" data-campo="alicuota" value="' +
+        (f.alicuota || "") + '" style="width:90px;' + est + '"></td>' +
+      '<td class="num"><input type="number" step="0.01" data-cod="' + cod + '" data-campo="minimo" value="' +
+        (f.minimo || "") + '" style="width:110px;' + est + '"></td>' +
+      '<td style="text-align:center"><input type="checkbox" data-cod="' + cod + '" data-campo="exento"' +
+        (f.exento ? " checked" : "") + "></td>" +
+      '<td><input type="text" data-cod="' + cod + '" data-campo="notas" value="' + esc(f.notas || "") +
+        '" placeholder="—" style="width:100%;min-width:140px;padding:6px 9px;border:1px solid var(--borde);border-radius:6px"></td>' +
+      (puede ? '<td><button class="btn gris chico" onclick="borrarFilaAlic(\'' + cod + '\')">✕</button></td>' : "") +
+      "</tr>";
+  });
+  $("tablaAlicuotas").innerHTML = html + "</tbody></table></div>";
+
+  Array.prototype.forEach.call($("tablaAlicuotas").querySelectorAll("input[data-cod]"), function(inp){
+    if (!puede){ inp.disabled = true; return; }
+    inp.onchange = function(){ _alicTomarInput(inp); };
+  });
+}
+
+/* Cada campo tocado se lleva a _alicEdit con la fila entera: así el update()
+   posterior escribe un objeto completo y no medio renglón. */
+function _alicTomarInput(inp){
+  var juris = $("selJurisAlic").value || "arba";
+  var cod   = inp.dataset.cod;
+  var base  = _alicFilaDe(juris, cod) || {};
+  var f = {
+    desc:     base.desc || "",
+    alicuota: base.alicuota || null,
+    minimo:   base.minimo || null,
+    exento:   !!base.exento,
+    notas:    base.notas || ""
+  };
+  if (inp.dataset.campo === "exento") f.exento = inp.checked;
+  else if (inp.dataset.campo === "desc" || inp.dataset.campo === "notas") f[inp.dataset.campo] = inp.value.trim();
+  else f[inp.dataset.campo] = _numAr(inp.value);
+  _alicEdit[cod] = f;
+  pintarAlicuotas();
+}
+
+function borrarFilaAlic(cod){
+  _alicEdit[cod] = null;
+  pintarAlicuotas();
+  toast("Se borra al guardar", "info");
+}
+
+$("selJurisAlic").onchange = function(){
+  if (Object.keys(_alicEdit).length &&
+      !confirm("Hay cambios sin guardar en la otra jurisdicción. ¿Los descarto?")) {
+    return;
+  }
+  _alicEdit = {};
+  renderAlicuotas();
+};
+$("alicBuscar").oninput = pintarAlicuotas;
+
+$("btnNuevaFilaAlic").onclick = function(){
+  var juris = $("selJurisAlic").value || "arba";
+  abrirModal("Nueva actividad en " + _cortoJuris(juris),
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Código (NAIIB / NAES)</label><input type="text" id="naCod" placeholder="691001"></div>' +
+      '<div class="campo"><label>Alícuota %</label><input type="number" step="0.001" id="naAlic" placeholder="5"></div>' +
+    "</div>" +
+    '<div class="campo"><label>Actividad</label><input type="text" id="naDesc" placeholder="Servicios jurídicos"></div>' +
+    '<div class="grid g2">' +
+      '<div class="campo"><label>Mínimo mensual</label><input type="number" step="0.01" id="naMin" placeholder="sin mínimo"></div>' +
+      '<div class="campo" style="justify-content:flex-end"><label class="check"><input type="checkbox" id="naExento"> Actividad exenta</label></div>' +
+    "</div>" +
+    '<div class="campo"><label>Notas</label><input type="text" id="naNotas" placeholder="Ej: exenta si es en planta radicada en la provincia"></div>',
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+      { texto:"Agregar", accion:function(){
+          var cod = _alicClave($("naCod").value);
+          if (!cod){ toast("Poné el código de actividad", "error"); return; }
+          _alicEdit[cod] = {
+            desc:     $("naDesc").value.trim(),
+            alicuota: _numAr($("naAlic").value),
+            minimo:   _numAr($("naMin").value),
+            exento:   $("naExento").checked,
+            notas:    $("naNotas").value.trim()
+          };
+          cerrarModal();
+          $("alicBuscar").value = cod;
+          pintarAlicuotas();
+          toast("Agregada. Acordate de Guardar cambios", "ok");
+        } }
+    ]);
+};
+
+$("btnGuardarAlic").onclick = function(){
+  var juris = $("selJurisAlic").value || "arba";
+  var base  = "config/alicuotas/" + juris;
+  var upd = {};
+  upd[base + "/vigencia"]    = $("alicVigencia").value.trim();
+  upd[base + "/fuente"]      = $("alicFuente").value.trim();
+  upd[base + "/general"]     = _numAr($("alicGeneral").value);
+  upd[base + "/minimo"]      = _numAr($("alicMinimo").value);
+  upd[base + "/actualizado"] = new Date().toISOString();
+  var cambios = Object.keys(_alicEdit);
+  cambios.forEach(function(c){ upd[base + "/filas/" + c] = _alicEdit[c]; });
+
+  ref("").update(upd).then(function(){
+    if (!ESTADO.config.alicuotas) ESTADO.config.alicuotas = {};
+    if (!ESTADO.config.alicuotas[juris]) ESTADO.config.alicuotas[juris] = {};
+    var t = ESTADO.config.alicuotas[juris];
+    t.vigencia = $("alicVigencia").value.trim();
+    t.fuente   = $("alicFuente").value.trim();
+    t.general  = _numAr($("alicGeneral").value);
+    t.minimo   = _numAr($("alicMinimo").value);
+    if (!t.filas) t.filas = {};
+    cambios.forEach(function(c){
+      if (_alicEdit[c] === null) delete t.filas[c];
+      else t.filas[c] = _alicEdit[c];
+    });
+    _alicEdit = {};
+    toast(cambios.length ? "Guardado: " + cambios.length + " actividad" + (cambios.length === 1 ? "" : "es") : "Guardado", "ok");
+    pintarAlicuotas();
+  }).catch(function(err){ toast("Error al guardar: " + err.message, "error"); });
+};
+
+$("btnBajarAlic").onclick = function(){
+  var juris = $("selJurisAlic").value || "arba";
+  var filas = alicFilas(juris), codigos = Object.keys(filas).sort();
+  if (!codigos.length){ toast("La tabla está vacía", "error"); return; }
+  if (typeof XLSX === "undefined"){ toast("No se pudo cargar el generador de Excel", "error"); return; }
+  var datos = codigos.map(function(c){
+    return {
+      Codigo:   c,
+      Actividad: filas[c].desc || "",
+      Alicuota:  filas[c].alicuota || "",
+      Minimo:    filas[c].minimo || "",
+      Exenta:    filas[c].exento ? "SI" : "",
+      Notas:     filas[c].notas || ""
+    };
+  });
+  var libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(datos), "Alicuotas");
+  XLSX.writeFile(libro, "alicuotas-" + juris + (alicTabla(juris).vigencia ? "-" + alicTabla(juris).vigencia : "") + ".xlsx");
+};
+
+/* ---------- CARGAR LA TABLA ----------
+   Los anexos vienen de mil formas distintas. Lo único estable es que en cada
+   renglón hay un código de 4 a 9 dígitos, un nombre de actividad y un
+   porcentaje. Se interpreta con eso, y lo interpretado se muestra en una tabla
+   EDITABLE antes de guardar: el control final lo hace la persona, no el
+   parser. */
+var _alicImport = [];   /* filas interpretadas, esperando confirmación */
+
+function parsearAlicuotasTexto(txt){
+  var out = [];
+  String(txt || "").split(/\r?\n/).forEach(function(linea){
+    var l = linea.replace(/\s+/g, " ").trim();
+    if (!l) return;
+    var mCod = l.match(/(?:^|[\s|;,])(\d{4,9})(?![\d])/);
+    if (!mCod) return;
+    var cod = mCod[1];
+    var resto = l.slice(mCod.index + mCod[0].length).replace(/^[\s|;,.:-]+/, "");
+    /* La descripción es lo que va hasta el primer número: los porcentajes y los
+       importes vienen siempre después del nombre de la actividad. */
+    var mNum = resto.match(/\d/);
+    var desc = (mNum ? resto.slice(0, mNum.index) : resto).replace(/[\s|;,.:-]+$/, "").trim();
+    var cola = mNum ? resto.slice(mNum.index) : "";
+    var nums = (cola.match(/\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?/g) || []).map(_numAr)
+                 .filter(function(n){ return n !== null; });
+    var alic = null, min = null;
+    for (var i = 0; i < nums.length; i++){
+      if (alic === null && nums[i] <= 100){ alic = nums[i]; continue; }
+      if (min === null && nums[i] > 100)   { min  = nums[i]; }
+    }
+    var exento = /exent|exenc/i.test(l);
+    if (alic === null && !exento) return;              /* renglón de título, no de alícuota */
+    out.push({ codigo: cod, desc: desc, alicuota: alic, minimo: min, exento: exento, notas: "" });
+  });
+  return out;
+}
+
+/* Cuando el archivo trae columnas de verdad (el Excel del nomenclador) se usan
+   los encabezados, que es mucho más confiable que adivinar por la línea. */
+function _colQueDiga(enc, claves){
+  for (var i = 0; i < enc.length; i++){
+    for (var j = 0; j < claves.length; j++){
+      if (enc[i].indexOf(claves[j]) !== -1) return i;
+    }
+  }
+  return -1;
+}
+
+function parsearAlicuotasFilas(filas){
+  if (!filas || !filas.length) return [];
+  /* El encabezado no siempre está en la primera fila: los anexos traen dos o
+     tres renglones de título arriba. Se busca en las primeras diez. */
+  var iEnc = -1, enc = [];
+  for (var k = 0; k < Math.min(10, filas.length); k++){
+    var e = (filas[k] || []).map(function(c){ return _sinTildes(String(c)).toLowerCase(); });
+    if (_colQueDiga(e, ["codigo", "naiib", "naes", "cod."]) !== -1 &&
+        _colQueDiga(e, ["alicuota", "tasa", "%"]) !== -1){ iEnc = k; enc = e; break; }
+  }
+  if (iEnc === -1){
+    /* Sin encabezados reconocibles: se pega cada fila y se lee como texto. */
+    return parsearAlicuotasTexto(filas.map(function(f){ return (f || []).join(" "); }).join("\n"));
+  }
+  var iCod  = _colQueDiga(enc, ["codigo", "naiib", "naes", "cod."]);
+  var iDesc = _colQueDiga(enc, ["actividad", "descripcion", "detalle", "denominacion"]);
+  var iAlic = _colQueDiga(enc, ["alicuota", "tasa", "%"]);
+  var iMin  = _colQueDiga(enc, ["minimo", "impuesto minimo"]);
+  var out = [];
+  filas.slice(iEnc + 1).forEach(function(f){
+    var cod = _alicClave(f[iCod]);
+    if (cod.length < 2) return;
+    var alic = iAlic === -1 ? null : _numAr(f[iAlic]);
+    var txt  = (f || []).join(" ");
+    var exento = /exent|exenc/i.test(txt);
+    if (alic === null && !exento) return;
+    out.push({
+      codigo: cod,
+      desc: iDesc === -1 ? "" : String(f[iDesc] || "").replace(/\s+/g, " ").trim(),
+      alicuota: alic,
+      minimo: iMin === -1 ? null : _numAr(f[iMin]),
+      exento: exento,
+      notas: ""
+    });
+  });
+  return out;
+}
+
+function abrirImportarAlicuotas(){
+  if (!esAdminRol()){ toast("Sólo un administrador puede cargar la tabla", "error"); return; }
+  var juris = $("selJurisAlic").value || "arba";
+  _alicImport = [];
+  abrirModal("Cargar la tabla de " + _cortoJuris(juris),
+    '<div class="aviso info"><span>ℹ️</span><div>La tabla sale del <b>anexo de alícuotas de la Ley Impositiva</b> o del <b>nomenclador</b> del organismo. ' +
+      "Tres caminos: subir el <b>Excel o CSV</b> del nomenclador, <b>pegar el texto</b> del anexo, o subir un <b>PDF</b>. " +
+      "Del PDF se intenta primero leer el texto solo; si no alcanza, lo lee la IA. " +
+      "Antes de guardar vas a ver todo en una tabla que podés corregir.</div></div>" +
+    '<div class="campo"><label>Archivo (Excel, CSV o PDF)</label>' +
+      '<input type="file" id="iaArchivo" accept=".xlsx,.xlsm,.xls,.csv,.txt,.pdf"></div>' +
+    '<div class="campo"><label>…o pegá acá el texto del anexo</label>' +
+      '<textarea id="iaTexto" rows="7" placeholder="691001 Servicios jurídicos 5,00&#10;692000 Servicios de contabilidad 5,00"></textarea>' +
+      '<div class="ayuda">Un renglón por actividad. No importa el orden de las columnas mientras el código vaya antes del nombre.</div></div>' +
+    '<label class="check"><input type="checkbox" id="iaIA"> Leer con IA (Gemini) en vez de interpretarlo solo</label>' +
+    '<div class="ayuda" style="margin-top:-4px">Necesario para los PDF escaneados y para los anexos con columnas raras. Para un anexo muy largo conviene ir de a unas pocas páginas.</div>' +
+    '<div id="iaEstado" style="margin-top:14px"></div>' +
+    '<div id="iaPreview"></div>',
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+      { texto:"Interpretar", clase:"sec", accion:interpretarAlicuotas, id:"iaBtnLeer" },
+      { texto:"Guardar en la tabla", accion:confirmarImportAlicuotas, id:"iaBtnGuardar" }
+    ], "ancho");
+  $("iaBtnGuardar").disabled = true;
+}
+$("btnImportarAlic").onclick = abrirImportarAlicuotas;
+
+function _iaEstado(html){ $("iaEstado").innerHTML = html; }
+
+function interpretarAlicuotas(){
+  var f    = $("iaArchivo").files[0];
+  var txt  = $("iaTexto").value.trim();
+  var conIA = $("iaIA").checked;
+  if (!f && !txt){ toast("Subí un archivo o pegá el texto", "error"); return; }
+
+  $("iaBtnLeer").disabled = true;
+  _iaEstado('<div class="aviso info"><span>⏳</span><div>Interpretando…</div></div>');
+
+  var listo = function(filas){
+    $("iaBtnLeer").disabled = false;
+    _alicImport = _alicUnificar(filas);
+    pintarPreviewAlicuotas();
+  };
+  var mal = function(e){
+    $("iaBtnLeer").disabled = false;
+    _iaEstado('<div class="aviso bad"><span>⚠️</span><div>' + esc(e.message || String(e)) + "</div></div>");
+  };
+
+  /* Con IA se manda el archivo tal cual (PDF o imagen) o el texto pegado. */
+  if (conIA){
+    var prompt = "Te paso un anexo de alícuotas del impuesto sobre los ingresos brutos de Argentina. " +
+      "Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
+      '{"filas":[{"codigo":"691001","desc":"Servicios jurídicos","alicuota":5,"minimo":null,"exento":false,"notas":""}]}. ' +
+      "codigo es el código de actividad (NAIIB o NAES) sin puntos. alicuota es el porcentaje como número " +
+      "(5,00 se escribe 5). minimo es el impuesto mínimo mensual si figura, o null. exento en true si el " +
+      "renglón dice que la actividad está exenta. notas: condiciones del renglón, si hay, en pocas palabras. " +
+      "No inventes ningún código ni ningún porcentaje: sólo lo que está escrito.";
+    var envio = (f && /\.pdf$/i.test(f.name)) || (f && /^image\//.test(f.type)) ? f : null;
+    if (!envio && !txt && f){
+      mal(new Error("Ese archivo la IA no lo lee: pasá el Excel sin IA, o pegá el texto."));
+      return;
+    }
+    preguntarAGemini(prompt + (txt ? "\n\nAnexo:\n" + txt : ""), envio, 0)
+      .then(function(r){
+        var d = jsonDeGemini(r);
+        var filas = (d.filas || []).map(function(x){
+          return {
+            codigo: _alicClave(x.codigo),
+            desc: String(x.desc || x.actividad || "").trim(),
+            alicuota: _numAr(x.alicuota),
+            minimo: _numAr(x.minimo),
+            exento: !!x.exento,
+            notas: String(x.notas || "").trim()
+          };
+        }).filter(function(x){ return x.codigo; });
+        listo(filas);
+      }).catch(mal);
+    return;
+  }
+
+  if (!f){ listo(parsearAlicuotasTexto(txt)); return; }
+
+  if (esExcel(f)){
+    if (typeof XLSX === "undefined"){ mal(new Error("No se pudo cargar el lector de Excel")); return; }
+    var lec = new FileReader();
+    lec.onload = function(e){
+      try {
+        var libro = XLSX.read(new Uint8Array(e.target.result), { type:"array", cellDates:true });
+        var todas = [];
+        libro.SheetNames.forEach(function(n){
+          todas = todas.concat(XLSX.utils.sheet_to_json(libro.Sheets[n], { header:1, raw:true, defval:"" })
+                     .map(function(fl){ return fl.map(celdaATexto); }));
+        });
+        listo(parsearAlicuotasFilas(todas));
+      } catch (err){ mal(err); }
+    };
+    lec.onerror = function(){ mal(new Error("No pude leer el archivo")); };
+    lec.readAsArrayBuffer(f);
+    return;
+  }
+
+  if (/\.pdf$/i.test(f.name)){
+    textoDePdf(f).then(function(r){
+      var filas = parsearAlicuotasTexto(r.texto);
+      if (filas.length < 3){
+        mal(new Error("De ese PDF saqué " + r.texto.length + " caracteres de texto y sólo " + filas.length +
+          " renglón/es con alícuota. Probá tildando «Leer con IA», o copiá el texto y pegalo acá."));
+        return;
+      }
+      listo(filas);
+    }).catch(mal);
+    return;
+  }
+
+  /* CSV o texto plano */
+  var lecT = new FileReader();
+  lecT.onload = function(e){
+    var filas;
+    try { filas = parsearAlicuotasFilas(parseCSV(e.target.result)); }
+    catch (err){ filas = parsearAlicuotasTexto(e.target.result); }
+    if (!filas.length) filas = parsearAlicuotasTexto(e.target.result);
+    listo(filas);
+  };
+  lecT.onerror = function(){ mal(new Error("No pude leer el archivo")); };
+  lecT.readAsText(f, "UTF-8");
+}
+
+/* Un mismo código puede venir dos veces (el anexo lo repite por jurisdicción o
+   por condición). Gana el último, y se avisa arriba cuántos se unificaron. */
+function _alicUnificar(filas){
+  var mapa = {}, repetidos = 0;
+  (filas || []).forEach(function(f){
+    var cod = _alicClave(f.codigo);
+    if (!cod) return;
+    if (mapa[cod]) repetidos++;
+    mapa[cod] = { codigo: cod, desc: f.desc || "", alicuota: f.alicuota, minimo: f.minimo, exento: !!f.exento, notas: f.notas || "" };
+  });
+  var out = Object.keys(mapa).sort().map(function(c){ return mapa[c]; });
+  out._repetidos = repetidos;
+  return out;
+}
+
+function pintarPreviewAlicuotas(){
+  var juris = $("selJurisAlic").value || "arba";
+  var filas = _alicImport;
+  if (!filas.length){
+    _iaEstado('<div class="aviso warn"><span>⚠️</span><div>No pude sacar ni una actividad de ahí. ' +
+      "Fijate que cada renglón tenga el código primero, después el nombre y al final el porcentaje; " +
+      "o probá tildando «Leer con IA».</div></div>");
+    $("iaPreview").innerHTML = "";
+    $("iaBtnGuardar").disabled = true;
+    return;
+  }
+  var yaHay = alicFilas(juris), pisa = 0;
+  filas.forEach(function(f){ if (yaHay[f.codigo]) pisa++; });
+
+  _iaEstado('<div class="aviso ok"><span>✓</span><div>Interpreté <b>' + filas.length + "</b> actividad" +
+    (filas.length === 1 ? "" : "es") +
+    (filas._repetidos ? " (" + filas._repetidos + " código/s repetido/s, quedó el último)" : "") +
+    (pisa ? " · <b>" + pisa + "</b> ya estaban en la tabla y se van a actualizar" : "") +
+    ". Revisalas antes de guardar: lo que corrijas acá es lo que se guarda.</div></div>");
+
+  var est = 'padding:5px 8px;border:1px solid var(--borde);border-radius:6px';
+  var TOPE = 200;
+  var html = '<div class="tabla-wrap" style="max-height:340px;overflow:auto"><table><thead><tr>' +
+    "<th></th><th>Código</th><th>Actividad</th><th class=num>Alícuota %</th><th class=num>Mínimo</th><th>Exenta</th>" +
+    "</tr></thead><tbody>";
+  filas.slice(0, TOPE).forEach(function(f, i){
+    html += "<tr>" +
+      '<td><input type="checkbox" class="ia-chk" data-i="' + i + '" checked></td>' +
+      '<td><input type="text" class="ia-cod" data-i="' + i + '" value="' + esc(f.codigo) + '" style="width:90px;' + est + '"></td>' +
+      '<td><input type="text" class="ia-desc" data-i="' + i + '" value="' + esc(f.desc) + '" style="width:100%;min-width:200px;' + est + '"></td>' +
+      '<td class="num"><input type="number" step="0.001" class="ia-alic" data-i="' + i + '" value="' + (f.alicuota == null ? "" : f.alicuota) + '" style="width:85px;text-align:right;' + est + '"></td>' +
+      '<td class="num"><input type="number" step="0.01" class="ia-min" data-i="' + i + '" value="' + (f.minimo == null ? "" : f.minimo) + '" style="width:105px;text-align:right;' + est + '"></td>' +
+      '<td style="text-align:center"><input type="checkbox" class="ia-ex" data-i="' + i + '"' + (f.exento ? " checked" : "") + "></td>" +
+      "</tr>";
+  });
+  html += "</tbody></table></div>";
+  if (filas.length > TOPE){
+    html += '<div class="ayuda" style="margin-top:8px">Se muestran las primeras ' + TOPE +
+      " para revisar; se guardan las " + filas.length + ". Después las corregís desde la tabla.</div>";
+  }
+  $("iaPreview").innerHTML = html;
+  $("iaBtnGuardar").disabled = false;
+}
+
+function confirmarImportAlicuotas(){
+  var juris = $("selJurisAlic").value || "arba";
+  /* Lo editado en la vista previa se vuelca sobre lo interpretado. Sólo se
+     tocan las filas que están en pantalla; las de más abajo van como salieron. */
+  Array.prototype.forEach.call($("iaPreview").querySelectorAll(".ia-cod"), function(inp){
+    var i = parseInt(inp.dataset.i, 10);
+    var f = _alicImport[i];
+    if (!f) return;
+    f.codigo = _alicClave(inp.value);
+    var q = function(cl){ return $("iaPreview").querySelector("." + cl + '[data-i="' + i + '"]'); };
+    f.desc     = q("ia-desc").value.trim();
+    f.alicuota = _numAr(q("ia-alic").value);
+    f.minimo   = _numAr(q("ia-min").value);
+    f.exento   = q("ia-ex").checked;
+    f.incluir  = q("ia-chk").checked;
+  });
+
+  var elegidas = _alicImport.filter(function(f){ return f.codigo && f.incluir !== false; });
+  if (!elegidas.length){ toast("No quedó ninguna actividad para guardar", "error"); return; }
+
+  var base = "config/alicuotas/" + juris;
+  var upd = {};
+  upd[base + "/actualizado"] = new Date().toISOString();
+  /* Lo que haya en la cabecera de la pantalla se guarda junto con la carga: si
+     alguien escribió la vigencia o la alícuota general y de ahí se fue directo
+     a importar, sería raro que se perdiera. */
+  if ($("alicVigencia").value.trim()) upd[base + "/vigencia"] = $("alicVigencia").value.trim();
+  if ($("alicFuente").value.trim())   upd[base + "/fuente"]   = $("alicFuente").value.trim();
+  if (_numAr($("alicGeneral").value) !== null) upd[base + "/general"] = _numAr($("alicGeneral").value);
+  if (_numAr($("alicMinimo").value)  !== null) upd[base + "/minimo"]  = _numAr($("alicMinimo").value);
+  elegidas.forEach(function(f){
+    upd[base + "/filas/" + f.codigo] = {
+      desc: f.desc || "", alicuota: f.alicuota, minimo: f.minimo, exento: !!f.exento, notas: f.notas || ""
+    };
+  });
+
+  $("iaBtnGuardar").disabled = true;
+  ref("").update(upd).then(function(){
+    if (!ESTADO.config.alicuotas) ESTADO.config.alicuotas = {};
+    if (!ESTADO.config.alicuotas[juris]) ESTADO.config.alicuotas[juris] = {};
+    var t = ESTADO.config.alicuotas[juris];
+    if (!t.filas) t.filas = {};
+    if ($("alicVigencia").value.trim()) t.vigencia = $("alicVigencia").value.trim();
+    if ($("alicFuente").value.trim())   t.fuente   = $("alicFuente").value.trim();
+    if (_numAr($("alicGeneral").value) !== null) t.general = _numAr($("alicGeneral").value);
+    if (_numAr($("alicMinimo").value)  !== null) t.minimo  = _numAr($("alicMinimo").value);
+    elegidas.forEach(function(f){
+      t.filas[f.codigo] = { desc: f.desc || "", alicuota: f.alicuota, minimo: f.minimo, exento: !!f.exento, notas: f.notas || "" };
+    });
+    cerrarModal();
+    toast(elegidas.length + " alícuota" + (elegidas.length === 1 ? "" : "s") + " cargada" + (elegidas.length === 1 ? "" : "s"), "ok");
+    renderAlicuotas();
+  }).catch(function(err){
+    $("iaBtnGuardar").disabled = false;
+    toast("Error al guardar: " + err.message, "error");
+  });
+}
+
+
+/* ---------- LA TABLA DENTRO DE LA FICHA DEL CLIENTE ----------
+   Debajo de cada alícuota se muestra lo que dice la tabla para el código de
+   actividad cargado arriba, con un link para copiarlo. Sugerencia, no
+   imposición: si en la ficha hay un número escrito, ese es el que se usa. */
+function pintarSugAlic(){
+  ["arba", "agip"].forEach(function(k){
+    var el = $("sugAlic_" + k);
+    if (!el) return;
+    var corto = _cortoJuris(k);
+    var t = alicTabla(k);
+    var hayTabla = Object.keys(alicFilas(k)).length;
+    if (!hayTabla && !t.general){
+      el.innerHTML = "La tabla de alícuotas de " + corto + " está vacía. Se carga una sola vez en " +
+        '<b>Alícuotas IIBB</b> y después el código de actividad trae la alícuota solo.';
+      return;
+    }
+    var cod = $("fcNaes") ? _alicClave($("fcNaes").value) : "";
+    if (!cod){
+      el.innerHTML = "Cargá el código de actividad y busco la alícuota en la tabla de " + corto + ".";
+      return;
+    }
+    var f = buscarAlicuota(k, cod);
+    if (!f){
+      el.innerHTML = t.general
+        ? "El código " + esc(cod) + " no figura en la tabla de " + corto + ". Le correspondería la <b>general del " +
+          t.general + "%</b>. " + _linkUsarAlic(k, t.general, t.minimo)
+        : "El código " + esc(cod) + " no figura en la tabla de " + corto + " y no hay alícuota general cargada.";
+      return;
+    }
+    if (f.exento){
+      el.innerHTML = "En la tabla de " + corto + ", el código " + esc(f.codigo) +
+        (f.desc ? " (" + esc(f.desc) + ")" : "") + " figura como <b>exento</b>." +
+        (f.notas ? " " + esc(f.notas) : "");
+      return;
+    }
+    el.innerHTML = "Tabla de " + corto + (t.vigencia ? " " + esc(t.vigencia) : "") + ": código " + esc(f.codigo) +
+      (f.exacto ? "" : " (renglón general del rubro)") + (f.desc ? " — " + esc(f.desc) : "") +
+      " → <b>" + f.alicuota + "%</b>" + (f.minimo ? ", mínimo " + pesos(f.minimo) : "") +
+      (f.notas ? ". " + esc(f.notas) : "") + " " + _linkUsarAlic(k, f.alicuota, f.minimo);
+  });
+}
+function _linkUsarAlic(k, alic, min){
+  return '<a href="#" onclick="usarAlicDeTabla(\'' + k + "'," + (alic || 0) + "," +
+    (min || 0) + ');return false;">Usar esta alícuota</a>';
+}
+function usarAlicDeTabla(k, alic, min){
+  if (alic) $("fcAlic_" + k).value = alic;
+  if (min)  $("fcMin_" + k).value  = min;
+  _modalSucio = true;
+  toast("Alícuota copiada a la ficha", "ok");
+}
 
 /* ---------- 18. CONFIGURACIÓN Y BÓVEDA ---------- */
 function renderConfig(){
@@ -6124,7 +6915,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v40";
+var VERSION_APP = "v41";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

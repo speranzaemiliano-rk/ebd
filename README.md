@@ -145,6 +145,11 @@ La escala de ARCA vigente desde el 01/08/2026 ya viene cargada. Cuando publiquen
 próxima (enero 2027), andá a **Escalas ARCA → + Nueva vigencia** en vez de editar la
 existente: así los cálculos de períodos anteriores siguen dando bien.
 
+Las **alícuotas de ingresos brutos** sí hay que cargarlas una vez: bajá el anexo
+o el nomenclador del organismo y usá **Alícuotas IIBB → Cargar la tabla** (ver
+más abajo). Sin eso, los importes de ARBA y AGIP siguen yendo a mano, como hasta
+ahora.
+
 ---
 
 ## Traer los comprobantes de ARCA sin importar archivos
@@ -167,6 +172,47 @@ Para que empiece a funcionar faltan tres cosas, y ninguna es código:
 Los comprobantes **recibidos** no tienen web service en ARCA: esos se siguen
 importando desde el archivo de Mis Comprobantes, en CSV o en Excel.
 
+## Alícuotas de ingresos brutos (ARBA y AGIP)
+
+La alícuota de IIBB no depende del cliente sino de la **actividad**: el código
+NAIIB en ARBA —alineado al NAES—, el mismo NAES en AGIP. Y el porcentaje de cada
+código lo fija todos los años la **Ley Impositiva** de la jurisdicción.
+
+Por eso la tabla **no viene cargada de fábrica**: los porcentajes tienen que salir
+del anexo oficial, no de una estimación. Se carga una sola vez, en la pantalla
+**Alícuotas IIBB**, y de ahí en más cada cliente saca la suya por su código de
+actividad, sin escribirla ficha por ficha.
+
+**Cargar la tabla** acepta tres formatos:
+
+- el **Excel o CSV** del nomenclador (reconoce las columnas por el encabezado,
+  aunque haya renglones de título arriba);
+- el **texto pegado** del anexo (un renglón por actividad: código, nombre y
+  porcentaje);
+- un **PDF**, del que primero intenta leer el texto solo y, si no alcanza, lo
+  lee con IA.
+
+Salga de donde salga, antes de guardar se muestra todo en una **tabla editable**:
+lo que corrijas ahí es lo que se guarda. El sistema no inventa ningún porcentaje.
+
+Con la tabla cargada:
+
+- en la **ficha del cliente**, debajo de cada alícuota aparece lo que dice la
+  tabla para el código de actividad, con un link para copiarla;
+- en la **liquidación mensual**, el importe se calcula solo y abajo del cálculo
+  dice de dónde salió el porcentaje (ficha, tabla o alícuota general);
+- lo que esté escrito en la ficha **siempre gana**: la tabla es el valor por
+  defecto, no una imposición.
+
+Además se puede cargar la **alícuota general** (la subsidiaria) de cada
+jurisdicción, que se usa cuando la actividad no figura en la tabla, y marcar
+actividades **exentas**. Cuando salga la ley del año que viene se vuelve a
+importar el anexo: los códigos que ya estaban se actualizan, no se duplican.
+
+La tabla vive en `config/alicuotas/<jurisdicción>` dentro de la base, así que
+**no hay que tocar las reglas de Firebase** para usarla: la rama `config` ya está
+publicada desde el paso 4.
+
 ## Entrar a ARCA, ARBA y AGIP desde el sistema
 
 En la **bóveda de claves**, cada cliente que tenga credenciales guardadas
@@ -179,5 +225,5 @@ todos los clientes a un servicio de terceros.
 
 ## Qué falta (próximos pasos)
 
-- **Cálculo de IIBB**: hoy los importes de ARBA, AGIP y municipio se cargan a mano.
+- **Tasa municipal**: no tiene tabla de alícuotas (cada municipio es distinto), se carga a mano en la ficha.
 - **Adjuntar el PDF del VEP** al mail (hoy va como link).
