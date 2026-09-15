@@ -1895,6 +1895,7 @@ var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
 var TIPOS_ARCHIVO = [
   { clave:"ddjj",       nombre:"Declaración jurada" },
   { clave:"ddjjiibb",   nombre:"DDJJ de Ingresos Brutos" },
+  { clave:"acuse",      nombre:"Acuse de presentación" },
   { clave:"vep",        nombre:"VEP" },
   { clave:"pago",       nombre:"Comprobante de pago" },
   { clave:"factura",    nombre:"Factura" },
@@ -1907,7 +1908,34 @@ var TIPOS_ARCHIVO = [
    se guarda adentro de la liquidación —viene de antes y el sistema lo usa para
    contar cuántos faltan—; el resto va a los papeles del cliente, en el mes que
    corresponde, que es donde después se los busca y desde donde se los manda. */
-var TIPOS_LIQ = ["ddjjiibb", "ddjj", "vep", "pago", "factura", "resumen", "constancia", "otro"];
+/* El VEP va PRIMERO porque es el que queda elegido por defecto, y elegir un
+   archivo sin tocar la lista es lo más común. Con la DDJJ adelante, un VEP
+   subido de apuro se archivaba como declaración jurada sin que nadie lo note
+   —y desde que la DDJJ y el acuse tienen su propio botón, la lista es para
+   todo lo demás. */
+var TIPOS_LIQ = ["vep", "ddjjiibb", "ddjj", "acuse", "pago", "factura", "resumen", "constancia", "otro"];
+
+/* Los dos papeles que en ARCA y en ARBA se piden siempre: la declaración
+   jurada y el acuse de presentación —que es el que prueba que se presentó, y
+   es lo primero que reclaman en una fiscalización—. Tenerlos con su nombre en
+   un botón evita el paso de ir a buscar el tipo en una lista, que es donde se
+   elige mal. Para ARBA la declaración jurada es la de Ingresos Brutos.
+   El resto de los tipos sigue estando en la lista, para los cuatro impuestos. */
+var PAPELES_AL_TOQUE = {
+  arca: [ { tipo:"ddjj",     texto:"Subir declaración jurada" },
+          { tipo:"acuse",    texto:"Subir acuse de presentación" } ],
+  arba: [ { tipo:"ddjjiibb", texto:"Subir declaración jurada" },
+          { tipo:"acuse",    texto:"Subir acuse de presentación" } ]
+};
+
+/* Deja el tipo elegido y abre el selector de archivos: de ahí en adelante es
+   el mismo camino de siempre (leerPapelDeLiquidacion). */
+function subirPapelAlToque(clave, tipo){
+  var sel = $("lq_" + clave + "_tipo"), campo = $("lq_" + clave + "_file");
+  if (!sel || !campo) return;
+  sel.value = tipo;
+  campo.click();
+}
 
 /* Cuentas que se crean solas la primera vez que arranca el sistema. */
 var CUENTAS_SEMILLA = {
@@ -6579,8 +6607,15 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
    después y desde ahí se los manda. El VEP sigue viviendo adentro de la
    liquidación porque el sistema lo usa para contar cuántos faltan. */
 function bloqueVepArchivo(clave, d){
+  var alToque = (PAPELES_AL_TOQUE[clave] || []).map(function(b){
+    return '<button type="button" class="btn sec chico" onclick="subirPapelAlToque(\'' + clave + "','" + b.tipo + '\')">' +
+      "📎 " + esc(b.texto) + "</button>";
+  }).join("");
+
   return '<div class="campo"><label>Papeles de este impuesto</label>' +
     '<div id="lqPapeles_' + clave + '">' + listaPapelesImpuesto(clave) + "</div>" +
+    (alToque ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' + alToque + "</div>" +
+               '<div class="ayuda" style="margin-top:10px">Otro papel:</div>' : "") +
     '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">' +
       '<select class="pill" id="lq_' + clave + '_tipo" style="height:34px;line-height:32px;font-size:13.5px">' +
         TIPOS_LIQ.map(function(t){
@@ -6673,6 +6708,16 @@ function guardarPapelDeImpuesto(clave, file, tipo){
    un plan de pagos— y la IA no tiene manera de saberlo. */
 var _papelLeido  = {};   /* clave de impuesto -> lo que devolvió la IA */
 var _ultimoPapel = {};   /* el último archivo elegido, para poder reintentar */
+var _tipoPapel   = {};   /* y de qué tipo se dijo que era */
+
+/* El número de VEP sólo se completa desde un VEP o un comprobante de pago.
+   Una declaración jurada y un acuse de presentación traen su propio número
+   —el de transacción— y si se copiara ahí, el sistema contaría un VEP que no
+   existe: la liquidación diría "2/2" con el volante todavía sin emitir. */
+function _traeNroDeVep(clave){
+  var t = _tipoPapel[clave];
+  return t === undefined || t === "vep" || t === "pago";
+}
 
 var CAMPOS_VEP = [
   { dato:"importe",     campo:"monto", rotulo:"Importe" },
@@ -6695,15 +6740,17 @@ function leerPapelDeLiquidacion(clave, reintento){
      campo para que el guardado de la liquidación no lo tome otra vez. */
   if (!reintento){
     var tipo = ($("lq_" + clave + "_tipo") || {}).value || "vep";
+    _tipoPapel[clave] = tipo;
     guardarPapelDeImpuesto(clave, f, tipo).then(function(){
       if (campo) campo.value = "";
     }).catch(function(e){ toast(explicarError(e), "error"); });
   }
 
   var prompt = "Te paso un papel de impuestos argentino: puede ser un VEP (volante electrónico de pago), " +
-    "una declaración jurada o un comprobante de pago. Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
+    "una declaración jurada, un acuse o constancia de presentación, o un comprobante de pago. " +
+    "Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
     '{"tipo":"vep","organismo":"arca","importe":123456.78,"nroVep":"1234567890","vencimiento":"2026-09-22","periodo":"202608"}. ' +
-    "tipo: vep, ddjj, pago u otro. organismo: arca, arba, agip o municipal. importe: el total a pagar, como número, " +
+    "tipo: vep, ddjj, acuse, pago u otro. organismo: arca, arba, agip o municipal. importe: el total a pagar, como número, " +
     "con punto decimal y sin separador de miles. nroVep: el número del VEP o del comprobante, sin puntos. " +
     "vencimiento: la fecha de vencimiento o de pago en formato AAAA-MM-DD. periodo: el período fiscal en AAAAMM. " +
     "Lo que no figure en el papel va en null. No inventes ningún número.";
@@ -6747,6 +6794,7 @@ function _avisoPapelLeido(clave, corto, d){
   CAMPOS_VEP.forEach(function(cv){
     var valor = d[cv.dato];
     if (valor === null || valor === undefined || valor === "") return;
+    if (cv.dato === "nroVep" && !_traeNroDeVep(clave)) return;
     var el = $("lq_" + clave + "_" + cv.campo);
     if (!el) return;
     var actual = String(el.value || "").trim();
@@ -9094,7 +9142,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v53";
+var VERSION_APP = "v54";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
