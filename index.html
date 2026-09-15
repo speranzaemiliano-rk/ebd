@@ -1893,6 +1893,7 @@ var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
    (ver REF de archivosContenido) para que el listado abra liviano. */
 var TIPOS_ARCHIVO = [
   { clave:"ddjj",       nombre:"Declaración jurada" },
+  { clave:"ddjjiibb",   nombre:"DDJJ de Ingresos Brutos" },
   { clave:"vep",        nombre:"VEP" },
   { clave:"pago",       nombre:"Comprobante de pago" },
   { clave:"factura",    nombre:"Factura" },
@@ -1905,7 +1906,7 @@ var TIPOS_ARCHIVO = [
    se guarda adentro de la liquidación —viene de antes y el sistema lo usa para
    contar cuántos faltan—; el resto va a los papeles del cliente, en el mes que
    corresponde, que es donde después se los busca y desde donde se los manda. */
-var TIPOS_LIQ = ["vep", "ddjj", "pago", "factura", "resumen", "otro"];
+var TIPOS_LIQ = ["ddjjiibb", "ddjj", "vep", "pago", "factura", "resumen", "constancia", "otro"];
 
 /* Cuentas que se crean solas la primera vez que arranca el sistema. */
 var CUENTAS_SEMILLA = {
@@ -6816,6 +6817,25 @@ function editarLiquidacion(clienteId, periodo){
       bloqueVepArchivo(i.clave, d);
   });
 
+  /* Los que el cliente no tiene tildados en su ficha. Antes había que salir a
+     editarlo para poder cargarle, por ejemplo, la tasa municipal; ahora se
+     suma desde acá de un toque y la ficha queda igual de coherente. */
+  var faltanImp = IMPUESTOS.filter(function(i){
+    return i.clave === "arca" ? (c.impuestos || {}).arca === false : !(c.impuestos || {})[i.clave];
+  });
+  if (faltanImp.length && puedeEscribir()){
+    html += '<div class="seccion-tit">Sumarle otro impuesto</div>' +
+      '<div class="aviso info"><span>➕</span><div>Este cliente no tiene tildado ' +
+        faltanImp.map(function(i){ return "<b>" + esc(i.corto) + "</b>"; }).join(", ") +
+        " en su ficha, así que no aparece arriba. Se lo podés sumar de acá:" +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+          faltanImp.map(function(i){
+            return '<button type="button" class="btn sec chico" onclick="sumarImpuestoAlCliente(\'' +
+              clienteId + "','" + i.clave + "','" + periodo + '\')">➕ ' + esc(i.nombre) + "</button>";
+          }).join("") +
+        "</div></div></div>";
+  }
+
   if (!html) html = '<div class="aviso warn"><span>⚠️</span><div>Este cliente no tiene ningún impuesto tildado en su ficha.</div></div>';
 
   if (html){
@@ -6845,6 +6865,25 @@ function editarLiquidacion(clienteId, periodo){
 
   /* Los papeles que ya tenga cargados de este mes, para no volver a subirlos. */
   cargarPapelesDelMesEnLiquidacion();
+}
+
+/* Tilda el impuesto en la ficha del cliente y vuelve a abrir la liquidación,
+   ya con su bloque. Se escribe por camino relativo (impuestos/municipal) para
+   no pisar los otros: sumar el municipal no puede destildar ARBA. */
+function sumarImpuestoAlCliente(clienteId, clave, periodo){
+  var u = {};
+  u["impuestos/" + clave] = true;
+  u.modificado = new Date().toISOString();
+  ref("clientes/" + clienteId).update(u).then(function(){
+    var c = ESTADO.clientes[clienteId];
+    if (!c.impuestos) c.impuestos = {};
+    c.impuestos[clave] = true;
+    var corto = (IMPUESTOS.filter(function(i){ return i.clave === clave; })[0] || {}).corto || clave;
+    toast(corto + " agregado a la ficha del cliente", "ok");
+    cerrarModal();
+    setTimeout(function(){ editarLiquidacion(clienteId, periodo); }, 220);
+    if ($("tablaClientes")) renderClientes();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
 function guardarLiquidacion(clienteId, periodo){
@@ -9003,7 +9042,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v51";
+var VERSION_APP = "v52";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
