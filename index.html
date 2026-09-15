@@ -528,6 +528,15 @@ tbody tr:hover{background:#FAFAFC}
 }
 .modal.ancho{max-width:1000px}
 .modal.angosto{max-width:460px}
+/* Un empujoncito cuando se toca el fondo: dice "te escuché, pero por acá no". */
+@keyframes sacudir{
+  0%,100%{transform:none}
+  18%{transform:translateX(-7px)} 38%{transform:translateX(7px)}
+  58%{transform:translateX(-4px)} 78%{transform:translateX(4px)}
+}
+.modal.sacudir{animation:sacudir .34s cubic-bezier(.36,.07,.19,.97)}
+@media (prefers-reduced-motion:reduce){ .modal.sacudir{animation:none} }
+
 @keyframes materializar{
   from{opacity:0;transform:translateY(12px) scale(.975)}
   to{opacity:1;transform:none}
@@ -1688,6 +1697,15 @@ var CUENTAS_SEMILLA = {
   banco:    { nombre:"Cuenta bancaria", tipo:"banco", saldoInicial:0, activa:true, orden:2 }
 };
 
+/* Las 24 jurisdicciones. El orden es el de siempre: la Ciudad y la Provincia
+   primero, que son las que aparecen en casi todas las fichas del estudio. */
+var PROVINCIAS = [
+  "Ciudad Autónoma de Buenos Aires", "Buenos Aires", "Catamarca", "Chaco", "Chubut",
+  "Córdoba", "Corrientes", "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja",
+  "Mendoza", "Misiones", "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis",
+  "Santa Cruz", "Santa Fe", "Santiago del Estero", "Tierra del Fuego", "Tucumán"
+];
+
 var MEDIOS_PAGO = [
   { clave:"efectivo",      nombre:"Efectivo" },
   { clave:"transferencia", nombre:"Transferencia" },
@@ -2416,7 +2434,24 @@ Array.prototype.forEach.call($("navTabs").children, function(b){
   b.onclick = function(){ irA(b.dataset.tab); };
 });
 $("modalCerrar").onclick = cerrarModalPedido;
-$("modalFondo").onclick = function(e){ if (e.target === this) cerrarModalPedido(); };
+/* ---------- EL CLIC AFUERA NO CIERRA ----------
+   Cerrar al tocar afuera venía tirando abajo fichas a medio cargar. Preguntar
+   antes no alcanzó, y por una razón que no se ve: si el botón del mouse se
+   APRIETA adentro de un campo y se SUELTA afuera —arrastrando para seleccionar
+   texto, que es lo más común del mundo— el navegador dispara igual un clic
+   cuyo blanco es el fondo. Para el usuario es "se cerró solo pasando el mouse".
+
+   Así que el fondo directamente no cierra. Para salir están la ✕, Cancelar y
+   Escape, que sí preguntan si hay algo sin guardar. El cuadro hace un gesto y
+   lo dice, para que no parezca que la app se colgó. */
+$("modalFondo").onclick = function(e){
+  if (e.target !== this) return;
+  var caja = $("modalCaja");
+  caja.classList.remove("sacudir");
+  void caja.offsetWidth;            /* fuerza a reiniciar la animación */
+  caja.classList.add("sacudir");
+  toast("Para cerrar usá ✕ o Cancelar", "info");
+};
 document.addEventListener("keydown", function(e){
   if (e.key !== "Escape") return;
   /* Si el asistente está abierto, Escape lo cierra a él: es lo que está
@@ -2666,6 +2701,10 @@ function renderClientes(){
 function formCliente(c, idCliente){
   c = c || {};
   var imp = c.impuestos || {};
+  var dom = c.domicilio || {};
+  var opcProv = '<option value="">— sin cargar —</option>' + PROVINCIAS.map(function(p){
+    return '<option value="' + esc(p) + '"' + (dom.provincia === p ? " selected" : "") + ">" + esc(p) + "</option>";
+  }).join("");
   var opcCat = '<option value="">— sin categoría —</option>' + LETRAS.map(function(l){
     return '<option value="' + l + '"' + (c.categoriaActual === l ? " selected" : "") + ">" + l + "</option>";
   }).join("");
@@ -2681,6 +2720,22 @@ function formCliente(c, idCliente){
       '<div class="ayuda">El de Convenio Multilateral o el local, según cómo esté inscripto.</div></div>' +
     '<div class="campo"><label>Correo electrónico</label><input type="email" id="fcMail" value="' + esc(c.email || "") + '"></div>' +
     '<div class="campo"><label>Teléfono</label><input type="text" id="fcTel" value="' + esc(c.telefono || "") + '"></div>' +
+  '</div>' +
+
+  /* El domicilio es el fiscal: el que sale en la constancia y el que va en
+     cualquier nota al organismo. */
+  '<div class="seccion-tit">Domicilio fiscal</div>' +
+  '<div class="grid g2">' +
+    '<div class="campo"><label>Calle y número</label>' +
+      '<input type="text" id="fcDomCalle" value="' + esc(dom.calle || "") + '" placeholder="Av. Corrientes 1234"></div>' +
+    '<div class="campo"><label>Piso / depto</label>' +
+      '<input type="text" id="fcDomPiso" value="' + esc(dom.piso || "") + '" placeholder="5º B"></div>' +
+    '<div class="campo"><label>Localidad</label>' +
+      '<input type="text" id="fcDomLocalidad" value="' + esc(dom.localidad || "") + '" placeholder="La Plata"></div>' +
+    '<div class="campo"><label>Provincia</label><select id="fcDomProvincia">' + opcProv + "</select></div>" +
+    '<div class="campo"><label>Código postal</label>' +
+      '<input type="text" id="fcDomCp" value="' + esc(dom.cp || "") + '" placeholder="B1900ABC o 1900">' +
+      '<div class="ayuda">Sirve el CPA de 8 caracteres o el código viejo de 4 dígitos.</div></div>' +
   '</div>' +
 
   '<div class="seccion-tit">Monotributo</div>' +
@@ -2888,6 +2943,20 @@ function abrirBovedaDesdeFicha(idCliente){
   pie.insertBefore(aviso, pie.firstChild);
 }
 
+/* Si no cargaron nada del domicilio se guarda null y no un objeto con cinco
+   cadenas vacías: en la base queda más limpio y `domicilioEnUnaLinea` ya sabe
+   qué hacer con la nada. */
+function _domicilioDelForm(){
+  var d = {
+    calle:     $("fcDomCalle").value.trim(),
+    piso:      $("fcDomPiso").value.trim(),
+    localidad: $("fcDomLocalidad").value.trim(),
+    provincia: $("fcDomProvincia").value,
+    cp:        $("fcDomCp").value.trim().toUpperCase()
+  };
+  return Object.keys(d).some(function(k){ return d[k]; }) ? d : null;
+}
+
 /* `precarga` trae los datos leídos de una constancia. Tiene la misma forma que
    un cliente, así que se usa tal cual para armar el formulario. */
 var _formClienteId = null;   /* para poder ubicar el tramo de facturación */
@@ -2934,6 +3003,7 @@ function guardarFormCliente(id){
     cuit: cuit,
     nroIIBB: $("fcIIBB").value.trim(),
     email: $("fcMail").value.trim(),
+    domicilio: _domicilioDelForm(),
     telefono: $("fcTel").value.trim(),
     honorarioMensual: parseFloat($("fcHonMonto").value) || 0,
     honorarioModalidad: $("fcHonModalidad").value,
@@ -3068,6 +3138,87 @@ function _valorTrasEtiqueta(t, etiqueta){
   return m[1].replace(/[\s.;:,-]+$/, "").trim();
 }
 
+/* ---------- EL DOMICILIO DE LA CONSTANCIA ----------
+   Viene en una sola línea y en un orden que cambia según el organismo:
+     "SAN MARTIN 123 Piso: 2 Dpto: A - 1900 - LA PLATA, BUENOS AIRES"
+     "CALLE 50 Nº 1234 (B1900ABC) LA PLATA - BUENOS AIRES"
+   Se saca lo que se puede reconocer sin dudar —código postal, provincia,
+   piso— y el resto se reparte entre calle y localidad. Lo que salga torcido se
+   corrige en el formulario, que se muestra antes de guardar: acá conviene
+   equivocarse por poner de más y no por dejar el campo vacío. */
+function _partirDomicilio(txt){
+  var out = { calle:"", piso:"", localidad:"", provincia:"", cp:"" };
+  var t = String(txt || "").replace(/\s+/g, " ").trim();
+  if (!t) return out;
+
+  /* Piso y departamento */
+  var mp = t.match(/\bPiso\s*:?\s*([\w°º]+)/i);
+  var md = t.match(/\b(?:Dpto|Depto|Depart(?:amento)?)\s*:?\s*([\w°º]+)/i);
+  if (mp) out.piso = mp[1];
+  if (md) out.piso = (out.piso ? out.piso + " " : "") + md[1];
+  t = t.replace(/\bPiso\s*:?\s*[\w°º]+/ig, " ")
+       .replace(/\b(?:Dpto|Depto|Depart(?:amento)?)\s*:?\s*[\w°º]+/ig, " ");
+
+  /* Provincia. Las formas cortas van PRIMERO: "CIUDAD DE BUENOS AIRES"
+     contiene "BUENOS AIRES", así que buscar por la lista lo mandaba a la
+     provincia equivocada. Y se busca con un patrón que aguanta tildes, porque
+     las constancias las imprimen sin ellas ("CORDOBA", "ENTRE RIOS"). */
+  var sin = _sinTildes(t).toUpperCase();
+  if (/\bCABA\b|CAPITAL FEDERAL|CIUDAD AUTONOMA|CIUDAD DE BUENOS AIRES/.test(sin)){
+    out.provincia = "Ciudad Autónoma de Buenos Aires";
+    t = t.replace(/\bC\.?A\.?B\.?A\.?\b|CAPITAL FEDERAL|CIUDAD AUTONOMA(?: DE)?(?: BUENOS AIRES)?|CIUDAD DE BUENOS AIRES/ig, "|");
+  } else if (/\bBS\.? ?AS\.?\b/.test(sin)){
+    out.provincia = "Buenos Aires";
+    t = t.replace(/\bBS\.? ?AS\.?\b/ig, "|");
+  } else {
+    for (var i = 0; i < PROVINCIAS.length; i++){
+      var re = new RegExp("\\b" + _patronSinTildes(PROVINCIAS[i]) + "\\b", "i");
+      if (re.test(t)){ out.provincia = PROVINCIAS[i]; t = t.replace(re, "|"); break; }
+    }
+  }
+
+  /* Código postal. Primero el CPA (letra + 4 dígitos + 3 letras), que no se
+     confunde con nada. El viejo de 4 dígitos sólo si está separado —entre
+     paréntesis o entre guiones—, para no llevarse puesta la altura de la
+     calle: en "SAN MARTIN 1900" el 1900 no es un código postal.
+
+     Donde estaba el código queda una barra, y eso además PARTE la dirección:
+     en estas constancias lo que va antes es la calle y lo que va después, la
+     localidad, aunque no haya ningún otro separador. */
+  var mc = t.match(/\(?\s*\b([A-Za-z]\d{4}[A-Za-z]{3})\b\s*\)?/);
+  if (mc){ out.cp = mc[1].toUpperCase(); t = t.replace(mc[0], "|"); }
+  else {
+    var m4 = t.match(/\(\s*(\d{4})\s*\)/) || t.match(/(?:^|[-–,|])\s*(\d{4})\s*(?=[-–,|]|$)/);
+    if (m4){ out.cp = m4[1]; t = t.replace(m4[0], "|"); }
+  }
+
+  /* Lo que queda: la calle adelante, la localidad al final. */
+  var partes = t.split(/\s*[-–,|]\s*/)
+                .map(function(x){ return x.replace(/^[\s.;:,()-]+|[\s.;:,()-]+$/g, "").trim(); })
+                .filter(function(x){ return x.length > 1; });
+  if (partes.length){
+    out.calle = partes[0];
+    if (partes.length > 1) out.localidad = partes[partes.length - 1];
+  }
+  return out;
+}
+
+/* Un patrón que encuentra el texto lo escriban con tilde o sin ella: las
+   constancias imprimen "CORDOBA" y la lista dice "Córdoba". */
+function _patronSinTildes(txt){
+  var clases = { a:"[aáàäâ]", e:"[eéèëê]", i:"[iíìïî]", o:"[oóòöô]", u:"[uúùüû]", n:"[nñ]", c:"[cç]" };
+  return _sinTildes(txt).toLowerCase().split("").map(function(ch){
+    return clases[ch] || ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }).join("");
+}
+
+function domicilioEnUnaLinea(d){
+  d = d || {};
+  var uno = [d.calle, d.piso].filter(Boolean).join(" ");
+  var dos = [d.cp, d.localidad].filter(Boolean).join(" ");
+  return [uno, dos, d.provincia].filter(Boolean).join(" — ");
+}
+
 /* Devuelve { organismo, cuit, cuitDudoso, razonSocial, actividad,
    codigoActividad, categoria, nroIIBB, regimen, encontrados, faltantes } */
 function parsearConstancia(texto){
@@ -3124,6 +3275,10 @@ function parsearConstancia(texto){
     if (suelto) out.nroIIBB = suelto[0];
   }
 
+  /* Domicilio: se prefiere el fiscal, que es el que vale para el organismo. */
+  out.domicilioTexto = _valorTrasEtiqueta(t, "Domicilio\\s*Fiscal") || _valorTrasEtiqueta(t, "Domicilio");
+  out.domicilio = _partirDomicilio(out.domicilioTexto);
+
   if (/CONVENIO MULTILATERAL/.test(T))                                    out.regimen = "Convenio Multilateral";
   else if (/REGIMEN SIMPLIFICADO/.test(T))                                out.regimen = "Régimen Simplificado";
   else if (/CONTRIBUYENTE LOCAL|\bLOCAL\b/.test(T) && (out.organismo === "agip" || out.organismo === "arba")) out.regimen = "Local";
@@ -3133,7 +3288,8 @@ function parsearConstancia(texto){
     { clave:"razonSocial", nombre:"Razón social / Nombre" },
     { clave:"actividad",   nombre:"Actividad" },
     { clave:"categoria",   nombre:"Categoría de monotributo" },
-    { clave:"nroIIBB",     nombre:"Nº de Ingresos Brutos" }
+    { clave:"nroIIBB",     nombre:"Nº de Ingresos Brutos" },
+    { clave:"domicilioTexto", nombre:"Domicilio fiscal" }
   ];
   out.encontrados = campos.filter(function(c){ return out[c.clave]; });
   out.faltantes   = campos.filter(function(c){ return !out[c.clave]; });
@@ -3293,6 +3449,22 @@ function cambiosDesdeConstancia(clienteId, d){
           function(u){ u.codigoNAES = d.codigoActividad; });
   agregar("Nº de Ingresos Brutos", c.nroIIBB, d.nroIIBB,
           function(u){ u.nroIIBB = d.nroIIBB; });
+
+  /* El domicilio, campo por campo: puede que ya esté la calle y falte el
+     código postal, y en ese caso no tiene sentido ofrecer todo junto.
+     Se escribe por camino relativo (domicilio/cp) para no pisar lo demás. */
+  var dom = c.domicilio || {}, nuevo = d.domicilio || {};
+  [
+    { k:"calle",     n:"Domicilio — calle y número" },
+    { k:"piso",      n:"Domicilio — piso / depto" },
+    { k:"localidad", n:"Domicilio — localidad" },
+    { k:"provincia", n:"Domicilio — provincia" },
+    { k:"cp",        n:"Domicilio — código postal" }
+  ].forEach(function(campo){
+    agregar(campo.n, dom[campo.k], nuevo[campo.k], function(u){
+      u["domicilio/" + campo.k] = nuevo[campo.k];
+    });
+  });
 
   /* Los impuestos se escriben por camino relativo (impuestos/agip) para no
      pisar el resto del objeto: tildar AGIP no puede destildar ARBA. */
@@ -3504,6 +3676,7 @@ function abrirFichaDesdeConstancia(){
     categoriaActual: d.categoria,
     actividadIIBB: d.actividad,
     codigoNAES:    d.codigoActividad,
+    domicilio:     d.domicilio,
     impuestos:     { arca: d.organismo === "arca" || !d.organismo,
                      arba: d.organismo === "arba",
                      agip: d.organismo === "agip" }
@@ -3819,6 +3992,12 @@ function fichaPdfCliente(id){
   fila("Nº de Ingresos Brutos", c.nroIIBB || "", "Actividad (monotributo)",
        c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios"));
   fila("Correo electrónico", c.email || "", "Teléfono", c.telefono || "");
+  var _dom = c.domicilio || {};
+  if (domicilioEnUnaLinea(_dom)){
+    fila("Domicilio fiscal", [_dom.calle, _dom.piso].filter(Boolean).join("  "),
+         "Localidad", [_dom.cp, _dom.localidad].filter(Boolean).join("  ") || "—");
+    if (_dom.provincia) fila("Provincia", _dom.provincia, "", "");
+  }
   if (c.actividadIIBB || c.codigoNAES) fila("Actividad (ingresos brutos)", c.actividadIIBB || "", "Código NAES", c.codigoNAES || "");
   y += 8;
 
@@ -7402,7 +7581,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v43";
+var VERSION_APP = "v44";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
