@@ -118,10 +118,21 @@ a:hover{text-decoration:underline}
 /* Sobre el panel oscuro la marca no necesita sombra: ya contrasta sola */
 .logo-marca.claro svg{filter:none}
 
-/* La órbita da la vuelta completa alrededor de las letras. El recuadro de los
-   logos que giran es CUADRADO (viewBox 10 10 100 100) justamente por esto: el
-   óvalo mide 100 de ancho, así que en un recuadro bajo se salía por arriba y
-   por abajo y se veía cortado en dos arcos durante casi toda la vuelta.
+/* La órbita da la vuelta completa alrededor de las letras. Dos cosas del
+   recuadro de los logos que giran, las dos aprendidas rompiéndolo:
+
+   1. es CUADRADO. El óvalo mide 100 de ancho y 43 de alto, así que al girar
+      necesita 100 en las dos direcciones; en un recuadro bajo se salía por
+      arriba y por abajo y se veía cortado en dos arcos casi toda la vuelta;
+
+   2. mide 104 y no 100, o sea que le sobran 2 por lado. Con exactamente 100 el
+      óvalo entraba justo... pero el TRAZO no: son 3,2 de ancho, 1,6 para cada
+      lado del contorno, y esos 1,6 quedaban afuera del recuadro. Resultado: a
+      0°, 90°, 180° y 270° las dos puntas del óvalo aparecían cortadas en
+      plano. Cuatro veces por vuelta, que es justo lo que se ve como que el
+      óvalo "se pierde". El centro sigue en (60,60): lo único que cambia es que
+      ahora hay aire alrededor.
+
    Se frena sola si el usuario pidió menos movimiento en su sistema. */
 .orbita{transform-origin:60px 60px;animation:girarOrbita 18s linear infinite}
 @keyframes girarOrbita{
@@ -730,7 +741,7 @@ tbody tr:hover{background:#FAFAFC}
      sobre el fondo oscuro. Es el mismo dibujo de la pantalla de ingreso; los ids
      de los degradados llevan sufijo S para no chocar con los de las otras copias. */
   var LOGO_EBD =
-    '<svg viewBox="10 10 100 100" role="img" aria-label="EBD Consultores">' +
+    '<svg viewBox="8 8 104 104" role="img" aria-label="EBD Consultores">' +
       '<defs>' +
         '<linearGradient id="caraS" x1="0" y1="0" x2="0" y2="1">' +
           '<stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CBE0FF"/></linearGradient>' +
@@ -816,7 +827,7 @@ tbody tr:hover{background:#FAFAFC}
   <!-- Panel de presentación -->
   <aside class="slide">
     <div class="logo-marca claro">
-      <svg viewBox="10 10 100 100" width="92" height="92" role="img" aria-label="EBD Consultores">
+      <svg viewBox="8 8 104 104" width="92" height="92" role="img" aria-label="EBD Consultores">
         <defs>
           <linearGradient id="caraL" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CBE0FF"/>
@@ -970,7 +981,7 @@ tbody tr:hover{background:#FAFAFC}
     <section class="panel activo" id="tabHome">
 
       <div class="hero-inicio">
-        <svg viewBox="10 10 100 100" width="104" height="104" role="img" aria-label="EBD Consultores">
+        <svg viewBox="8 8 104 104" width="104" height="104" role="img" aria-label="EBD Consultores">
           <defs>
             <linearGradient id="caraI" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#CBE0FF"/>
