@@ -87,7 +87,7 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text",
               "Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
   background:var(--fondo); color:var(--texto);
-  font-size:14px; line-height:1.47; letter-spacing:-.01em;
+  font-size:14px; line-height:1.47; letter-spacing:-.004em;
   /* Apple suaviza el trazo: sin esto la letra se ve más gorda de la cuenta */
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
 }
@@ -209,7 +209,7 @@ a:hover{text-decoration:underline}
 .lado-form{display:flex;align-items:center;justify-content:center;padding:40px 44px}
 .login-card{width:100%;max-width:376px}
 .login-card .titulo{font-size:32px;font-weight:600;letter-spacing:-.03em;line-height:1.1;margin-bottom:8px}
-.login-card .sub{color:var(--gris);margin-bottom:28px;font-size:15px;letter-spacing:-.016em}
+.login-card .sub{color:var(--gris);margin-bottom:28px;font-size:15px;letter-spacing:-.008em}
 .login-card .legal{
   font-size:12px;color:var(--gris2);line-height:1.6;
 }
@@ -245,7 +245,7 @@ header.top .marca span{color:var(--azul-link)}
 header.top .sep{flex:1}
 .chip-user{
   display:flex;align-items:center;gap:9px;background:rgba(0,0,0,.05);
-  border-radius:999px;padding:4px 13px 4px 4px;font-size:13px;letter-spacing:-.014em;
+  border-radius:999px;padding:4px 13px 4px 4px;font-size:13px;letter-spacing:-.003em;
 }
 .avatar{
   width:28px;height:28px;border-radius:50%;background:var(--azul);color:#fff;
@@ -265,7 +265,7 @@ nav.tabs{
 }
 nav.tabs::-webkit-scrollbar{display:none}
 nav.tabs button{
-  padding:7px 15px;color:var(--gris);font-weight:400;font-size:13.5px;letter-spacing:-.014em;
+  padding:7px 15px;color:var(--gris);font-weight:400;font-size:13.5px;letter-spacing:-.003em;
   border-radius:999px;white-space:nowrap;
   transition:background .18s, color .18s, transform .09s ease-out;
 }
@@ -283,7 +283,7 @@ main{padding:28px 24px 60px;max-width:1500px;margin:0 auto}
   box-shadow:0 1px 3px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05);
 }
 .card > h2{font-size:21px;letter-spacing:-.022em;margin-bottom:5px}
-.card > .desc{color:var(--gris);font-size:14px;letter-spacing:-.016em;margin-bottom:20px}
+.card > .desc{color:var(--gris);font-size:14px;letter-spacing:-.008em;margin-bottom:20px}
 /* El título estira y empuja los controles a la derecha; entre ellos el espacio
    es menor, para que se lean como un grupo y no como cinco cosas sueltas. */
 .card-head{display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap}
@@ -296,7 +296,7 @@ main{padding:28px 24px 60px;max-width:1500px;margin:0 auto}
 .filtros input[type=text],.filtros input[type=search],.filtros select{
   height:40px;padding:0 16px;border:1px solid var(--borde);border-radius:999px;
   background:var(--blanco);color:var(--texto);
-  font-size:15px;letter-spacing:-.016em;line-height:38px;outline:none;
+  font-size:15px;letter-spacing:-.008em;line-height:38px;outline:none;
   transition:border-color .15s, box-shadow .15s;
 }
 select.pill,.filtros select{
@@ -330,9 +330,9 @@ select.pill,.filtros select{
   background:var(--blanco);border-radius:var(--r);padding:22px 24px;
   box-shadow:0 1px 3px rgba(0,0,0,.04), 0 8px 28px rgba(0,0,0,.05);
 }
-.kpi .lbl{color:var(--gris);font-size:13px;letter-spacing:-.014em;margin-bottom:6px}
+.kpi .lbl{color:var(--gris);font-size:13px;letter-spacing:-.003em;margin-bottom:6px}
 .kpi .val{font-size:38px;font-weight:600;line-height:1.05;letter-spacing:-.028em}
-.kpi .pie{color:var(--gris2);font-size:12.5px;letter-spacing:-.012em;margin-top:7px}
+.kpi .pie{color:var(--gris2);font-size:12.5px;letter-spacing:.005em;margin-top:7px}
 .kpi.ok .val{color:var(--verde)} .kpi.warn .val{color:var(--amar)} .kpi.bad .val{color:var(--rojo)}
 
 /* ---------- BOTONES ----------
@@ -343,7 +343,7 @@ select.pill,.filtros select{
    instantáneo sin verse como un salto. */
 .btn{
   background:var(--azul);color:#fff;border-radius:999px;padding:13px 26px;
-  font-weight:400;font-size:15px;letter-spacing:-.016em;line-height:1.2;
+  font-weight:400;font-size:15px;letter-spacing:-.008em;line-height:1.2;
   transition:background .2s ease, transform .09s ease-out;
 }
 .btn:active:not(:disabled){transform:scale(.97)}
@@ -378,30 +378,30 @@ nav.tabs button:active{transform:scale(.98)}
    El foco no es una línea más oscura: es un halo blando alrededor del campo,
    como en macOS. */
 .campo{margin-bottom:18px}
-.campo label{display:block;font-size:13px;color:var(--gris);margin-bottom:7px;font-weight:400;letter-spacing:-.014em}
+.campo label{display:block;font-size:13px;color:var(--gris);margin-bottom:7px;font-weight:400;letter-spacing:-.003em}
 .campo input[type=text],.campo input[type=email],.campo input[type=number],
 .campo input[type=password],.campo input[type=date],.campo input[type=month],
 .campo select,.campo textarea{
   width:100%;padding:12px 14px;border:1px solid var(--borde);border-radius:var(--r2);
-  background:var(--blanco);color:var(--texto);outline:none;font-size:15px;letter-spacing:-.016em;
+  background:var(--blanco);color:var(--texto);outline:none;font-size:15px;letter-spacing:-.008em;
   transition:border-color .15s, box-shadow .15s;
 }
 .campo input:focus,.campo select:focus,.campo textarea:focus{
   border-color:var(--azul);box-shadow:0 0 0 4px rgba(0,113,227,.22);
 }
 .campo textarea{resize:vertical;min-height:110px;font-family:inherit;line-height:1.6}
-.campo .ayuda{font-size:12.5px;color:var(--gris2);margin-top:6px;letter-spacing:-.012em}
-.check{display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;font-size:14.5px;letter-spacing:-.016em}
+.campo .ayuda{font-size:12.5px;color:var(--gris2);margin-top:6px;letter-spacing:.005em}
+.check{display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;font-size:14.5px;letter-spacing:-.008em}
 .check input{width:18px;height:18px;accent-color:var(--azul);cursor:pointer}
 
 /* ---------- TABLAS ----------
    Encabezado en minúscula y gris: el VERSALITA ESPACIADO es de otra escuela.
    Acá la jerarquía la da el color, no el tamaño de la caja. */
 .tabla-wrap{overflow-x:auto;border:1px solid var(--pelo);border-radius:14px}
-table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--blanco);letter-spacing:-.014em}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--blanco);letter-spacing:-.003em}
 th{
   text-align:left;padding:12px 15px;background:#FBFBFD;color:var(--gris);
-  font-weight:500;font-size:12.5px;letter-spacing:-.01em;
+  font-weight:500;font-size:12.5px;letter-spacing:.005em;
   border-bottom:1px solid var(--pelo);white-space:nowrap;
 }
 td{padding:13px 15px;border-bottom:1px solid rgba(0,0,0,.055);vertical-align:middle}
@@ -423,13 +423,13 @@ tbody tr:hover{background:#FAFAFC}
 .hero-inicio > *{position:relative;z-index:1}
 .hero-txt{flex:1;min-width:220px}
 .hero-txt h2{font-size:28px;font-weight:600;letter-spacing:-.028em;line-height:1.1;margin-bottom:7px}
-.hero-txt p{font-size:15px;color:rgba(255,255,255,.72);line-height:1.5;letter-spacing:-.016em}
+.hero-txt p{font-size:15px;color:rgba(255,255,255,.72);line-height:1.5;letter-spacing:-.008em}
 .hero-dato{
   background:rgba(255,255,255,.10);border-radius:var(--r2);padding:14px 20px;
   text-align:center;min-width:118px;
 }
 .hero-dato .n{display:block;font-size:26px;font-weight:600;line-height:1.15;letter-spacing:-.024em}
-.hero-dato .l{display:block;font-size:12px;color:rgba(255,255,255,.65);letter-spacing:-.012em;margin-top:4px}
+.hero-dato .l{display:block;font-size:12px;color:rgba(255,255,255,.65);letter-spacing:.005em;margin-top:4px}
 @media(max-width:640px){
   .hero-inicio{padding:22px;gap:16px}
   .hero-txt h2{font-size:22px}
@@ -476,7 +476,7 @@ tbody tr:hover{background:#FAFAFC}
 #ebdSplash.paso2 .sp-sub{color:rgba(191,216,255,.62)}
 #ebdSplash .sp-enter{
   margin-top:32px;padding:10px 26px;border:1px solid rgba(255,255,255,.3);background:transparent;
-  color:#fff;font-size:13px;letter-spacing:-.014em;border-radius:999px;cursor:pointer;
+  color:#fff;font-size:13px;letter-spacing:-.003em;border-radius:999px;cursor:pointer;
   opacity:0;pointer-events:none;transition:opacity .5s ease,border-color .2s,color .2s,background .2s;
 }
 #ebdSplash.paso2 .sp-enter{opacity:1;pointer-events:auto}
@@ -485,7 +485,7 @@ tbody tr:hover{background:#FAFAFC}
 }
 #ebdSplash .sp-pista{
   position:absolute;bottom:28px;left:0;right:0;text-align:center;
-  font-size:12px;letter-spacing:-.012em;color:rgba(255,255,255,.34);
+  font-size:12px;letter-spacing:.005em;color:rgba(255,255,255,.34);
   transition:opacity .3s;
 }
 #ebdSplash.paso2 .sp-pista{opacity:0}
@@ -505,7 +505,7 @@ tbody tr:hover{background:#FAFAFC}
 .dobleentrada td.mes{text-align:center;padding:5px 4px}
 .celda{
   display:block;width:100%;border-radius:9px;padding:7px 3px;
-  font-size:11.5px;font-weight:500;line-height:1.25;cursor:pointer;letter-spacing:-.012em;
+  font-size:11.5px;font-weight:500;line-height:1.25;cursor:pointer;letter-spacing:.005em;
   border:1px solid transparent;transition:transform .14s ease-out, box-shadow .14s;
 }
 .celda:hover{transform:translateY(-1px);box-shadow:var(--sombra)}
@@ -521,7 +521,7 @@ tbody tr:hover{background:#FAFAFC}
 /* ---------- BADGES / SEMAFORO ---------- */
 .badge{
   display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;
-  font-size:12px;font-weight:500;white-space:nowrap;letter-spacing:-.012em;
+  font-size:12px;font-weight:500;white-space:nowrap;letter-spacing:.005em;
 }
 .b-verde{background:var(--verde-bg);color:var(--verde)}
 .b-amar{background:var(--amar-bg);color:var(--amar)}
@@ -558,12 +558,15 @@ tbody tr:hover{background:#FAFAFC}
 .modal-fondo.abierto{display:flex;opacity:1}
 
 /* Entra materializándose —crece y se define— y se va por el mismo camino. Si
-   apareciera de una forma y se fuera por otra, se pierde de dónde vino. */
+   apareciera de una forma y se fuera por otra, se pierde de dónde vino.
+   En el celular no es una ventana sino una hoja de pantalla completa, así que
+   ahí sube desde abajo y se va para abajo (ver el @media del final). */
+@keyframes subirHoja{ from{transform:translateY(100%)} to{transform:none} }
 .modal{
   background:var(--blanco);border-radius:20px;width:100%;max-width:760px;
   box-shadow:0 24px 60px rgba(0,0,0,.24);
   animation:materializar .22s cubic-bezier(.2,.8,.2,1);
-  transition:opacity .16s ease-in, transform .16s ease-in;
+  transition:opacity .22s ease-in, transform .22s ease-in;
 }
 .modal.ancho{max-width:1000px}
 .modal.angosto{max-width:460px}
@@ -582,6 +585,11 @@ tbody tr:hover{background:#FAFAFC}
 }
 .modal-fondo.cerrando{opacity:0}
 .modal-fondo.cerrando .modal{opacity:0;transform:translateY(10px) scale(.98);animation:none}
+@media(max-width:640px){
+  .modal{animation:subirHoja .24s cubic-bezier(.2,.8,.2,1)}
+  /* Una hoja no se desvanece: se va para abajo, por donde vino. */
+  .modal-fondo.cerrando .modal{opacity:1;transform:translateY(100%)}
+}
 .modal-head{padding:26px 28px 0;display:flex;align-items:flex-start;gap:12px}
 .modal-head h3{font-size:22px;letter-spacing:-.024em;flex:1}
 .modal-body{padding:22px 28px}
@@ -597,14 +605,14 @@ tbody tr:hover{background:#FAFAFC}
 #barraVersion{
   display:none;position:sticky;top:0;z-index:200;
   background:#FF9500;color:#1D1D1F;
-  padding:11px 20px;font-size:14px;letter-spacing:-.016em;
+  padding:11px 20px;font-size:14px;letter-spacing:-.008em;
   display:none;align-items:center;gap:12px;flex-wrap:wrap;
 }
 #barraVersion.ver{display:flex}
 #barraVersion b{font-weight:600}
 #barraVersion button{
   background:#1D1D1F;color:#fff;border-radius:999px;padding:7px 16px;font-size:13.5px;
-  letter-spacing:-.014em;transition:transform .09s ease-out;
+  letter-spacing:-.003em;transition:transform .09s ease-out;
 }
 #barraVersion button:active{transform:scale(.97)}
 
@@ -615,6 +623,9 @@ tbody tr:hover{background:#FAFAFC}
   text-align:left;padding:0;background:none;border:none;cursor:pointer;
 }
 .lnk-cliente:hover{color:var(--azul-link);text-decoration:underline}
+/* La respuesta va en el apretar, no en el soltar: sin esto el nombre del
+   cliente era lo único de la tabla que no acusaba recibo del toque. */
+.lnk-cliente:active{opacity:.55}
 
 /* ---------- BOTÓN FLOTANTE DEL ASISTENTE ----------
    Va con el logo del estudio y no con un ícono genérico: el asistente contesta
@@ -672,30 +683,30 @@ tbody tr:hover{background:#FAFAFC}
 }
 #panelAsistente .as-head h3{font-size:17px;flex:1;letter-spacing:-.02em}
 #asChat{flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
-.as-msg{max-width:88%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.5;letter-spacing:-.014em;white-space:pre-wrap}
+.as-msg{max-width:88%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.5;letter-spacing:-.003em;white-space:pre-wrap}
 .as-msg.yo{align-self:flex-end;background:var(--azul);color:#fff;border-bottom-right-radius:5px}
 .as-msg.ia{align-self:flex-start;background:var(--fondo);color:var(--texto);border-bottom-left-radius:5px}
 .as-msg.error{align-self:flex-start;background:var(--rojo-bg);color:var(--rojo)}
 .as-pie{padding:14px 20px;border-top:1px solid var(--pelo);display:flex;gap:9px;align-items:flex-end}
 .as-pie textarea{
   flex:1;resize:none;min-height:42px;max-height:130px;padding:11px 14px;font-size:14.5px;
-  border:1px solid var(--borde);border-radius:var(--r2);outline:none;font-family:inherit;letter-spacing:-.016em;
+  border:1px solid var(--borde);border-radius:var(--r2);outline:none;font-family:inherit;letter-spacing:-.008em;
 }
 .as-pie textarea:focus{border-color:var(--azul);box-shadow:0 0 0 4px rgba(0,113,227,.22)}
 .as-sug{display:flex;gap:7px;flex-wrap:wrap;padding:0 20px 14px}
 .as-sug button{
   font-size:12.5px;padding:6px 12px;border-radius:999px;background:var(--fondo);
-  color:var(--texto);letter-spacing:-.012em;
+  color:var(--texto);letter-spacing:.005em;
 }
 .as-sug button:hover{background:rgba(0,0,0,.09)}
 @media(max-width:640px){ #panelAsistente{width:100vw} }
 
 /* ---------- VARIOS ---------- */
-.vacio{text-align:center;padding:60px 20px;color:var(--gris);font-size:15px;letter-spacing:-.016em}
+.vacio{text-align:center;padding:60px 20px;color:var(--gris);font-size:15px;letter-spacing:-.008em}
 .vacio .ico{font-size:44px;margin-bottom:12px;opacity:.3}
 .aviso{
   padding:15px 17px;border-radius:var(--r2);font-size:13.5px;margin-bottom:16px;
-  display:flex;gap:11px;align-items:flex-start;line-height:1.5;letter-spacing:-.014em;
+  display:flex;gap:11px;align-items:flex-start;line-height:1.5;letter-spacing:-.003em;
 }
 .aviso.info{background:var(--azul-bg);color:#0040DD}
 .aviso.warn{background:var(--amar-bg);color:var(--amar)}
@@ -707,7 +718,7 @@ tbody tr:hover{background:#FAFAFC}
   position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(120px);
   background:rgba(29,29,31,.88);color:#fff;padding:14px 22px;border-radius:14px;
   backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
-  font-size:14px;letter-spacing:-.016em;z-index:9500;transition:transform .28s cubic-bezier(.2,.8,.2,1);
+  font-size:14px;letter-spacing:-.008em;z-index:9500;transition:transform .28s cubic-bezier(.2,.8,.2,1);
   max-width:88vw;box-shadow:0 8px 30px rgba(0,0,0,.3);
 }
 #toast.ver{transform:translateX(-50%) translateY(0)}
@@ -723,7 +734,7 @@ tbody tr:hover{background:#FAFAFC}
 .dropzone{
   border:1.5px dashed var(--borde);border-radius:var(--r);padding:44px 20px;text-align:center;
   color:var(--gris);transition:.18s;cursor:pointer;background:var(--fondo);
-  font-size:14.5px;letter-spacing:-.016em;
+  font-size:14.5px;letter-spacing:-.008em;
 }
 .dropzone:hover,.dropzone.encima{border-color:var(--azul);background:var(--azul-bg);color:var(--azul-link)}
 .dropzone .ico{font-size:40px;margin-bottom:10px;opacity:.45}
@@ -745,7 +756,7 @@ tbody tr:hover{background:#FAFAFC}
 .lista-simple{list-style:none}
 .lista-simple li{
   display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.055);
-  font-size:13.5px;letter-spacing:-.014em;
+  font-size:13.5px;letter-spacing:-.003em;
 }
 .lista-simple li:last-child{border-bottom:none}
 .lista-simple .crece{flex:1;min-width:0}
@@ -1093,7 +1104,7 @@ tbody tr:hover{background:#FAFAFC}
       <span class="logo-txt">Consultores</span>
     </div>
     <span id="verApp" title="Versión del sistema que tenés cargada"
-          style="font-size:11.5px;color:var(--gris2);letter-spacing:-.01em">&nbsp;</span>
+          style="font-size:11.5px;color:var(--gris2);letter-spacing:.005em">&nbsp;</span>
     <div class="sep"></div>
     <button class="btn sec chico oculto" id="btnInstalar" title="Instalar como aplicación">⬇<span class="solo-ancho"> Instalar app</span></button>
     <button class="btn-icono" id="btnBoveda" title="Bóveda de claves">🔒</button>
@@ -2123,6 +2134,9 @@ function cuotaActual(cli, fechaISO){
 var _sociosBloqueado = "";
 
 var _cierreModalPendiente = null;
+/* Lo que tarda el modal en irse. Tiene que coincidir con la transición del CSS:
+   más corto acá y la animación se corta a la mitad. */
+var MS_CIERRE_MODAL = 220;
 
 /* ---------- Cambios sin guardar ----------
 
@@ -2219,7 +2233,7 @@ function cerrarModal(){
        esto es sólo higiene. */
     _modalSucio = false;
     _modalFoto  = "";
-  }, 160);
+  }, MS_CIERRE_MODAL);
   $("fabAsistente").classList.remove("tapado");
 }
 
@@ -2233,7 +2247,7 @@ function cerrarModalPedido(){
   ]);
   var pie = $("modalPie");
   var aviso = document.createElement("div");
-  aviso.style.cssText = "flex:1;min-width:180px;align-self:center;color:var(--rojo);font-size:13.5px;letter-spacing:-.014em";
+  aviso.style.cssText = "flex:1;min-width:180px;align-self:center;color:var(--rojo);font-size:13.5px;letter-spacing:-.003em";
   aviso.textContent = "Hay cambios sin guardar.";
   pie.insertBefore(aviso, pie.firstChild);
 }
@@ -2995,7 +3009,7 @@ function abrirBovedaDesdeFicha(idCliente){
     { texto:"Abrir la bóveda igual", clase:"peligro", accion:seguir }
   ]);
   var pie = $("modalPie"), aviso = document.createElement("div");
-  aviso.style.cssText = "flex:1;min-width:200px;align-self:center;color:var(--rojo);font-size:13.5px;letter-spacing:-.014em";
+  aviso.style.cssText = "flex:1;min-width:200px;align-self:center;color:var(--rojo);font-size:13.5px;letter-spacing:-.003em";
   aviso.textContent = "Para abrir la bóveda hay que cerrar la ficha, y lo cargado se pierde.";
   pie.insertBefore(aviso, pie.firstChild);
 }
@@ -7869,7 +7883,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v46";
+var VERSION_APP = "v47";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
