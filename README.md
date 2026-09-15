@@ -6,6 +6,14 @@ recategorización semestral.
 
 **En línea:** <https://speranzaemiliano-rk.github.io/ebd/>
 
+## Cerrar una ficha
+
+Las ventanas del sistema **no se cierran tocando afuera**. Para salir están la
+**✕**, **Cancelar** y **Escape**, y las tres preguntan antes si hay algo cargado
+sin guardar. El motivo es concreto: si el botón del mouse se aprieta adentro de
+un campo y se suelta afuera —arrastrando para seleccionar texto— el navegador lo
+cuenta como un clic en el fondo, y media hora de carga se iba sin aviso.
+
 ## En el celular
 
 El mismo sistema, adaptado a pantalla angosta —no el de escritorio achicado—:
