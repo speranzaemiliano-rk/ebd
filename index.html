@@ -1700,6 +1700,20 @@ tbody tr:hover{background:#FAFAFC}
         </div>
 
         <div class="card">
+          <h2>Adjuntar en Gmail</h2>
+          <p class="desc">Sin esto, «Enviar al cliente» descarga los papeles y abre el correo escrito: los archivos se arrastran a mano. Con esto, el sistema deja el correo <b>ya armado y con los archivos adentro</b>, como borrador en la casilla del estudio, para revisarlo y mandarlo.</p>
+          <div class="campo"><label>ID de cliente de Google</label>
+            <input type="text" id="cfgGoogleClientId" placeholder="123456789-abc.apps.googleusercontent.com">
+            <div class="ayuda">Se saca una sola vez, gratis, en la consola de Google Cloud.</div></div>
+          <div id="cfgGmailEstado" style="margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn" id="btnGuardarGoogle">Guardar</button>
+            <button class="btn sec" id="btnConectarGmail">Conectar Gmail</button>
+            <button class="btn gris" id="btnComoGmail">Cómo se saca</button>
+          </div>
+        </div>
+
+        <div class="card">
           <h2>EmailJS</h2>
           <p class="desc">Servicio que permite mandar los mails desde el sistema sin backend. Creá una cuenta en emailjs.com, conectá la casilla del estudio y pegá acá las tres claves.</p>
           <div class="campo"><label>Service ID</label><input type="text" id="cfgEjsService" placeholder="service_xxxxxxx"></div>
@@ -1851,6 +1865,9 @@ tbody tr:hover{background:#FAFAFC}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js"></script>
+<!-- Google Identity Services: sólo para pedir permiso de Gmail y poder dejar
+     el borrador CON los adjuntos. Si no está configurado, no molesta. -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <!-- ============ INICIO SCRIPT PRINCIPAL — NO BORRAR ESTA MARCA ============ -->
 <script>
@@ -2100,12 +2117,13 @@ var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio"
                          "btnGuardarEjs","btnGuardarPlantilla","btnNuevoUsuario",
                          "btnConfigBoveda","btnBoveda","btnGuardarBackend","btnGuardarGemini",
                          "btnNuevoSocio","tabBtnSocios",
-                         "btnImportarAlic","btnNuevaFilaAlic","btnGuardarAlic"];
+                         "btnImportarAlic","btnNuevaFilaAlic","btnGuardarAlic",
+                         "btnGuardarGoogle","btnConectarGmail"];
 
 /* Campos que solo un admin puede guardar: sin el botón al lado, dejarlos
    editables invita a escribir algo que después se pierde. */
 var CAMPOS_ADMIN = ["cfgNombre","cfgCuit","cfgMail","cfgTel",
-                    "cfgCorreoModo","cfgCorreoCuenta",
+                    "cfgCorreoModo","cfgCorreoCuenta","cfgGoogleClientId",
                     "cfgEjsService","cfgEjsTemplate","cfgEjsKey",
                     "escalaVigencia","escalaAlquileres",
                     "plantillaAsunto","plantillaCuerpo",
@@ -2167,6 +2185,13 @@ function periodoCorto(p){
   if (!p || p.length !== 6) return p || "";
   return p.slice(4) + "/" + p.slice(0,4);
 }
+function periodoAnterior(p){
+  if (!p || p.length !== 6) return p || "";
+  var a = parseInt(p.slice(0,4),10), m = parseInt(p.slice(4),10) - 1;
+  if (m === 0){ m = 12; a--; }
+  return a + String(m).padStart(2,"0");
+}
+
 /* Devuelve los 12 períodos "AAAAMM" que terminan en `hasta` (inclusive) */
 function ventana12(hasta){
   var a = parseInt(hasta.slice(0,4),10), m = parseInt(hasta.slice(4),10), out = [];
@@ -2596,7 +2621,7 @@ function cargarTodo(){
        viniera con el arranque, cada pantalla del sistema pagaría el peso de
        una tabla que se usa en dos. Se carga sola cuando hace falta
        (asegurarAlicuotas). */
-    Promise.all(["estudio","emailjs","plantilla","backend","boveda","municipios"].map(function(k){
+    Promise.all(["estudio","emailjs","plantilla","backend","boveda","municipios","google"].map(function(k){
       return ref("config/" + k).once("value").then(function(s){ return [k, s.val()]; });
     })).then(function(pares){
       var cfg = {};
@@ -4965,7 +4990,8 @@ function bloqueMesPapeles(clienteId, g, gi){
         ? '<button class="btn sec chico" onclick="agregarPapelAlMes(\'' + clienteId + "','" + g.periodo + '\')">+ Agregar</button>'
         : "") +
       (g.periodo
-        ? '<button class="btn sec chico" onclick="enviarPapelesDelMes(\'' + clienteId + "','" + g.periodo + '\')">📧 Enviar al cliente</button>'
+        ? '<button class="btn sec chico" title="El mail dice «' + esc(periodoLargo(mesLiquidado(g.periodo))) +
+          '»: se liquida a mes vencido" onclick="enviarPapelesDelMes(\'' + clienteId + "','" + g.periodo + '\')">📧 Enviar al cliente</button>'
         : "") +
     "</div>" +
     '<ul class="lista-simple">' + g.items.map(function(it, ii){
@@ -5039,6 +5065,134 @@ function urlDeCorreo(para, asunto, cuerpo){
     "&body=" + encodeURIComponent(cuerpo || "");
 }
 
+/* ==========================================================================
+   DEJAR EL BORRADOR EN GMAIL, CON LOS ADJUNTOS
+
+   El link de redacción de Gmail (view=cm) NO puede llevar archivos: acepta
+   destinatario, asunto y cuerpo, nada más. Por eso hasta acá se hacían las dos
+   mitades —bajar los papeles y abrir el correo escrito— y los adjuntos se
+   arrastraban a mano.
+
+   Con la API de Gmail sí se puede: se arma el mail entero (texto + archivos)
+   y se lo deja como BORRADOR en la casilla del estudio. Después se abre ese
+   borrador para revisarlo y mandarlo. Se deja como borrador y no se manda
+   solo a propósito: un mail al cliente lo tiene que mirar una persona antes.
+
+   Hace falta configurarlo una vez (Configuración → Adjuntar en Gmail). Si no
+   está configurado, o si falla, se vuelve solo al camino de siempre.
+   ========================================================================== */
+
+var GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
+var _gmToken = null;          /* { valor, vence } — dura una hora */
+var _gmCliente = null;
+
+function gmailClientId(){ return ((ESTADO.config.google || {}).clientId || "").trim(); }
+function gmailListo(){ return !!(gmailClientId() && window.google && google.accounts && google.accounts.oauth2); }
+function gmailTokenVivo(){ return !!(_gmToken && _gmToken.vence > Date.now() + 60000); }
+
+/* `interactivo` = se puede abrir la ventanita de permiso de Google. Al mandar
+   los papeles NO se puede: esa ventana ya se gastó reservando la pestaña, y
+   el navegador bloquea la segunda. Por eso el permiso se da una sola vez, a
+   mano, desde Configuración, y después se renueva solo y en silencio. */
+function pedirTokenGmail(interactivo){
+  if (gmailTokenVivo()) return Promise.resolve(_gmToken.valor);
+  if (!gmailListo()) return Promise.reject(new Error("Falta configurar el ID de cliente de Google"));
+
+  return new Promise(function(resolver, rechazar){
+    _gmCliente = google.accounts.oauth2.initTokenClient({
+      client_id: gmailClientId(),
+      scope: GMAIL_SCOPE,
+      hint: configCorreo().cuenta,
+      prompt: interactivo ? "consent" : "",
+      callback: function(r){
+        if (!r || !r.access_token){ rechazar(new Error("Google no dio el permiso")); return; }
+        _gmToken = { valor: r.access_token, vence: Date.now() + ((r.expires_in || 3600) * 1000) };
+        resolver(_gmToken.valor);
+      },
+      error_callback: function(e){
+        rechazar(new Error((e && (e.type || e.message)) === "popup_closed"
+          ? "Cerraste la ventana de Google sin dar el permiso"
+          : "Google no dio el permiso"));
+      }
+    });
+    _gmCliente.requestAccessToken();
+  });
+}
+
+/* ---------- ARMAR EL MAIL ---------- */
+function _b64Utf8(t){
+  return btoa(String.fromCharCode.apply(null, new TextEncoder().encode(String(t))));
+}
+/* Un asunto con acentos tiene que ir codificado o llega con símbolos raros. */
+function _cabeceraMime(t){
+  return /^[\x20-\x7E]*$/.test(String(t)) ? String(t) : "=?UTF-8?B?" + _b64Utf8(t) + "?=";
+}
+function _partirBase64(b64){
+  return String(b64 || "").replace(/\s+/g, "").replace(/(.{76})/g, "$1\r\n");
+}
+/* Los papeles se guardan como data URL: de ahí salen el tipo y el contenido. */
+function _deDataUrl(datos){
+  var m = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(String(datos || ""));
+  if (!m) return null;
+  return {
+    tipo: m[1] || "application/octet-stream",
+    b64:  m[2] ? m[3] : btoa(unescape(m[3]))
+  };
+}
+
+function armarMimeConAdjuntos(para, asunto, cuerpo, adjuntos){
+  var borde = "ebd" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  var L = [];
+  L.push("To: " + (para || ""));
+  L.push("Subject: " + _cabeceraMime(asunto));
+  L.push("MIME-Version: 1.0");
+  L.push('Content-Type: multipart/mixed; boundary="' + borde + '"');
+  L.push("");
+  L.push("--" + borde);
+  L.push('Content-Type: text/plain; charset="UTF-8"');
+  L.push("Content-Transfer-Encoding: base64");
+  L.push("");
+  L.push(_partirBase64(_b64Utf8(cuerpo)));
+
+  adjuntos.forEach(function(a){
+    L.push("--" + borde);
+    L.push("Content-Type: " + a.tipo + '; name="' + _cabeceraMime(a.nombre) + '"');
+    L.push('Content-Disposition: attachment; filename="' + _cabeceraMime(a.nombre) + '"');
+    L.push("Content-Transfer-Encoding: base64");
+    L.push("");
+    L.push(_partirBase64(a.b64));
+  });
+
+  L.push("--" + borde + "--");
+  L.push("");
+  return L.join("\r\n");
+}
+
+/* Se usa el endpoint de subida (`/upload/…`) y no el común: el común corta
+   cerca de los 5 MB y cuatro PDF lo pasan sin esfuerzo. */
+function crearBorradorGmail(token, mime){
+  return fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/drafts?uploadType=media", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token, "Content-Type": "message/rfc822" },
+    body: mime
+  }).then(function(r){
+    return r.text().then(function(t){
+      var d = null;
+      try { d = JSON.parse(t); } catch (_) {}
+      if (!r.ok){
+        var msg = (d && d.error && d.error.message) || t.slice(0, 200) || ("HTTP " + r.status);
+        throw new Error(msg);
+      }
+      return d;
+    });
+  });
+}
+
+function urlDelBorrador(idMensaje){
+  return "https://mail.google.com/mail/?authuser=" + encodeURIComponent(configCorreo().cuenta) +
+    "#drafts?compose=" + encodeURIComponent(idMensaje);
+}
+
 /* Gmail se abre en una pestaña nueva, y una pestaña abierta por código
    después de un rato es un pop-up para el navegador. Los papeles tardan lo
    suyo en bajar, así que la pestaña se reserva EN EL MISMO CLIC —en blanco, con
@@ -5101,10 +5255,69 @@ function enviarPapelesDelMes(clienteId, periodo){
       toast("No hay papeles guardados de ese mes", "error");
       return;
     }
+    /* Con Gmail configurado, el mail sale armado y con los archivos adentro.
+       Si no, el camino de siempre: bajarlos y abrir el correo escrito. */
+    if (configCorreo().modo === "gmail" && gmailListo()){
+      return mandarConAdjuntos(clienteId, periodo, c, g.items, pestana);
+    }
     return bajarPapelesDelMes(clienteId, g.items).then(function(bajados){
       abrirMailDelMes(c, periodo, g.items, bajados, pestana);
     });
   }).catch(function(e){ soltarPestana(); toast(explicarError(e), "error"); });
+}
+
+function _cartelPestana(v, texto){
+  if (!v || v.closed || !v.document) return;
+  try {
+    v.document.body.textContent = texto;
+  } catch (_) { /* si el navegador no deja escribirla, no pasa nada */ }
+}
+
+/* De a uno: son data URL grandes y pedirlas todas juntas a Firebase por la
+   misma conexión no las trae antes. */
+function contenidosDeLosPapeles(clienteId, items){
+  var out = [], cadena = Promise.resolve();
+  items.forEach(function(it){
+    cadena = cadena.then(function(){
+      var traer = it.contenido
+        ? Promise.resolve(it.contenido)
+        : ref("archivosContenido/" + it.id).once("value").then(function(s){ return s.val(); });
+      return traer.then(function(datos){
+        var d = _deDataUrl(datos);
+        if (d) out.push({ nombre: it.nombre || "papel.pdf", tipo: d.tipo, b64: d.b64 });
+      }).catch(function(){ /* que falte uno no puede frenar a los demás */ });
+    });
+  });
+  return cadena.then(function(){ return out; });
+}
+
+function mandarConAdjuntos(clienteId, periodo, c, items, pestana){
+  _cartelPestana(pestana, "Adjuntando los papeles…");
+
+  return Promise.all([ pedirTokenGmail(false), contenidosDeLosPapeles(clienteId, items) ])
+    .then(function(r){
+      var token = r[0], adj = r[1];
+      if (!adj.length) throw new Error("No pude leer el contenido de los papeles");
+      var t = textoDelMailDelMes(c, periodo, items);
+      return crearBorradorGmail(token, armarMimeConAdjuntos(c.email || "", t.asunto, t.cuerpo, adj))
+        .then(function(d){
+          var idMsg = d && d.message && d.message.id;
+          if (!idMsg) throw new Error("Gmail no devolvió el borrador");
+          var url = urlDelBorrador(idMsg);
+          if (pestana && !pestana.closed) pestana.location.href = url;
+          else _clickEnlace(url, true);
+          toast(adj.length + (adj.length === 1 ? " papel adjuntado" : " papeles adjuntados") +
+            ": el borrador quedó en Gmail, revisalo y mandalo", "ok");
+        });
+    })
+    .catch(function(e){
+      /* Que falle adjuntar no puede dejar sin mandar: se vuelve al camino de
+         siempre, diciendo por qué. */
+      toast("No pude adjuntar (" + (e && e.message ? e.message : e) + "). Bajo los papeles y abro el correo.", "error");
+      return bajarPapelesDelMes(clienteId, items).then(function(bajados){
+        abrirMailDelMes(c, periodo, items, bajados, pestana);
+      });
+    });
 }
 
 /* De a uno y con una pausa en el medio: varias descargas disparadas todas
@@ -5128,24 +5341,40 @@ function bajarPapelesDelMes(clienteId, items){
   return uno();
 }
 
-function abrirMailDelMes(c, periodo, items, bajados, pestana){
+/* ---------- DE QUÉ MES HABLA EL MAIL ----------
+   El estudio liquida a MES VENCIDO: los papeles que se juntan y se mandan en
+   septiembre son los de agosto. La carpeta del sistema sigue siendo la del mes
+   en que se cargaron —que es cuando uno los busca—, pero el mail tiene que
+   nombrar el mes que se liquida, que es el anterior. Decirle al cliente
+   «documentación de septiembre» cuando le estás mandando la DDJJ de agosto es
+   un error que después aparece en una consulta. */
+function mesLiquidado(periodo){ return periodoAnterior(periodo); }
+
+function textoDelMailDelMes(c, periodo, items){
   var est = ESTADO.config.estudio || {};
   var nombreEst = est.nombre || "EBD Consultores";
+  var mes = mesLiquidado(periodo);
   var lista = items.map(function(i){
     return "• " + (i.etiqueta || "Papel") + (i.nombre ? " — " + i.nombre : "");
   }).join("\n");
 
-  var cuerpo =
-    "Estimado/a " + (c.razonSocial || "") + ":\n\n" +
-    "Le enviamos la documentación correspondiente a " + periodoLargo(periodo) + ":\n\n" +
-    lista + "\n\n" +
-    "Quedamos a disposición por cualquier consulta.\n\n" +
-    "Saludos cordiales,\n" + nombreEst +
-    (est.cuit ? "\nCUIT " + formatCuit(est.cuit) : "") +
-    (est.mail ? (est.cuit ? " · " : "\n") + est.mail : "") +
-    (est.tel ? " · " + est.tel : "");
+  return {
+    asunto: nombreEst + " — " + periodoLargo(mes),
+    cuerpo:
+      "Estimado/a " + (c.razonSocial || "") + ":\n\n" +
+      "Le enviamos la documentación correspondiente al mes de " + periodoLargo(mes) + ":\n\n" +
+      lista + "\n\n" +
+      "Quedamos a disposición por cualquier consulta.\n\n" +
+      "Saludos cordiales,\n" + nombreEst +
+      (est.cuit ? "\nCUIT " + formatCuit(est.cuit) : "") +
+      (est.mail ? (est.cuit ? " · " : "\n") + est.mail : "") +
+      (est.tel ? " · " + est.tel : "")
+  };
+}
 
-  var abrio = abrirCorreo(c.email || "", nombreEst + " — " + periodoLargo(periodo), cuerpo, pestana);
+function abrirMailDelMes(c, periodo, items, bajados, pestana){
+  var t = textoDelMailDelMes(c, periodo, items);
+  var abrio = abrirCorreo(c.email || "", t.asunto, t.cuerpo, pestana);
 
   toast(!abrio
     ? "El navegador bloqueó la pestaña de Gmail: permitile abrir ventanas a este sitio"
@@ -7268,7 +7497,9 @@ function editarLiquidacion(clienteId, periodo){
 
   if (html){
     html += '<div class="seccion-tit">Mandarle los papeles</div>' +
-      '<div class="aviso info"><span>📧</span><div>Junta <b>todos</b> los papeles de ' + periodoLargo(periodo) +
+      '<div class="aviso info"><span>📧</span><div>El mail habla del mes que se liquida, <b>' +
+        periodoLargo(mesLiquidado(periodo)) + "</b> (se liquida a mes vencido). " +
+        "Junta <b>todos</b> los papeles de " + periodoLargo(periodo) +
         " —los de acá y los que estén cargados en la ficha del cliente—, los descarga y abre el correo con el " +
         "texto listo. Los adjuntos se arrastran a mano: el navegador no puede adjuntarlos solo." +
         '<div style="margin-top:10px"><button type="button" class="btn sec chico" onclick="enviarPapelesDelMes(\'' +
@@ -8753,6 +8984,8 @@ function renderConfig(){
 
   pintarEstadoBoveda();
   pintarMunicipios();
+  $("cfgGoogleClientId").value = gmailClientId();
+  pintarEstadoGmail();
 
   ref("usuarios").once("value").then(function(s){
     var us = s.val() || {};
@@ -8783,6 +9016,76 @@ $("btnGuardarEstudio").onclick = function(){
     ESTADO.config.estudio = cfg; toast("Datos guardados", "ok");
   });
 };
+/* ---------- ADJUNTAR EN GMAIL, EN CONFIGURACIÓN ---------- */
+function pintarEstadoGmail(){
+  var cont = $("cfgGmailEstado");
+  if (!cont) return;
+  var cuenta = configCorreo().cuenta;
+
+  if (!gmailClientId()){
+    cont.innerHTML = '<div class="aviso warn"><span>⚠️</span><div>Sin el ID de cliente, los papeles se bajan y los adjuntos van a mano. ' +
+      "Tocá <b>Cómo se saca</b> para el paso a paso.</div></div>";
+    return;
+  }
+  if (!gmailListo()){
+    cont.innerHTML = '<div class="aviso warn"><span>⚠️</span><div>El ID está cargado, pero no pude cargar la librería de Google. ' +
+      "Suele ser la conexión o un bloqueador. Recargá la página.</div></div>";
+    return;
+  }
+  cont.innerHTML = gmailTokenVivo()
+    ? '<div class="aviso ok"><span>✅</span><div>Conectado a <b>' + esc(cuenta) + "</b>. " +
+      "«Enviar al cliente» deja el borrador con los archivos adentro.</div></div>"
+    : '<div class="aviso info"><span>🔗</span><div>Falta dar el permiso una vez. Tocá <b>Conectar Gmail</b> ' +
+      "y elegí <b>" + esc(cuenta) + "</b>. Después se renueva solo.</div></div>";
+}
+
+$("btnGuardarGoogle").onclick = function(){
+  var cfg = { clientId: $("cfgGoogleClientId").value.trim() };
+  ref("config/google").set(cfg).then(function(){
+    ESTADO.config.google = cfg;
+    _gmToken = null;                 /* otro ID, otro permiso */
+    pintarEstadoGmail();
+    toast("Guardado", "ok");
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+};
+
+$("btnConectarGmail").onclick = function(){
+  if (!gmailClientId()){ toast("Primero cargá el ID de cliente de Google", "error"); return; }
+  toast("Abriendo el permiso de Google…", "ok");
+  pedirTokenGmail(true).then(function(){
+    pintarEstadoGmail();
+    toast("Gmail conectado", "ok");
+  }).catch(function(e){
+    pintarEstadoGmail();
+    toast(e && e.message ? e.message : "No se pudo conectar", "error");
+  });
+};
+
+$("btnComoGmail").onclick = function(){
+  abrirModal("Cómo sacar el ID de cliente de Google",
+    '<div class="aviso info"><span>ℹ️</span><div>Es gratis y se hace una sola vez. Todo pasa en ' +
+      '<b>console.cloud.google.com</b>, entrando con <b>' + esc(configCorreo().cuenta) + "</b>.</div></div>" +
+    '<ul class="lista-simple">' +
+      "<li><span class=\"badge b-azul\">1</span><div class=\"crece\"><div class=\"tit\">Creá un proyecto</div>" +
+        '<div class="sub">Arriba a la izquierda, «Proyecto nuevo». El nombre da igual.</div></div></li>' +
+      "<li><span class=\"badge b-azul\">2</span><div class=\"crece\"><div class=\"tit\">Activá la API de Gmail</div>" +
+        '<div class="sub">APIs y servicios → Biblioteca → buscá «Gmail API» → Habilitar.</div></div></li>' +
+      "<li><span class=\"badge b-azul\">3</span><div class=\"crece\"><div class=\"tit\">Pantalla de consentimiento</div>" +
+        '<div class="sub">Tipo <b>Externo</b>. En «Usuarios de prueba» agregá <b>' + esc(configCorreo().cuenta) +
+        "</b>. Mientras esté en prueba, sólo esas cuentas pueden usarlo — que es lo que hace falta acá.</div></div></li>" +
+      "<li><span class=\"badge b-azul\">4</span><div class=\"crece\"><div class=\"tit\">Credenciales</div>" +
+        '<div class="sub">Crear credenciales → <b>ID de cliente de OAuth</b> → tipo <b>Aplicación web</b>. ' +
+        'En «Orígenes autorizados de JavaScript» poné exactamente:<br><span class="mono">' +
+        esc(location.origin) + "</span></div></div></li>" +
+      "<li><span class=\"badge b-azul\">5</span><div class=\"crece\"><div class=\"tit\">Copiá el ID</div>" +
+        '<div class="sub">Termina en <span class="mono">.apps.googleusercontent.com</span>. Pegalo acá y tocá Guardar, ' +
+        "y después <b>Conectar Gmail</b>.</div></div></li>" +
+    "</ul>" +
+    '<div class="aviso warn"><span>⚠️</span><div>El permiso que se pide es <b>redactar</b>: el sistema puede dejar ' +
+      "borradores, no leer tu correo ni mandar nada solo. El mail lo mandás vos desde Gmail.</div></div>",
+    [{ texto:"Cerrar", clase:"gris", accion:cerrarModal }], "ancho");
+};
+
 /* ---------- LA TABLA DE MUNICIPIOS EN CONFIGURACIÓN ---------- */
 function pintarMunicipios(){
   var cont = $("cfgMunicipios");
@@ -9586,7 +9889,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v57";
+var VERSION_APP = "v58";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

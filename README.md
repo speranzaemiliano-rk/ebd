@@ -177,6 +177,46 @@ y con un cartel de «Preparando el correo…», y recién se la manda a Gmail cu
 los papeles terminaron de bajar. Abrirla después sería un pop-up para el
 navegador, y la bloquearía.
 
+### Los adjuntos van adentro del mail
+
+El link de redacción de Gmail **no puede llevar archivos**: acepta
+destinatario, asunto y cuerpo, nada más. Por eso durante mucho tiempo esto se
+hizo en dos mitades —bajar los papeles y abrir el correo escrito— y los
+adjuntos se arrastraban a mano.
+
+Con la **API de Gmail** sí se puede. Configurado eso, «Enviar al cliente» arma
+el mail entero —texto y archivos— y lo deja como **borrador** en la casilla del
+estudio; después abre ese borrador para revisarlo y mandarlo. No se manda solo
+a propósito: un mail al cliente lo mira una persona antes.
+
+**Se configura una vez** en Configuración → *Adjuntar en Gmail*, con el botón
+**Cómo se saca** que lleva el paso a paso de la consola de Google Cloud
+(proyecto → habilitar la Gmail API → pantalla de consentimiento con la casilla
+del estudio como usuario de prueba → ID de cliente OAuth de tipo *Aplicación
+web* con este sitio como origen autorizado). Después, **Conectar Gmail** una
+vez y listo: el permiso se renueva solo.
+
+El permiso que se pide es **redactar** (`gmail.compose`): el sistema puede
+dejar borradores, no leer el correo ni mandar nada por su cuenta.
+
+Si no está configurado —o si Gmail falla— vuelve solo al camino de siempre
+(bajar los papeles y abrir el correo escrito), diciendo por qué.
+
+### El mail habla del mes que se liquida
+
+El estudio liquida **a mes vencido**: los papeles que se juntan y se mandan en
+septiembre son los de **agosto**. La carpeta del sistema sigue siendo la del
+mes en que se cargaron —que es cuando uno los busca— pero el asunto y el cuerpo
+del mail nombran el mes anterior:
+
+> *Asunto:* EBD Consultores — agosto de 2026
+> *Cuerpo:* Le enviamos la documentación correspondiente al mes de agosto de 2026
+
+Decirle al cliente «documentación de septiembre» cuando se le manda la DDJJ de
+agosto es un error que después vuelve como consulta. El botón **Enviar al
+cliente** y el aviso de la liquidación dicen de qué mes va a hablar el mail,
+para que no sorprenda.
+
 ### Cómo funciona «Enviar al cliente»
 
 Descarga los papeles del mes y abre tu programa de correo con el destinatario,
