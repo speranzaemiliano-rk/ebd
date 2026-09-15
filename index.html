@@ -237,7 +237,7 @@ header.top{
   backdrop-filter:saturate(180%) blur(20px);
   -webkit-backdrop-filter:saturate(180%) blur(20px);
   border-bottom:1px solid var(--pelo);
-  padding:0 24px;height:54px;display:flex;align-items:center;gap:16px;
+  padding:0 24px;height:58px;display:flex;align-items:center;gap:14px;
   position:sticky;top:0;z-index:100;
 }
 header.top .marca{font-size:17px;font-weight:600;letter-spacing:-.022em;white-space:nowrap}
@@ -260,7 +260,7 @@ nav.tabs{
   backdrop-filter:saturate(180%) blur(20px);
   -webkit-backdrop-filter:saturate(180%) blur(20px);
   border-bottom:1px solid var(--pelo);
-  padding:9px 24px;display:flex;gap:4px;overflow-x:auto;position:sticky;top:54px;z-index:99;
+  padding:9px 24px;display:flex;gap:4px;overflow-x:auto;position:sticky;top:58px;z-index:99;
   scrollbar-width:none;
 }
 nav.tabs::-webkit-scrollbar{display:none}
@@ -284,8 +284,37 @@ main{padding:28px 24px 60px;max-width:1500px;margin:0 auto}
 }
 .card > h2{font-size:21px;letter-spacing:-.022em;margin-bottom:5px}
 .card > .desc{color:var(--gris);font-size:14px;letter-spacing:-.016em;margin-bottom:20px}
-.card-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
-.card-head h2{font-size:21px;letter-spacing:-.022em;flex:1;min-width:200px}
+/* El título estira y empuja los controles a la derecha; entre ellos el espacio
+   es menor, para que se lean como un grupo y no como cinco cosas sueltas. */
+.card-head{display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.card-head h2{font-size:21px;letter-spacing:-.022em;flex:1;min-width:200px;margin-right:8px}
+
+/* Los selectores y los campos de período que viven en esa fila. Tenían el
+   estilo escrito a mano en cada pantalla —unos redondeados, otros no, todos de
+   otra altura que el botón de al lado— y la fila quedaba escalonada. */
+.pill,
+.filtros input[type=text],.filtros input[type=search],.filtros select{
+  height:40px;padding:0 16px;border:1px solid var(--borde);border-radius:999px;
+  background:var(--blanco);color:var(--texto);
+  font-size:15px;letter-spacing:-.016em;line-height:38px;outline:none;
+  transition:border-color .15s, box-shadow .15s;
+}
+select.pill,.filtros select{
+  padding-right:38px;appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%236E6E73' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 15px center;
+}
+/* Todos los controles de la fila miden lo mismo. El botón principal es un
+   .btn entero y los otros .btn chico: con sus alturas de fábrica la fila
+   quedaba con un escalón de nueve píxeles en el medio. */
+.card-head .btn{
+  height:40px;padding-top:0;padding-bottom:0;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.pill:hover,.filtros input:hover,.filtros select:hover{border-color:#B8B8BF}
+.pill:focus,.filtros input:focus,.filtros select:focus{
+  outline:none;border-color:var(--azul);box-shadow:0 0 0 4px rgba(0,113,227,.22);
+}
 
 /* ---------- GRILLAS ---------- */
 .grid{display:grid;gap:18px}
@@ -313,21 +342,31 @@ main{padding:28px 24px 60px;max-width:1500px;margin:0 auto}
    al soltar, la interfaz se siente muerta. 90ms es lo que tarda en leerse como
    instantáneo sin verse como un salto. */
 .btn{
-  background:var(--azul);color:#fff;border-radius:999px;padding:11px 22px;
-  font-weight:400;font-size:14px;letter-spacing:-.016em;line-height:1.2;
-  transition:background .18s, transform .09s ease-out;
+  background:var(--azul);color:#fff;border-radius:999px;padding:13px 26px;
+  font-weight:400;font-size:15px;letter-spacing:-.016em;line-height:1.2;
+  transition:background .2s ease, transform .09s ease-out;
 }
 .btn:active:not(:disabled){transform:scale(.97)}
 .btn-icono:active{transform:scale(.92)}
 nav.tabs button:active{transform:scale(.98)}
 .btn:hover{background:var(--azul-h)}
 .btn:disabled{background:rgba(0,0,0,.16);color:rgba(255,255,255,.9);cursor:not-allowed}
-.btn.sec{background:transparent;color:var(--azul-link);border:1px solid var(--azul)}
-.btn.sec:hover{background:var(--azul);color:#fff}
+/* Tres niveles, como en iOS: relleno para LA acción de la pantalla, teñido
+   para las secundarias y gris para las neutras (cancelar, salir). El botón
+   secundario era un contorno azul, y con tres o cuatro juntos en el encabezado
+   de una tarjeta la fila se volvía un cerco de pastillas donde nada resaltaba:
+   ninguna era más importante que la otra aunque sí lo fueran. Teñido pesa
+   menos que un contorno y sigue diciendo "esto se toca". */
+.btn.sec{background:var(--azul-bg);color:var(--azul-link);border:none}
+.btn.sec:hover{background:rgba(0,113,227,.17);color:var(--azul-link)}
 .btn.gris{background:rgba(0,0,0,.05);color:var(--texto);border:none}
 .btn.gris:hover{background:rgba(0,0,0,.09)}
+/* El teclado también tiene que ver dónde está parado. */
+.btn:focus-visible,.btn-icono:focus-visible,nav.tabs button:focus-visible,.pill:focus-visible{
+  outline:none;box-shadow:0 0 0 4px rgba(0,113,227,.28);
+}
 .btn.peligro{background:#FF3B30} .btn.peligro:hover{background:#E5342A}
-.btn.chico{padding:7px 16px;font-size:13px}
+.btn.chico{padding:9px 19px;font-size:14px}
 .btn-icono{
   width:34px;height:34px;border-radius:50%;color:var(--gris);
   display:inline-flex;align-items:center;justify-content:center;font-size:16px;
@@ -675,13 +714,11 @@ tbody tr:hover{background:#FAFAFC}
 #toast.error{background:rgba(215,0,21,.92)}
 #toast.ok{background:rgba(36,138,61,.92)}
 
+/* La fila de filtros usa las mismas pastillas que la de arriba (ver .pill):
+   antes tenía su propio estilo, parecido pero no igual, y las dos filas de una
+   misma pantalla no terminaban de alinearse. */
 .filtros{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
-.filtros input[type=text],.filtros select{
-  padding:9px 15px;border:1px solid var(--borde);border-radius:999px;background:var(--blanco);
-  outline:none;font-size:14px;letter-spacing:-.016em;transition:border-color .15s, box-shadow .15s;
-}
 .filtros input[type=text]{min-width:230px}
-.filtros input:focus,.filtros select:focus{border-color:var(--azul);box-shadow:0 0 0 4px rgba(0,113,227,.22)}
 
 .dropzone{
   border:1.5px dashed var(--borde);border-radius:var(--r);padding:44px 20px;text-align:center;
@@ -736,12 +773,18 @@ tbody tr:hover{background:#FAFAFC}
   header.top{padding:0 14px;gap:10px}
   header.top .logo-txt,#verApp{display:none}
   .solo-ancho{display:none}
+  /* Sin el texto al lado, el botón de instalar no necesita el ancho de uno. */
+  #btnInstalar{padding-left:13px;padding-right:13px}
   .chip-user{background:none;padding:2px;gap:0}
   .chip-user #nombreUser{display:none}
 
   /* Encabezado de tarjeta: el título ocupa su renglón y los botones el de abajo */
   .card-head{gap:8px;margin-bottom:16px}
-  .card-head h2{min-width:100%}
+  .card-head h2{min-width:100%;margin-right:0}
+  /* Repartidos en partes iguales: envueltos y de anchos distintos, la fila
+     quedaba escalonada y con huecos. */
+  .card-head .btn{flex:1 1 auto}
+  .card-head .pill{flex:1 1 100%;width:100%}
 
   /* Grillas: los formularios a una columna, los indicadores a dos */
   .grid{gap:12px}
@@ -1223,7 +1266,7 @@ tbody tr:hover{background:#FAFAFC}
       <div class="card">
         <div class="card-head">
           <h2>Control de recategorización</h2>
-          <select id="recatCorte" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px"></select>
+          <select id="recatCorte" class="pill"></select>
           <button class="btn sec chico" id="btnExportRecat">Exportar CSV</button>
         </div>
         <div class="aviso info">
@@ -1239,7 +1282,7 @@ tbody tr:hover{background:#FAFAFC}
       <div class="card">
         <div class="card-head">
           <h2>Liquidación mensual</h2>
-          <input type="month" id="liqPeriodo" style="padding:9px 13px;border:1px solid var(--borde);border-radius:var(--r2)">
+          <input type="month" id="liqPeriodo" class="pill">
           <button class="btn sec chico" id="btnRecalcularLiq">Recalcular cuotas ARCA</button>
         </div>
         <div id="tablaLiquidacion"></div>
@@ -1258,7 +1301,7 @@ tbody tr:hover{background:#FAFAFC}
       <div class="card">
         <div class="card-head">
           <h2>Honorarios por cliente y mes</h2>
-          <select id="honAnio" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px"></select>
+          <select id="honAnio" class="pill"></select>
           <button class="btn sec chico" id="btnHonExportar">Exportar CSV</button>
           <button class="btn sec chico" id="btnHonGenerar">Generar meses</button>
           <button class="btn chico" id="btnHonActualizar">% Actualizar honorarios</button>
@@ -1285,7 +1328,7 @@ tbody tr:hover{background:#FAFAFC}
       <div class="card">
         <div class="card-head">
           <h2>Socios del estudio</h2>
-          <select id="socAnio" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px"></select>
+          <select id="socAnio" class="pill"></select>
           <button class="btn" id="btnNuevoSocio">+ Nuevo socio</button>
         </div>
         <div class="aviso info">
@@ -1320,7 +1363,7 @@ tbody tr:hover{background:#FAFAFC}
           <button class="btn" id="btnNuevoMovimiento">+ Movimiento</button>
         </div>
         <div class="filtros">
-          <input type="month" id="cajaPeriodo" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px">
+          <input type="month" id="cajaPeriodo" class="pill">
           <select id="cajaCuenta"></select>
           <select id="cajaTipo">
             <option value="">Ingresos y egresos</option>
@@ -1338,7 +1381,7 @@ tbody tr:hover{background:#FAFAFC}
       <div class="card">
         <div class="card-head">
           <h2>Envío de avisos de pago</h2>
-          <input type="month" id="mailPeriodo" style="padding:9px 13px;border:1px solid var(--borde);border-radius:var(--r2)">
+          <input type="month" id="mailPeriodo" class="pill">
           <button class="btn sec chico" id="btnPreviewMail">Ver previsualización</button>
           <button class="btn" id="btnEnviarMails">Enviar seleccionados</button>
         </div>
@@ -1383,7 +1426,7 @@ tbody tr:hover{background:#FAFAFC}
       <div class="card">
         <div class="card-head">
           <h2>Escalas del monotributo</h2>
-          <select id="selEscala" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px"></select>
+          <select id="selEscala" class="pill"></select>
           <button class="btn sec chico" id="btnNuevaEscala">+ Nueva vigencia</button>
           <button class="btn" id="btnGuardarEscala">Guardar cambios</button>
         </div>
@@ -1411,7 +1454,7 @@ tbody tr:hover{background:#FAFAFC}
       <div class="card">
         <div class="card-head">
           <h2>Alícuotas de Ingresos Brutos</h2>
-          <select id="selJurisAlic" style="padding:9px 13px;border:1px solid var(--borde);border-radius:999px">
+          <select id="selJurisAlic" class="pill">
             <option value="arba">ARBA — Provincia de Buenos Aires</option>
             <option value="agip">AGIP — Ciudad de Buenos Aires</option>
           </select>
@@ -1450,7 +1493,7 @@ tbody tr:hover{background:#FAFAFC}
           </div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 12px">
-          <input type="search" id="alicBuscar" placeholder="Buscar por código o por actividad" style="flex:1;min-width:220px;padding:9px 13px;border:1px solid var(--borde);border-radius:999px">
+          <input type="search" id="alicBuscar" class="pill" placeholder="Buscar por código o por actividad" style="flex:1;min-width:220px">
           <span class="ayuda" id="alicConteo"></span>
         </div>
         <div id="tablaAlicuotas"></div>
@@ -7581,7 +7624,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v44";
+var VERSION_APP = "v45";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
