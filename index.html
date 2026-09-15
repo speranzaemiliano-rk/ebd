@@ -2416,7 +2416,19 @@ Array.prototype.forEach.call($("navTabs").children, function(b){
   b.onclick = function(){ irA(b.dataset.tab); };
 });
 $("modalCerrar").onclick = cerrarModalPedido;
-$("modalFondo").onclick = function(e){ if (e.target === this) cerrarModalPedido(); };
+/* Tocar el fondo cierra el cuadro, pero sólo si el gesto entero pasó en el
+   fondo. Seleccionando con el mouse el texto de un campo es normal pasarse
+   para afuera: al soltar, el click le llega igual al fondo —es el ancestro
+   común— y se cerraba el formulario en la mitad de la carga. Por eso se miran
+   el apretar y el soltar por separado, y no el click. */
+var _fondoApretado = false, _fondoSoltado = false;
+$("modalFondo").onmousedown = function(e){ _fondoApretado = (e.target === this); };
+$("modalFondo").onmouseup   = function(e){ _fondoSoltado  = (e.target === this); };
+$("modalFondo").onclick = function(e){
+  var enElFondo = _fondoApretado && _fondoSoltado;
+  _fondoApretado = _fondoSoltado = false;
+  if (e.target === this && enElFondo) cerrarModalPedido();
+};
 document.addEventListener("keydown", function(e){
   if (e.key !== "Escape") return;
   /* Si el asistente está abierto, Escape lo cierra a él: es lo que está
@@ -2655,7 +2667,8 @@ function renderClientes(){
       "<td>" + badgeEstado(an) + "</td>" +
       '<td style="white-space:nowrap">' +
         (puedeEscribir()
-          ? '<button class="btn-icono" onclick="editarCliente(\'' + id + '\')" title="Editar">✏️</button>'
+          ? '<button class="btn-icono" onclick="editarCliente(\'' + id + '\')" title="Editar">✏️</button>' +
+            '<button class="btn-icono" onclick="abrirSubirArchivo(\'' + id + '\')" title="Subir papeles">📎</button>'
           : "") +
         '<button class="btn-icono" onclick="verFichaCliente(\'' + id + '\')" title="Ver ficha">📊</button>' +
       "</td></tr>";
@@ -3900,7 +3913,11 @@ function pintarArchivosDeLaFicha(id){
 
     if (!ids.length){
       cont.innerHTML = '<div class="ayuda">Todavía no hay papeles guardados de este cliente. ' +
-        "Se suben desde la solapa <b>Archivos</b>, o leyendo su constancia desde <b>Clientes</b>.</div>";
+        (puedeEscribir()
+          ? "Subilos con <b>📎 Subir papeles</b> acá arriba, desde la solapa <b>Archivos</b>, " +
+            "o leyendo su constancia desde <b>Clientes</b>."
+          : "Se suben desde la solapa <b>Archivos</b>, o leyendo su constancia desde <b>Clientes</b>.") +
+        "</div>";
       return;
     }
 
@@ -3958,7 +3975,15 @@ function verFichaCliente(id){
   }
   html += "</tbody></table></div>";
 
-  html += '<div class="seccion-tit">Papeles del cliente</div><div id="fcArchivos"><div class="ayuda">Buscando…</div></div>';
+  /* El botón de subir va acá y no sólo en la solapa Archivos: mirando la ficha
+     de alguien, sus papeles se cargan sin salir y sin volver a elegir de quién
+     son. */
+  html += '<div class="seccion-tit" style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
+      "<span>Papeles del cliente</span>" +
+      (puedeEscribir()
+        ? '<button class="btn sec chico" onclick="abrirSubirArchivo(\'' + id + '\')">📎 Subir papeles</button>'
+        : "") +
+    '</div><div id="fcArchivos"><div class="ayuda">Buscando…</div></div>';
 
   abrirModal(c.razonSocial + " · " + formatCuit(c.cuit), html, [
     { texto:"Cerrar", clase:"gris", accion:cerrarModalPedido },
@@ -7167,22 +7192,36 @@ function borrarArchivo(cli, id){
    ========================================================================== */
 
 var _papeles = [];        /* [{ file, tipo, clienteId, periodo, nota, estado }] */
+/* Cliente del que se abrió «Subir papeles», para volver a su ficha al guardar.
+   Vacío cuando se abrió desde la solapa Archivos. */
+var _papelesVuelvenA = "";
 var MAX_PAPEL_MB = 5;
 
-function abrirSubirArchivo(){
+/* Se abre de dos maneras. Desde la solapa Archivos, sin cliente: ahí la IA
+   tiene que adivinar de quién es cada papel. O desde un cliente concreto —su
+   ficha o su fila en el listado—: el cliente ya viene dado y a la IA sólo le
+   queda decir qué es cada papel y de qué mes. */
+function abrirSubirArchivo(cliFijo){
   _papeles = [];
+  /* Sólo vale si el cliente existe de verdad; con cualquier otra cosa se
+     comporta como el botón de la solapa. */
+  var cli = cliFijo && ESTADO.clientes[cliFijo] ? cliFijo : "";
+  _papelesVuelvenA = cli;
   var hoy = periodoHoy();
 
-  abrirModal("Subir papeles",
+  abrirModal(cli ? "Subir papeles de " + nombreCliente(cli) : "Subir papeles",
     '<div class="aviso info"><span>📎</span><div>Podés soltar <b>varios archivos de una vez</b>: constancias, VEP, ' +
-      "declaraciones juradas, resúmenes. Si tenés la IA configurada, lee cada uno y propone de qué cliente " +
-      "y de qué mes es; vos revisás antes de guardar.</div></div>" +
+      "declaraciones juradas, resúmenes. Si tenés la IA configurada, lee cada uno y propone " +
+      (cli ? "qué es y de qué mes" : "de qué cliente y de qué mes es") +
+      "; vos revisás antes de guardar.</div></div>" +
     '<div class="campo"><label>Archivos</label>' +
       '<input type="file" id="sbArchivo" accept="application/pdf,image/*" multiple>' +
       '<div class="ayuda">PDF o fotos, hasta ' + MAX_PAPEL_MB + " MB cada uno.</div></div>" +
     '<div class="grid g3">' +
       '<div class="campo"><label>Cliente</label><select id="sbCliente"></select>' +
-        '<div class="ayuda">Dejalo en «detectar» y lo saca del archivo.</div></div>' +
+        '<div class="ayuda">' +
+          (cli ? "Los papeles quedan en la ficha de este cliente." : "Dejalo en «detectar» y lo saca del archivo.") +
+        "</div></div>" +
       '<div class="campo"><label>Tipo</label><select id="sbTipo">' +
         '<option value="">✨ Detectar con IA</option>' +
         TIPOS_ARCHIVO.map(function(t){ return '<option value="' + t.clave + '">' + t.nombre + "</option>"; }).join("") +
@@ -7199,10 +7238,19 @@ function abrirSubirArchivo(){
     ], "ancho");
 
   setTimeout(function(){
-    llenarSelectClientes($("sbCliente"), false);
     var sel = $("sbCliente");
-    sel.insertBefore(new Option("✨ Detectar con IA", ""), sel.firstChild);
-    sel.value = "";
+    if (cli){
+      /* El select se arma a mano y no con llenarSelectClientes porque ese deja
+         afuera a los clientes dados de baja: si el papel es de uno de ellos,
+         el valor no se podría fijar y terminaría guardado en otro cliente. */
+      sel.innerHTML = '<option value="' + cli + '">' + esc(nombreCliente(cli)) + "</option>";
+      sel.value = cli;
+      sel.disabled = true;
+    } else {
+      llenarSelectClientes(sel, false);
+      sel.insertBefore(new Option("✨ Detectar con IA", ""), sel.firstChild);
+      sel.value = "";
+    }
     /* Elegir los archivos ya prepara: un botón menos que apretar. */
     $("sbArchivo").onchange = prepararPapeles;
   }, 50);
@@ -7292,9 +7340,15 @@ function pintarPapeles(){
   var cont = $("sbLista");
   if (!_papeles.length){ cont.innerHTML = ""; return; }
 
+  /* Los clientes dados de baja no se ofrecen, pero si un papel ya es de uno
+     (se abrió desde su ficha) hay que incluirlo igual: si no, el select
+     mostraría otro nombre y el papel terminaría en el cliente equivocado. */
+  var idsCli = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+  _papeles.forEach(function(p){
+    if (p.clienteId && ESTADO.clientes[p.clienteId] && idsCli.indexOf(p.clienteId) === -1) idsCli.push(p.clienteId);
+  });
   var opcCli = '<option value="">— elegir —</option>' +
-    Object.keys(ESTADO.clientes)
-      .filter(function(id){ return ESTADO.clientes[id].activo !== false; })
+    idsCli
       .sort(function(a, b){ return nombreCliente(a).localeCompare(nombreCliente(b)); })
       .map(function(id){ return '<option value="' + id + '">' + esc(nombreCliente(id)) + "</option>"; }).join("");
 
@@ -7382,16 +7436,23 @@ function guardarPapeles(){
     });
     return ref("").update(updates);
   }).then(function(){
+    var volver = _papelesVuelvenA;
+    _papelesVuelvenA = "";
     cerrarModal();
     toast(elegidos.length === 1 ? "Papel guardado" : elegidos.length + " papeles guardados", "ok");
     pintarArchivos();
+    /* Si se abrió desde un cliente, se vuelve a su ficha: el papel recién
+       guardado tiene que quedar a la vista donde se lo pidió. */
+    if (volver) setTimeout(function(){ verFichaCliente(volver); }, 180);
   }).catch(function(e){
     toast(explicarError(e), "error");
     if (btn){ btn.disabled = false; btn.textContent = "Guardar"; }
   });
 }
 
-$("btnSubirArchivo").onclick = abrirSubirArchivo;
+/* Envuelto a propósito: onclick pasa el evento como primer argumento y
+   abrirSubirArchivo lo tomaría como el cliente. */
+$("btnSubirArchivo").onclick = function(){ abrirSubirArchivo(); };
 $("arcCliente").onchange = pintarArchivos;
 $("arcTipo").onchange    = pintarArchivos;
 
