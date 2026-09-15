@@ -140,7 +140,23 @@ Junta las dos cosas que antes vivían separadas:
   volver a subirlos, aparecen solos.
 
 De cada mes se puede **agregar** un papel (ya viene con el cliente y el mes
-puestos) y **enviárselo al cliente**.
+puestos), **enviárselo al cliente** y **borrarlo**.
+
+### Borrar un papel
+
+El 🗑️ está en las dos listas donde aparece un papel: en la **liquidación**, al
+lado de cada adjunto del impuesto, y en los **papeles del cliente**, mes por
+mes.
+
+La confirmación aparece **en la propia fila**, no en un cuadro aparte. Es a
+propósito: en toda la app hay un solo cuadro de diálogo, y abrir uno encima de
+la liquidación borraría lo que se está cargando. De paso, la pregunta queda
+pegada al papel del que habla, así que no hay forma de confundirse de archivo.
+Decir que no lo deja todo como estaba.
+
+Borra las dos cosas juntas —la ficha del papel y su contenido—, para no dejar
+archivos huérfanos ocupando lugar. Un VEP guardado dentro de una liquidación se
+borra de ahí, que es donde vive, y el contador de VEP del mes se actualiza solo.
 
 ### Cómo funciona «Enviar al cliente»
 
