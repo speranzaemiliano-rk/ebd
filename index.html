@@ -1324,7 +1324,9 @@ tbody tr:hover{background:#FAFAFC}
           <span>ℹ️</span>
           <div>La alícuota de ingresos brutos depende de la <b>actividad</b> —el código NAIIB en ARBA, el mismo NAES en AGIP— y la fija cada año la <b>Ley Impositiva</b> de la jurisdicción.
             Por eso la tabla no viene cargada de fábrica: la cargás una vez con el anexo oficial y de ahí en más el sistema saca la alícuota de cada cliente por su código, sin que la escribas cliente por cliente.
-            <b>Cargar la tabla</b> toma el Excel del nomenclador, el texto pegado del anexo o un PDF leído con IA.</div>
+            <b>Cargar la tabla</b> toma el Excel del nomenclador, el texto pegado del anexo o un PDF leído con IA.
+            El <b>nombre</b> de cada actividad sí viene cargado —es el nomenclador NAIIB de ARBA, que no cambia todos los años—,
+            así que alcanza con que el anexo traiga el código y el porcentaje. Tocando un código se abre el detalle en el sitio de ARBA.</div>
         </div>
         <div id="avisoRolAlic"></div>
         <div class="grid g4" style="margin-bottom:4px">
@@ -1511,6 +1513,11 @@ tbody tr:hover{background:#FAFAFC}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4.4.1/dist/email.min.js"></script>
+
+<!-- El nomenclador de actividades de ARBA: código NAIIB/NAES -> nombre oficial.
+     Va en un archivo aparte y no acá adentro porque son mil actividades y no
+     cambian nunca. Si no carga, el sistema anda igual: sólo deja de sugerir. -->
+<script src="naiib.js"></script>
 
 <!-- ============ INICIO SCRIPT PRINCIPAL — NO BORRAR ESTA MARCA ============ -->
 <script>
@@ -1971,7 +1978,8 @@ var _cierreModalPendiente = null;
 
    Ojo con la distinción: cerrarModal() cierra y punto, y lo usan los guardados
    (ahí ya no hay nada que perder). cerrarModalPedido() es el que pregunta, y
-   es el único que se engancha a un gesto del usuario. */
+   es el único que se engancha a un gesto del usuario: la ✕, Cancelar y Escape.
+   Un clic en el fondo no cierra nada —ver más abajo, donde se engancha—. */
 var _modalSucio   = false;
 var _modalBotones = [];
 var _modalFoto    = "";
@@ -2268,7 +2276,45 @@ Array.prototype.forEach.call($("navTabs").children, function(b){
   b.onclick = function(){ irA(b.dataset.tab); };
 });
 $("modalCerrar").onclick = cerrarModalPedido;
-$("modalFondo").onclick = function(e){ if (e.target === this) cerrarModalPedido(); };
+
+/* Un clic en el fondo NO cierra el modal: lo sacude y lo deja abierto.
+
+   Antes cerraba (preguntando si había cambios) y era una fuente constante de
+   sustos, por tres motivos que no se ven mirando el código:
+
+   1. el fondo no es sólo el borde: tiene 40px arriba y abajo y 16px a los
+      costados, y además scrollea. Errarle a un campo por dos centímetros, o
+      tocar la barra de scroll, era "clic afuera";
+   2. el evento `click` se dispara al SOLTAR el botón, y su target es el
+      ancestro común de dónde apretaste y dónde soltaste. Seleccionar el texto
+      de un campo y soltar un pelo más afuera del modal daba `target === fondo`,
+      o sea: cerrar el formulario por arrastrar para seleccionar;
+   3. si todavía no habías tocado nada —abriste la ficha para mirar un dato— no
+      preguntaba nada, cerraba y listo.
+
+   Para cerrar están la ✕, el botón Cancelar y la tecla Escape, que son tres
+   gestos que se hacen a propósito. Los tres pasan por cerrarModalPedido(), así
+   que los tres preguntan si hay algo sin guardar. */
+$("modalFondo").onclick = function(e){
+  if (e.target !== this) return;
+  sacudirModal();
+};
+
+/* La sacudida va por código y no por una clase de CSS a propósito: .modal ya
+   tiene puesta la animación de entrada, y sacarle y ponerle una clase la hace
+   materializarse de nuevo cada vez. Element.animate() se superpone por lo que
+   dura y después se va sola. */
+function sacudirModal(){
+  var caja = $("modalCaja");
+  if (!caja || !caja.animate) return;
+  try {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    caja.animate([
+      { transform:"none" }, { transform:"translateX(-7px)" }, { transform:"translateX(6px)" },
+      { transform:"translateX(-4px)" }, { transform:"none" }
+    ], { duration:280, easing:"cubic-bezier(.36,.07,.19,.97)" });
+  } catch (err){ /* si el navegador no la banca, el modal se queda quieto: igual no cierra */ }
+}
 document.addEventListener("keydown", function(e){
   if (e.key !== "Escape") return;
   /* Si el asistente está abierto, Escape lo cierra a él: es lo que está
@@ -2578,10 +2624,12 @@ function formCliente(c, idCliente){
   '<div class="grid g2">' +
     '<div class="campo"><label>Actividad que desarrolla</label>' +
       '<input type="text" id="fcActIIBB" value="' + esc(c.actividadIIBB || "") + '" placeholder="Servicios jurídicos">' +
-      '<div class="ayuda">Es la que define el tratamiento en cada jurisdicción. Por ejemplo, en CABA el ejercicio de una profesión universitaria no organizado en forma de empresa está exento de ingresos brutos.</div></div>' +
-    '<div class="campo"><label>Código de actividad (NAES)</label>' +
+      '<div class="ayuda">Es la que define el tratamiento en cada jurisdicción. Por ejemplo, en CABA el ejercicio de una profesión universitaria no organizado en forma de empresa está exento de ingresos brutos.</div>' +
+      '<div class="ayuda" id="busNaes"></div></div>' +
+    '<div class="campo"><label>Código de actividad (NAIIB / NAES)</label>' +
       '<input type="text" id="fcNaes" value="' + esc(c.codigoNAES || "") + '" placeholder="691001">' +
-      '<div class="ayuda">El mismo código se usa en ARBA y en AGIP.</div></div>' +
+      '<div class="ayuda">El mismo código se usa en ARBA y en AGIP.</div>' +
+      '<div class="ayuda" id="sugNaes"></div></div>' +
   '</div>' +
   /* Sugerencias para el motivo, sin encerrarlo: es un campo libre. */
   '<datalist id="motivosExencion">' +
@@ -2724,26 +2772,33 @@ function guardarClavesDeFicha(clienteId, cuit){
   });
 }
 
-/* Abrir la bóveda cierra la ficha, porque hay un solo modal. Se vuelve a
-   abrir la misma ficha al terminar; lo que se hubiera tipeado y no guardado se
-   perdería, así que primero se avisa y se deja decidir. */
+/* Abrir la bóveda obliga a sacar la ficha de la pantalla, porque hay un solo
+   modal. Antes eso se avisaba con un cartel rojo y lo cargado se perdía igual,
+   que es la peor combinación posible: un cartel no le devuelve a nadie el rato
+   que estuvo tipeando, y encima dejaba la ficha y la bóveda como excluyentes.
+
+   Ahora la ficha no se pierde: se lee entera antes de salir y se vuelve a
+   poner cuando se reabre. Vale para las dos salidas —que abran la bóveda o que
+   la cancelen—, que era la otra mitad del problema: cancelar dejaba la ficha
+   cerrada y los datos en la nada.
+
+   Las claves de los organismos no entran en la foto y no hace falta que
+   entren: si la bóveda está cerrada, esos campos ni siquiera existen. */
 function abrirBovedaDesdeFicha(idCliente){
-  var seguir = function(){ abrirDialogoBoveda(function(){ abrirFormCliente(idCliente); }); };
-  if (!hayCambiosSinGuardar()){ seguir(); return; }
-  _pintarPieModal([
-    { texto:"Seguir en la ficha", clase:"sec", accion:function(){ _pintarPieModal(_modalBotones); } },
-    { texto:"Abrir la bóveda igual", clase:"peligro", accion:seguir }
-  ]);
-  var pie = $("modalPie"), aviso = document.createElement("div");
-  aviso.style.cssText = "flex:1;min-width:200px;align-self:center;color:var(--rojo);font-size:13.5px;letter-spacing:-.014em";
-  aviso.textContent = "Para abrir la bóveda hay que cerrar la ficha, y lo cargado se pierde.";
-  pie.insertBefore(aviso, pie.firstChild);
+  var loCargado = leerFormCliente();
+  var volverALaFicha = function(){ abrirFormCliente(idCliente, loCargado); };
+  abrirDialogoBoveda(volverALaFicha, volverALaFicha);
 }
 
-/* `precarga` trae los datos leídos de una constancia. Tiene la misma forma que
-   un cliente, así que se usa tal cual para armar el formulario. */
+/* `precarga` son datos que todavía no están en la base: los que leyó una
+   constancia, o los que quedaron tipeados cuando hubo que ir a la bóveda.
+   Tiene la misma forma que un cliente, así que se usa tal cual.
+
+   Con `id`, lo guardado es la base y la precarga lo pisa campo por campo. Sin
+   `id` —cliente nuevo—, la precarga es todo lo que hay. */
 function abrirFormCliente(id, precarga){
-  var c = id ? ESTADO.clientes[id] : (precarga || null);
+  var c = id ? Object.assign({}, ESTADO.clientes[id] || {}, precarga || {})
+             : (precarga || null);
   abrirModal(id ? "Editar cliente" : "Nuevo cliente", formCliente(c, id), [
     { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Guardar",  accion:function(){ guardarFormCliente(id); } }
@@ -2755,31 +2810,36 @@ function abrirFormCliente(id, precarga){
     var v = this.value.replace(/\D/g,"");
     if (v.length === 11) this.value = formatCuit(v);
   };
-  /* La alícuota de IIBB depende del código de actividad, así que la sugerencia
-     se repinta a medida que lo escriben. */
-  $("fcNaes").oninput = pintarSugAlic;
+  /* Todo lo de ingresos brutos cuelga del código de actividad, así que las dos
+     ayudas —qué actividad es, y qué alícuota le toca— se repintan a medida que
+     lo escriben. Y al revés: escribiendo la actividad aparece el código. */
+  $("fcNaes").oninput = function(){ pintarSugNaes(); pintarBusquedaNaes(); pintarSugAlic(); };
+  $("fcActIIBB").oninput = pintarBusquedaNaes;
+  pintarSugNaes();
+  pintarBusquedaNaes();
   pintarSugAlic();
-  /* Con datos precargados el formulario arranca "sucio" a propósito: son
-     cambios que el usuario no quiere perder de un clic afuera. */
   cargarClavesEnFicha(id, !!precarga);
+  /* Con datos precargados el formulario arranca "sucio" a propósito: lo que
+     leyó una constancia, o lo que sobrevivió a un paso por la bóveda, son
+     cambios reales que todavía no están en la base. Va al final porque
+     abrirModal() deja el modal limpio y esto lo tiene que pisar. */
+  if (precarga) _modalSucio = true;
 }
 function editarCliente(id){ abrirFormCliente(id); }
 
-function guardarFormCliente(id){
-  var nombre = $("fcNombre").value.trim();
-  var cuit   = $("fcCuit").value.replace(/\D/g,"");
-  if (!nombre){ toast("Falta la razón social", "error"); return; }
-  if (!cuitValido(cuit)){ toast("El CUIT no es válido (revisá el dígito verificador)", "error"); return; }
+/* Lee el formulario entero y arma un objeto con la misma forma que un cliente
+   guardado. Está aparte de guardarFormCliente() porque hay dos momentos en que
+   hace falta leer la ficha sin guardarla: al guardar, obvio, y al tener que
+   cerrarla un rato para abrir la bóveda —ahí lo leído se queda en memoria y
+   vuelve a su lugar cuando la ficha se reabre—.
 
-  var dup = Object.keys(ESTADO.clientes).filter(function(k){
-    return k !== id && String(ESTADO.clientes[k].cuit).replace(/\D/g,"") === cuit;
-  });
-  if (dup.length){ toast("Ya existe un cliente con ese CUIT", "error"); return; }
-
-  var datos = {
-    razonSocial: nombre,
+   No valida nada a propósito: validar es decisión de quien guarda. La foto que
+   se lleva a la bóveda tiene que poder ser una ficha a medio llenar. */
+function leerFormCliente(){
+  return {
+    razonSocial: $("fcNombre").value.trim(),
     nombreFantasia: $("fcFantasia").value.trim(),
-    cuit: cuit,
+    cuit: $("fcCuit").value.replace(/\D/g, ""),
     nroIIBB: $("fcIIBB").value.trim(),
     email: $("fcMail").value.trim(),
     telefono: $("fcTel").value.trim(),
@@ -2818,9 +2878,23 @@ function guardarFormCliente(id){
     }, {}),
     estadoDelegacion: $("fcDelegacion").value,
     ptosVenta: $("fcPtosVenta").value.split(",").map(function(s){ return parseInt(s.trim(),10); }).filter(function(n){ return !isNaN(n); }),
-    activo: $("fcActivo").checked,
-    modificado: new Date().toISOString()
+    activo: $("fcActivo").checked
   };
+}
+
+function guardarFormCliente(id){
+  var nombre = $("fcNombre").value.trim();
+  var cuit   = $("fcCuit").value.replace(/\D/g,"");
+  if (!nombre){ toast("Falta la razón social", "error"); return; }
+  if (!cuitValido(cuit)){ toast("El CUIT no es válido (revisá el dígito verificador)", "error"); return; }
+
+  var dup = Object.keys(ESTADO.clientes).filter(function(k){
+    return k !== id && String(ESTADO.clientes[k].cuit).replace(/\D/g,"") === cuit;
+  });
+  if (dup.length){ toast("Ya existe un cliente con ese CUIT", "error"); return; }
+
+  var datos = leerFormCliente();
+  datos.modificado = new Date().toISOString();
 
   var p;
   if (id){
@@ -3661,7 +3735,11 @@ function fichaPdfCliente(id){
   fila("Nº de Ingresos Brutos", c.nroIIBB || "", "Actividad (monotributo)",
        c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios"));
   fila("Correo electrónico", c.email || "", "Teléfono", c.telefono || "");
-  if (c.actividadIIBB || c.codigoNAES) fila("Actividad (ingresos brutos)", c.actividadIIBB || "", "Código NAES", c.codigoNAES || "");
+  /* Si en la ficha no escribieron la actividad pero sí el código, la ficha
+     impresa igual dice de qué se trata: la saca del nomenclador. */
+  if (c.actividadIIBB || c.codigoNAES)
+    fila("Actividad (ingresos brutos)", descActividad(c.codigoNAES, c.actividadIIBB),
+         "Código NAIIB / NAES", c.codigoNAES || "");
   y += 8;
 
   titulo("Monotributo");
@@ -5484,6 +5562,78 @@ $("btnNuevaEscala").onclick = function(){
     ]);
 };
 
+/* ---------- 17a. EL NOMENCLADOR DE ACTIVIDADES (NAIIB / NAES) ----------
+
+   El código de actividad es la llave de todo lo de ingresos brutos: de él sale
+   la alícuota. El problema es que son seis dígitos que nadie se acuerda, y
+   escribirlo mal no da error en ninguna pantalla: da la alícuota equivocada.
+
+   Por eso el sistema trae el nomenclador de ARBA (archivo `naiib.js`): mil y
+   pico de actividades con su nombre oficial. Sirve para tres cosas —avisar si
+   un código no existe, encontrarlo escribiendo la actividad, y ponerle nombre a
+   las filas que el anexo de alícuotas trae sólo con código y porcentaje—.
+
+   El nomenclador NO trae ni un porcentaje: las alícuotas siguen saliendo del
+   anexo de la Ley Impositiva, que se carga a mano en la pantalla de al lado.
+
+   Si `naiib.js` no cargó —una versión vieja en la caché, o el archivo borrado—
+   todo esto devuelve vacío y el sistema funciona igual que antes. */
+
+function _naiib(){ return (typeof NAIIB === "object" && NAIIB) ? NAIIB : {}; }
+function hayNomenclador(){ return Object.keys(_naiib()).length > 0; }
+
+/* El nombre oficial de un código, o "" si no figura. */
+function naiibNombre(codigo){ return _naiib()[_alicClave(codigo)] || ""; }
+
+/* Que un código no figure NO quiere decir que esté mal: puede ser uno de AGIP
+   que ARBA no usa. Por eso esto sólo sirve para avisar, nunca para rechazar. */
+function naiibExiste(codigo){ return !!naiibNombre(codigo); }
+
+/* Link al renglón exacto del nomenclador en el sitio de ARBA. Ahí están las
+   columnas «Incluye» y «Excluye», que son las que de verdad resuelven cuando
+   dos códigos parecen el mismo. No las copiamos porque pesan diez veces más
+   que todo el resto del nomenclador junto. */
+function naiibLink(codigo){
+  return "https://www.arba.gov.ar/archivos/Publicaciones/naiib.html#" + _alicClave(codigo);
+}
+
+/* El nombre que se muestra para un código: primero el que haya escrito una
+   persona, y si no hay ninguno, el oficial del nomenclador. */
+function descActividad(codigo, desc){
+  return String(desc || "").trim() || naiibNombre(codigo);
+}
+
+/* Índice para buscar por nombre. Se arma la primera vez que alguien busca y no
+   al abrir el sistema: normalizar mil actividades es trabajo al pedo las nueve
+   de cada diez veces que nadie va a buscar nada. */
+var _naiibIndice = null;
+function _naiibArmarIndice(){
+  if (_naiibIndice) return _naiibIndice;
+  var n = _naiib();
+  _naiibIndice = Object.keys(n).sort().map(function(c){
+    return { codigo:c, desc:n[c], busca:_sinTildes(n[c]).toLowerCase() };
+  });
+  return _naiibIndice;
+}
+
+/* Busca actividades por nombre o por código, y devuelve como mucho `tope`.
+   Por nombre tienen que estar TODAS las palabras: "alquiler maquinaria" trae
+   las que dicen las dos cosas, no las que dicen cualquiera de las dos. */
+function naiibBuscar(texto, tope){
+  var q = _sinTildes(texto || "").toLowerCase().trim();
+  if (q.length < 3) return [];
+  var digitos = q.replace(/\D/g, "");
+  var partes  = q.split(" ").filter(function(p){ return p; });
+  var idx = _naiibArmarIndice(), out = [];
+  for (var i = 0; i < idx.length && out.length < (tope || 8); i++){
+    var it = idx[i];
+    var pega = (digitos.length >= 3 && it.codigo.indexOf(digitos) === 0) ||
+               partes.every(function(p){ return it.busca.indexOf(p) !== -1; });
+    if (pega) out.push(it);
+  }
+  return out;
+}
+
 /* ---------- 17b. ALÍCUOTAS DE INGRESOS BRUTOS ----------
 
    La alícuota de IIBB no depende del cliente sino de la ACTIVIDAD: el código
@@ -5578,7 +5728,7 @@ function origenAlicuota(ef, juris){
   var f = ef.fila || {};
   return "tabla de " + _cortoJuris(juris) + (alicTabla(juris).vigencia ? " " + alicTabla(juris).vigencia : "") +
     ", código " + f.codigo + (f.exacto ? "" : " (renglón general del rubro)") +
-    (f.desc ? " — " + f.desc : "");
+    (descActividad(f.codigo, f.desc) ? " — " + descActividad(f.codigo, f.desc) : "");
 }
 
 /* ---------- LA PANTALLA ---------- */
@@ -5612,7 +5762,9 @@ function _alicCodigosVista(juris){
     if (!f) return false;                                   /* borrada sin guardar todavía */
     if (!q) return true;
     if (c.indexOf(q.replace(/\D/g, "")) === 0 && /\d/.test(q)) return true;
-    return _sinTildes(f.desc || "").toLowerCase().indexOf(q) !== -1;
+    /* Busca también por el nombre del nomenclador: una fila importada del anexo
+       puede no tener nombre escrito y encontrarse igual por la actividad. */
+    return _sinTildes(descActividad(c, f.desc)).toLowerCase().indexOf(q) !== -1;
   });
   out.sort();
   return out;
@@ -5655,8 +5807,16 @@ function pintarAlicuotas(){
     var f = _alicFilaDe(juris, cod) || {};
     var sucia = _alicEdit[cod] !== undefined;
     html += '<tr' + (sucia ? ' style="background:#FFFBE6"' : "") + '>' +
-      "<td><b>" + esc(cod) + "</b></td>" +
+      /* El código linkea al renglón del nomenclador en ARBA, donde está el
+         detalle de qué incluye y qué excluye. Y si la fila no tiene nombre, el
+         del nomenclador se ve en gris: se lee, pero se nota que no está
+         guardado —guardado queda recién si alguien lo escribe—. */
+      "<td><b>" + (naiibExiste(cod)
+        ? '<a href="' + naiibLink(cod) + '" target="_blank" rel="noopener" title="' +
+          esc(naiibNombre(cod)) + '">' + esc(cod) + "</a>"
+        : esc(cod)) + "</b></td>" +
       '<td><input type="text" data-cod="' + cod + '" data-campo="desc" value="' + esc(f.desc || "") +
+        '" placeholder="' + esc(naiibNombre(cod) || "—") +
         '" style="width:100%;min-width:220px;padding:6px 9px;border:1px solid var(--borde);border-radius:6px"></td>' +
       '<td class="num"><input type="number" step="0.001" data-cod="' + cod + '" data-campo="alicuota" value="' +
         (f.alicuota || "") + '" style="width:90px;' + est + '"></td>' +
@@ -5713,11 +5873,24 @@ $("selJurisAlic").onchange = function(){
 };
 $("alicBuscar").oninput = pintarAlicuotas;
 
+/* Al escribir el código en «+ Actividad», el nombre lo completa el nomenclador.
+   Guardamos qué nombre pusimos nosotros para poder corregirlo si después
+   corrigen el código, y para no pisar nunca lo que escribió una persona. */
+var _naDescPuesta = "";
+function _naDescDelNomenclador(){
+  var d = $("naDesc");
+  if (!d) return;
+  if (d.value.trim() && d.value !== _naDescPuesta) return;
+  _naDescPuesta = naiibNombre($("naCod").value);
+  d.value = _naDescPuesta;
+}
+
 $("btnNuevaFilaAlic").onclick = function(){
   var juris = $("selJurisAlic").value || "arba";
+  _naDescPuesta = "";
   abrirModal("Nueva actividad en " + _cortoJuris(juris),
     '<div class="grid g2">' +
-      '<div class="campo"><label>Código (NAIIB / NAES)</label><input type="text" id="naCod" placeholder="691001"></div>' +
+      '<div class="campo"><label>Código (NAIIB / NAES)</label><input type="text" id="naCod" placeholder="691001" oninput="_naDescDelNomenclador()"></div>' +
       '<div class="campo"><label>Alícuota %</label><input type="number" step="0.001" id="naAlic" placeholder="5"></div>' +
     "</div>" +
     '<div class="campo"><label>Actividad</label><input type="text" id="naDesc" placeholder="Servicios jurídicos"></div>' +
@@ -5730,6 +5903,7 @@ $("btnNuevaFilaAlic").onclick = function(){
       { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Agregar", accion:function(){
           var cod = _alicClave($("naCod").value);
+          _naDescPuesta = "";
           if (!cod){ toast("Poné el código de actividad", "error"); return; }
           _alicEdit[cod] = {
             desc:     $("naDesc").value.trim(),
@@ -5785,7 +5959,7 @@ $("btnBajarAlic").onclick = function(){
   var datos = codigos.map(function(c){
     return {
       Codigo:   c,
-      Actividad: filas[c].desc || "",
+      Actividad: descActividad(c, filas[c].desc),
       Alicuota:  filas[c].alicuota || "",
       Minimo:    filas[c].minimo || "",
       Exenta:    filas[c].exento ? "SI" : "",
@@ -6010,14 +6184,19 @@ function interpretarAlicuotas(){
 }
 
 /* Un mismo código puede venir dos veces (el anexo lo repite por jurisdicción o
-   por condición). Gana el último, y se avisa arriba cuántos se unificaron. */
+   por condición). Gana el último, y se avisa arriba cuántos se unificaron.
+
+   Acá también se completa el nombre de la actividad con el nomenclador cuando
+   el anexo trae sólo el código y el porcentaje, que es lo más común. Ojo con la
+   diferencia: el NOMBRE puede salir del nomenclador porque es un dato fijo y
+   oficial; el PORCENTAJE no, ese sale del anexo o no sale de ningún lado. */
 function _alicUnificar(filas){
   var mapa = {}, repetidos = 0;
   (filas || []).forEach(function(f){
     var cod = _alicClave(f.codigo);
     if (!cod) return;
     if (mapa[cod]) repetidos++;
-    mapa[cod] = { codigo: cod, desc: f.desc || "", alicuota: f.alicuota, minimo: f.minimo, exento: !!f.exento, notas: f.notas || "" };
+    mapa[cod] = { codigo: cod, desc: descActividad(cod, f.desc), alicuota: f.alicuota, minimo: f.minimo, exento: !!f.exento, notas: f.notas || "" };
   });
   var out = Object.keys(mapa).sort().map(function(c){ return mapa[c]; });
   out._repetidos = repetidos;
@@ -6127,6 +6306,68 @@ function confirmarImportAlicuotas(){
 }
 
 
+/* ---------- EL NOMENCLADOR DENTRO DE LA FICHA DEL CLIENTE ----------
+   Dos ayudas sobre el mismo dato, cada una en la dirección que falta.
+   Abajo del código: qué actividad es. Abajo de la actividad: qué códigos
+   coinciden con lo que escribieron. Ninguna de las dos decide nada sola —los
+   campos los termina llenando la persona, con un clic o a mano—. */
+function pintarSugNaes(){
+  var el = $("sugNaes");
+  if (!el) return;
+  if (!hayNomenclador()){ el.innerHTML = ""; return; }
+  var cod = _alicClave($("fcNaes").value);
+  if (!cod){
+    el.innerHTML = "Si no lo tenés a mano, escribí la actividad ahí al lado y te paso el código.";
+    return;
+  }
+  var nombre = naiibNombre(cod);
+  if (nombre){
+    el.innerHTML = "✓ <b>" + esc(nombre) + "</b> · " +
+      '<a href="#" onclick="usarNombreNaiib();return false;">usar de actividad</a> · ' +
+      '<a href="' + naiibLink(cod) + '" target="_blank" rel="noopener">ver qué incluye y qué excluye</a>';
+    return;
+  }
+  el.innerHTML = cod.length !== 6
+    ? "Los códigos del nomenclador tienen seis dígitos."
+    : "⚠️ El código " + esc(cod) + " no figura en el nomenclador de ARBA. Puede ser correcto " +
+      "igual —si es de los que usa sólo AGIP—, pero fijate que no esté mal copiado.";
+}
+
+/* Copia el nombre oficial al campo de actividad. No se hace solo a propósito:
+   el nombre del nomenclador es largo y burocrático, y a veces en la ficha
+   conviene el de todos los días. */
+function usarNombreNaiib(){
+  var n = naiibNombre($("fcNaes").value);
+  if (!n) return;
+  $("fcActIIBB").value = n;
+  _modalSucio = true;
+  pintarBusquedaNaes();
+  toast("Actividad copiada del nomenclador", "ok");
+}
+
+function pintarBusquedaNaes(){
+  var el = $("busNaes");
+  if (!el) return;
+  /* Con el código ya puesto no hay nada que buscar. */
+  if (!hayNomenclador() || _alicClave($("fcNaes").value)){ el.innerHTML = ""; return; }
+  var r = naiibBuscar($("fcActIIBB").value, 6);
+  if (!r.length){ el.innerHTML = ""; return; }
+  el.innerHTML = "En el nomenclador de ARBA:<br>" + r.map(function(x){
+    return '<a href="#" onclick="usarCodigoNaiib(\'' + x.codigo + '\');return false;"><b>' +
+      x.codigo + "</b> — " + esc(x.desc) + "</a>";
+  }).join("<br>");
+}
+
+function usarCodigoNaiib(cod){
+  $("fcNaes").value = cod;
+  if (!$("fcActIIBB").value.trim()) $("fcActIIBB").value = naiibNombre(cod);
+  _modalSucio = true;
+  pintarSugNaes();
+  pintarBusquedaNaes();
+  pintarSugAlic();
+  toast("Código " + cod + " cargado", "ok");
+}
+
 /* ---------- LA TABLA DENTRO DE LA FICHA DEL CLIENTE ----------
    Debajo de cada alícuota se muestra lo que dice la tabla para el código de
    actividad cargado arriba, con un link para copiarlo. Sugerencia, no
@@ -6158,12 +6399,13 @@ function pintarSugAlic(){
     }
     if (f.exento){
       el.innerHTML = "En la tabla de " + corto + ", el código " + esc(f.codigo) +
-        (f.desc ? " (" + esc(f.desc) + ")" : "") + " figura como <b>exento</b>." +
+        (descActividad(f.codigo, f.desc) ? " (" + esc(descActividad(f.codigo, f.desc)) + ")" : "") + " figura como <b>exento</b>." +
         (f.notas ? " " + esc(f.notas) : "");
       return;
     }
     el.innerHTML = "Tabla de " + corto + (t.vigencia ? " " + esc(t.vigencia) : "") + ": código " + esc(f.codigo) +
-      (f.exacto ? "" : " (renglón general del rubro)") + (f.desc ? " — " + esc(f.desc) : "") +
+      (f.exacto ? "" : " (renglón general del rubro)") +
+      (descActividad(f.codigo, f.desc) ? " — " + esc(descActividad(f.codigo, f.desc)) : "") +
       " → <b>" + f.alicuota + "%</b>" + (f.minimo ? ", mínimo " + pesos(f.minimo) : "") +
       (f.notas ? ". " + esc(f.notas) : "") + " " + _linkUsarAlic(k, f.alicuota, f.minimo);
   });
@@ -6267,18 +6509,26 @@ function pintarEstadoBoveda(){
 $("btnBoveda").onclick = function(){ irA("tabConfig"); setTimeout(abrirDialogoBoveda, 120); };
 $("btnConfigBoveda").onclick = abrirDialogoBoveda;
 
-/* Lo que había que hacer y quedó esperando a que se abriera la bóveda. */
-var _trasAbrirBoveda = null;
+/* Lo que había que hacer y quedó esperando a que se abriera la bóveda, y lo
+   que hay que hacer si en vez de abrirla la cancelan. */
+var _trasAbrirBoveda  = null;
+var _trasCerrarBoveda = null;
 
 /* `alAbrir` es opcional. Se pasa cuando el usuario quiso hacer algo que
    necesita la bóveda —entrar a ARCA, ver las claves de un cliente— y estaba
    cerrada: en vez de mandarlo a otra pantalla a abrirla y que después se
    acuerde de volver, se le pide la contraseña ahí y se sigue con lo que
    quería hacer.
+
+   `alCancelar` es para el otro final. Si se llegó acá desde una pantalla que
+   tenía algo cargado, cancelar no puede dejar al usuario en el vacío: hay que
+   devolverlo a donde estaba, igual que si hubiera abierto la bóveda.
+
    Ojo: este mismo nombre está enganchado a onclick, que llama con un Event
-   como primer argumento; por eso se verifica que sea una función. */
-function abrirDialogoBoveda(alAbrir){
-  _trasAbrirBoveda = (typeof alAbrir === "function") ? alAbrir : null;
+   como primer argumento; por eso se verifica que sean funciones. */
+function abrirDialogoBoveda(alAbrir, alCancelar){
+  _trasAbrirBoveda  = (typeof alAbrir    === "function") ? alAbrir    : null;
+  _trasCerrarBoveda = (typeof alCancelar === "function") ? alCancelar : null;
   var b = ESTADO.config.boveda;
   if (!b){
     abrirModal("Inicializar la bóveda",
@@ -6287,7 +6537,7 @@ function abrirDialogoBoveda(alAbrir){
       '<div class="campo"><label>Contraseña maestra (mínimo 12 caracteres)</label><input type="password" id="bvPass1"></div>' +
       '<div class="campo"><label>Repetir contraseña</label><input type="password" id="bvPass2"></div>',
       [
-        { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+        { texto:"Cancelar", clase:"gris", accion:cancelarDialogoBoveda },
         { texto:"Inicializar", accion:inicializarBoveda }
       ], "angosto");
   } else if (ESTADO.claveMaestra){
@@ -6301,7 +6551,7 @@ function abrirDialogoBoveda(alAbrir){
       '<div class="campo"><label>Contraseña maestra</label><input type="password" id="bvPass"></div>' +
       '<div id="bvError"></div>',
       [
-        { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+        { texto:"Cancelar", clase:"gris", accion:cancelarDialogoBoveda },
         { texto:"Abrir", accion:desbloquearBoveda }
       ], "angosto");
     setTimeout(function(){
@@ -6330,11 +6580,26 @@ function inicializarBoveda(){
   }).catch(function(e){ toast("Error: " + e.message, "error"); });
 }
 
+/* Cancelar el diálogo. Si hay a dónde volver, se vuelve sin preguntar nada: no
+   se pierde nada —la ficha vuelve entera— y lo único que queda atrás es una
+   contraseña maestra a medio tipear, que no es un dato que nadie quiera
+   conservar. Si no hay a dónde volver, se cierra como se cerraba siempre, o sea
+   preguntando: ahí el diálogo puede ser el de inicializar la bóveda, con una
+   contraseña nueva escrita dos veces que sí duele perder de un clic. */
+function cancelarDialogoBoveda(){
+  var volver = _trasCerrarBoveda;
+  _trasAbrirBoveda = null;
+  _trasCerrarBoveda = null;
+  /* No hace falta cerrar el modal antes: quien vuelve lo redibuja entero. */
+  if (volver) volver(); else cerrarModalPedido();
+}
+
 /* Si había algo esperando, se hace; si no, se muestra la lista de claves,
    que es lo que se espera al abrir la bóveda a propósito. */
 function seguirTrasBoveda(){
   var tarea = _trasAbrirBoveda;
-  _trasAbrirBoveda = null;
+  _trasAbrirBoveda  = null;
+  _trasCerrarBoveda = null;
   if (tarea) tarea(); else listarCredenciales();
 }
 

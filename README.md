@@ -20,13 +20,17 @@ sin barra del navegador.
 Instalado, el ícono deja además accesos directos: mantené apretado el ícono y
 saltás directo a Recategorización, Liquidación o Clientes.
 
-> Cada vez que se modifique `index.html`, hay que subir el número de `VERSION`
-> en `sw.js`. Si no, algunos navegadores siguen mostrando la versión vieja.
+> Cada vez que se modifique `index.html` o `naiib.js`, hay que subir el número
+> de `VERSION` en `sw.js`. Si no, algunos navegadores siguen mostrando la
+> versión vieja.
 
 ## Cómo está armado
 
 - **`index.html`** — todo el sistema en un solo archivo: HTML, CSS y JavaScript.
   No usa frameworks ni build. Se edita y se sube tal cual.
+- **`naiib.js`** — el nomenclador de actividades de ARBA: 1019 códigos con su
+  nombre oficial. Es sólo datos, no tiene lógica. Está aparte de `index.html`
+  porque son 70 KB que no cambian nunca.
 - **`database.rules.json`** — reglas de seguridad de la base. Se pegan en Firebase.
 - **Firebase Realtime Database** — la base de datos. Path raíz: `estudioContable`.
 - **Firebase Authentication** — login por correo y contraseña, con roles.
@@ -204,6 +208,11 @@ Con la tabla cargada:
 - lo que esté escrito en la ficha **siempre gana**: la tabla es el valor por
   defecto, no una imposición.
 
+El **nombre** de cada actividad no hace falta cargarlo: viene con el sistema, en
+`naiib.js`. Así que si el anexo trae sólo el código y el porcentaje —que es lo
+más común— la tabla igual queda legible. Tocando un código se abre el renglón
+en el sitio de ARBA, con el detalle de qué incluye y qué excluye.
+
 Además se puede cargar la **alícuota general** (la subsidiaria) de cada
 jurisdicción, que se usa cuando la actividad no figura en la tabla, y marcar
 actividades **exentas**. Cuando salga la ley del año que viene se vuelve a
@@ -212,6 +221,49 @@ importar el anexo: los códigos que ya estaban se actualizan, no se duplican.
 La tabla vive en `config/alicuotas/<jurisdicción>` dentro de la base, así que
 **no hay que tocar las reglas de Firebase** para usarla: la rama `config` ya está
 publicada desde el paso 4.
+
+## El código de actividad, sin buscarlo a mano
+
+El código de actividad (NAIIB en ARBA, el mismo NAES en AGIP) es la llave de
+todo lo de ingresos brutos: de él sale la alícuota. El problema es que son seis
+dígitos que nadie se acuerda, y escribirlo mal no da error en ninguna pantalla:
+da la alícuota equivocada.
+
+Por eso el sistema trae el **nomenclador completo de ARBA**. En la ficha del
+cliente:
+
+- escribís el **código** y abajo aparece el nombre oficial de la actividad, con
+  un link para copiarlo al campo de al lado y otro para ver en el sitio de ARBA
+  qué incluye y qué excluye ese código;
+- o al revés: escribís la **actividad** ("alquiler de maquinaria", "arquitectura")
+  y aparecen los códigos que coinciden, para elegir uno de un clic;
+- si el código no figura en el nomenclador, avisa. No lo rechaza: puede ser uno
+  de los que usa sólo AGIP.
+
+El nomenclador **no trae alícuotas** y no reemplaza al anexo: los porcentajes
+los sigue fijando la Ley Impositiva de cada año y se cargan en **Alícuotas IIBB**.
+
+Cuando ARBA publique una versión nueva del nomenclador, se rearma `naiib.js`
+desde <https://www.arba.gov.ar/archivos/Publicaciones/naiib.html> y se sube el
+`VERSION` de `sw.js`.
+
+## Los formularios no se cierran solos
+
+Un clic afuera de una ventana **no la cierra**: la sacude y la deja donde está.
+Antes cerraba, y era una fuente permanente de sustos por tres motivos que no se
+ven mirando la pantalla: el fondo no es sólo el borde (tiene margen arriba,
+abajo y a los costados, y además scrollea); el navegador cuenta como "clic
+afuera" el hecho de apretar adentro y soltar afuera, o sea seleccionar el texto
+de un campo arrastrando un poco de más; y si todavía no habías tocado nada,
+cerraba sin preguntar.
+
+Para cerrar están la **✕**, el botón **Cancelar** y la tecla **Escape**. Los tres
+preguntan si hay algo cargado sin guardar.
+
+Y abrir la **bóveda** desde la ficha de un cliente ya no borra lo que estabas
+cargando. La ficha se tiene que sacar de la pantalla —hay una sola ventana a la
+vez— pero lo tipeado vuelve a su lugar cuando la ficha se reabre, tanto si
+abrís la bóveda como si cancelás.
 
 ## Entrar a ARCA, ARBA y AGIP desde el sistema
 

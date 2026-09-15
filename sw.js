@@ -10,17 +10,20 @@
    - Firebase, Google, EmailJS -> ni los toca. Van derecho a internet,
                     porque son datos vivos y sesiones que no se pueden cachear.
 
-   IMPORTANTE: cada vez que se cambie index.html hay que subir el número de
-   VERSION de acá abajo. Si no, algunos navegadores siguen mostrando la vieja.
+   IMPORTANTE: cada vez que se cambie index.html —o naiib.js— hay que subir el
+   número de VERSION de acá abajo. Si no, algunos navegadores siguen mostrando
+   la versión vieja. index.html se pide a la red primero y se nota menos, pero
+   naiib.js se sirve de la caché: sin subir VERSION queda el nomenclador viejo.
    ========================================================================== */
 
-var VERSION = "v41";
+var VERSION = "v42";
 var CACHE   = "ebd-" + VERSION;
 
 /* Archivos propios que se guardan para que la app abra sin conexión. */
 var SHELL = [
   "./",
   "./index.html",
+  "./naiib.js",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png",
