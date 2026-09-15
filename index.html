@@ -374,6 +374,69 @@ nav.tabs button:active{transform:scale(.98)}
 }
 .btn-icono:hover{background:rgba(0,0,0,.05);color:var(--texto)}
 
+/* ---------- BUSCADOR GENERAL ----------
+   Cae desde arriba, como el Spotlight: no es una pantalla a la que se va sino
+   una capa que aparece sobre la que uno estaba y se va sin dejar rastro. */
+.bus-fondo{
+  position:fixed;inset:0;z-index:9000;display:none;justify-content:center;
+  padding:12vh 16px 16px;background:rgba(0,0,0,.34);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+.bus-fondo.abierto{display:flex}
+.bus-caja{
+  width:100%;max-width:620px;max-height:70vh;display:flex;flex-direction:column;
+  background:var(--blanco);border-radius:18px;overflow:hidden;
+  box-shadow:0 24px 60px rgba(0,0,0,.28);
+  animation:materializar .18s cubic-bezier(.2,.8,.2,1);
+}
+.bus-campo{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--pelo)}
+.bus-campo span{font-size:17px;opacity:.55}
+.bus-campo input{
+  flex:1;min-width:0;border:none;outline:none;background:none;
+  font-size:17px;letter-spacing:-.012em;color:var(--texto);font-family:inherit;
+}
+.bus-campo kbd{
+  font:inherit;font-size:11px;color:var(--gris2);background:rgba(0,0,0,.05);
+  border-radius:6px;padding:3px 7px;
+}
+#buscadorResultados{overflow-y:auto;padding:8px}
+.bus-grupo{
+  font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--gris2);
+  padding:12px 12px 6px;
+}
+.bus-item{
+  display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;cursor:pointer;
+}
+.bus-item.elegido{background:var(--azul-bg)}
+.bus-item .ico{font-size:16px;width:22px;text-align:center}
+.bus-item .crece{flex:1;min-width:0}
+.bus-item .tit{font-size:14.5px;letter-spacing:-.008em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bus-item .sub{font-size:12.5px;letter-spacing:.005em;color:var(--gris);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bus-ayuda{padding:26px 16px;text-align:center;color:var(--gris);font-size:13.5px;line-height:1.6}
+@media(max-width:640px){
+  .bus-fondo{padding:0}
+  .bus-caja{max-width:none;max-height:100%;height:100%;border-radius:0}
+  .bus-campo{padding-top:calc(16px + env(safe-area-inset-top,0px))}
+  .bus-campo kbd{display:none}
+}
+
+/* La fila de filtros vive dentro del encabezado de la tabla, pegada a la
+   columna que filtra: si estuviera arriba en una barra aparte, habría que
+   acordarse de cuál corresponde a cuál. */
+.fila-filtros th{padding:8px 10px;background:#FBFBFD;border-bottom:1px solid var(--pelo)}
+.fila-filtros .f-col{
+  width:100%;min-width:74px;padding:6px 10px;font-size:12.5px;letter-spacing:.005em;
+  border:1px solid var(--borde);border-radius:8px;background:var(--blanco);
+  color:var(--texto);outline:none;font-family:inherit;
+  transition:border-color .15s, box-shadow .15s;
+}
+.fila-filtros select.f-col{padding-right:6px}
+.fila-filtros .f-col:focus{border-color:var(--azul);box-shadow:0 0 0 3px rgba(0,113,227,.2)}
+.fila-filtros .btn-icono{width:28px;height:28px;font-size:13px}
+/* En el celular la tabla se vuelve tarjetas, así que la fila de filtros —que
+   es parte del encabezado— se esconde con él. Ahí filtra el buscador de
+   arriba, que es lo que entra en una pantalla de teléfono. */
+
 /* ---------- ADENTRO DE UN CLIENTE ----------
    La pantalla entera pasa a ser el cliente. Arriba, el camino de vuelta —lo
    primero que uno busca cuando se metió en algún lado— y después quién es y
@@ -441,7 +504,12 @@ nav.tabs button:active{transform:scale(.98)}
   border-color:var(--azul);box-shadow:0 0 0 4px rgba(0,113,227,.22);
 }
 .campo textarea{resize:vertical;min-height:110px;font-family:inherit;line-height:1.6}
-.campo .ayuda{font-size:12.5px;color:var(--gris2);margin-top:6px;letter-spacing:.005em}
+/* La letra chica de una explicación. Estaba definida SÓLO adentro de .campo,
+   pero se usa en sesenta lugares y en la mitad no hay ningún campo alrededor:
+   ahí salía con el tamaño y el color del cuerpo, que es justo lo que no se
+   quiere para una aclaración. Apareció midiendo el tracking en una prueba. */
+.ayuda{font-size:12.5px;color:var(--gris2);letter-spacing:.005em;line-height:1.55}
+.campo .ayuda{margin-top:6px}
 .check{display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;font-size:14.5px;letter-spacing:-.008em}
 .check input{width:18px;height:18px;accent-color:var(--azul);cursor:pointer}
 
@@ -1158,6 +1226,7 @@ tbody tr:hover{background:#FAFAFC}
           style="font-size:11.5px;color:var(--gris2);letter-spacing:.005em">&nbsp;</span>
     <div class="sep"></div>
     <button class="btn sec chico oculto" id="btnInstalar" title="Instalar como aplicación">⬇<span class="solo-ancho"> Instalar app</span></button>
+    <button class="btn-icono" id="btnBuscar" title="Buscar en todo (Ctrl+K)">🔍</button>
     <button class="btn-icono" id="btnBoveda" title="Bóveda de claves">🔒</button>
     <div class="chip-user">
       <div class="avatar" id="avatarUser">?</div>
@@ -1261,19 +1330,6 @@ tbody tr:hover{background:#FAFAFC}
         </div>
         <div class="filtros">
           <input type="text" id="filtroCliente" placeholder="Buscar por nombre o CUIT…">
-          <select id="filtroImpuesto">
-            <option value="">Todos los impuestos</option>
-            <option value="arca">ARCA (monotributo)</option>
-            <option value="arba">IIBB Provincia (ARBA)</option>
-            <option value="agip">IIBB CABA (AGIP)</option>
-            <option value="municipal">Tasa municipal</option>
-          </select>
-          <select id="filtroActividad">
-            <option value="">Toda actividad</option>
-            <option value="servicios">Servicios</option>
-            <option value="bienes">Venta de bienes</option>
-            <option value="mixto">Mixto</option>
-          </select>
           <label class="check"><input type="checkbox" id="filtroInactivos"> Ver inactivos</label>
         </div>
         <div id="tablaClientes"></div>
@@ -1664,6 +1720,18 @@ tbody tr:hover{background:#FAFAFC}
 </div>
 
 <!-- ==================== MODALES ==================== -->
+<!-- ---------- BUSCADOR GENERAL ---------- -->
+<div class="bus-fondo" id="buscadorFondo">
+  <div class="bus-caja">
+    <div class="bus-campo">
+      <span>🔍</span>
+      <input type="text" id="buscadorTexto" placeholder="Buscar un cliente, un papel, una pantalla…" autocomplete="off">
+      <kbd>esc</kbd>
+    </div>
+    <div id="buscadorResultados"></div>
+  </div>
+</div>
+
 <div class="modal-fondo" id="modalFondo">
   <div class="modal" id="modalCaja">
     <div class="modal-head"><h3 id="modalTitulo">Título</h3><button class="btn-icono" id="modalCerrar">✕</button></div>
@@ -1811,11 +1879,19 @@ var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
    (ver REF de archivosContenido) para que el listado abra liviano. */
 var TIPOS_ARCHIVO = [
   { clave:"ddjj",       nombre:"Declaración jurada" },
-  { clave:"vep",        nombre:"VEP / comprobante de pago" },
+  { clave:"vep",        nombre:"VEP" },
+  { clave:"pago",       nombre:"Comprobante de pago" },
+  { clave:"factura",    nombre:"Factura" },
   { clave:"resumen",    nombre:"Resumen bancario" },
   { clave:"constancia", nombre:"Constancia de inscripción" },
   { clave:"otro",       nombre:"Otro" }
 ];
+
+/* Lo que se adjunta en la liquidación de cada impuesto. El VEP es el único que
+   se guarda adentro de la liquidación —viene de antes y el sistema lo usa para
+   contar cuántos faltan—; el resto va a los papeles del cliente, en el mes que
+   corresponde, que es donde después se los busca y desde donde se los manda. */
+var TIPOS_LIQ = ["vep", "ddjj", "pago", "factura", "resumen", "otro"];
 
 /* Cuentas que se crean solas la primera vez que arranca el sistema. */
 var CUENTAS_SEMILLA = {
@@ -2617,10 +2693,11 @@ function inicializarUI(){
   llenarSelectClientes($("verCompCliente"), false);
   llenarAnios();
 
-  $("filtroCliente").oninput      = renderClientes;
-  $("filtroImpuesto").onchange    = renderClientes;
-  $("filtroActividad").onchange   = renderClientes;
-  $("filtroInactivos").onchange   = renderClientes;
+  /* El buscador de arriba y "ver inactivos" repintan sólo las filas, igual que
+     los filtros de las columnas: rearmar la tabla entera con cada tecla le
+     saca el foco al campo donde se está escribiendo. */
+  $("filtroCliente").oninput      = pintarFilasClientes;
+  $("filtroInactivos").onchange   = pintarFilasClientes;
   $("verCompCliente").onchange    = renderTablaComprobantes;
   $("verCompAnio").onchange       = renderTablaComprobantes;
   $("verCompMes").onchange        = renderTablaComprobantes;
@@ -2748,6 +2825,183 @@ function badgeEstado(an){
   return '<span class="badge b-verde">Al día</span>';
 }
 
+/* ==========================================================================
+   BUSCADOR GENERAL
+
+   Un estudio con cien clientes no navega: busca. "Dónde estaba lo de Pérez"
+   no debería costar tres clics y acordarse de en qué solapa estaba.
+
+   Se abre con la lupa de la barra o con Ctrl/⌘+K, y busca en tres lados:
+   los clientes, los papeles (declaraciones juradas, VEP, constancias) y las
+   pantallas del sistema. Se elige con las flechas y se entra con Enter.
+
+   Los papeles se bajan la primera vez que se busca y quedan en memoria: en
+   `archivos` vive sólo la ficha de cada papel —nombre, tipo, mes—, no el
+   archivo, que está aparte justamente para que esto sea liviano.
+   ========================================================================== */
+
+var PANTALLAS_BUSCABLES = [
+  { tab:"tabHome",         nombre:"Inicio" },
+  { tab:"tabClientes",     nombre:"Clientes" },
+  { tab:"tabComprobantes", nombre:"Comprobantes" },
+  { tab:"tabRecat",        nombre:"Recategorización" },
+  { tab:"tabLiquidacion",  nombre:"Liquidación" },
+  { tab:"tabHonorarios",   nombre:"Honorarios" },
+  { tab:"tabSocios",       nombre:"Socios" },
+  { tab:"tabCaja",         nombre:"Caja" },
+  { tab:"tabMails",        nombre:"Mails" },
+  { tab:"tabArchivos",     nombre:"Archivos" },
+  { tab:"tabEscalas",      nombre:"Escalas ARCA" },
+  { tab:"tabAlicuotas",    nombre:"Alícuotas IIBB" },
+  { tab:"tabConfig",       nombre:"Configuración" }
+];
+
+var _papelesBuscables = null;   /* null = todavía no se bajaron */
+var _resBusqueda = [];
+var _resElegido  = 0;
+
+function abrirBuscador(){
+  $("buscadorFondo").classList.add("abierto");
+  var caja = $("buscadorTexto");
+  caja.value = "";
+  caja.focus();
+  pintarResultados("");
+  /* Las fichas de los papeles, una sola vez por sesión. */
+  if (_papelesBuscables === null){
+    _papelesBuscables = [];
+    ref("archivos").once("value").then(function(s){
+      var todo = s.val() || {};
+      var out = [];
+      Object.keys(todo).forEach(function(cli){
+        Object.keys(todo[cli] || {}).forEach(function(id){
+          var a = todo[cli][id];
+          out.push({ cli: cli, id: id, nombre: a.nombre || "", tipo: a.tipo || "", periodo: a.periodo || "" });
+        });
+      });
+      _papelesBuscables = out;
+      if ($("buscadorFondo").classList.contains("abierto")) pintarResultados($("buscadorTexto").value);
+    }).catch(function(){ _papelesBuscables = []; });
+  }
+}
+function cerrarBuscador(){ $("buscadorFondo").classList.remove("abierto"); }
+
+function buscarEnTodo(q){
+  var t = _sinTildes(q).toLowerCase().trim();
+  if (!t) return [];
+  var soloDigitos = t.replace(/\D/g, "");
+  var out = [];
+
+  Object.keys(ESTADO.clientes).forEach(function(id){
+    var c = ESTADO.clientes[id];
+    var texto = _sinTildes([c.razonSocial, c.nombreFantasia, c.email, c.codigoNAES, c.actividadIIBB]
+      .filter(Boolean).join(" ")).toLowerCase();
+    var cuit = String(c.cuit || "").replace(/\D/g, "");
+    if (texto.indexOf(t) === -1 && !(soloDigitos.length >= 2 && cuit.indexOf(soloDigitos) !== -1)) return;
+    out.push({
+      grupo:"Clientes", icono:"👤",
+      titulo: c.razonSocial || "(sin nombre)",
+      sub: formatCuit(c.cuit) + (c.email ? " · " + c.email : "") + (c.activo === false ? " · inactivo" : ""),
+      accion: function(){ abrirCliente(id); }
+    });
+  });
+
+  (_papelesBuscables || []).forEach(function(p){
+    var texto = _sinTildes(p.nombre + " " + nombreTipoArchivo(p.tipo) + " " + nombreCliente(p.cli)).toLowerCase();
+    if (texto.indexOf(t) === -1) return;
+    out.push({
+      grupo:"Papeles", icono:"📎",
+      titulo: p.nombre,
+      sub: nombreTipoArchivo(p.tipo) + " · " + nombreCliente(p.cli) +
+           (p.periodo ? " · " + periodoLargo(p.periodo) : ""),
+      accion: function(){ abrirCliente(p.cli, "papeles"); }
+    });
+  });
+
+  PANTALLAS_BUSCABLES.forEach(function(p){
+    if (_sinTildes(p.nombre).toLowerCase().indexOf(t) === -1) return;
+    out.push({
+      grupo:"Pantallas", icono:"🧭", titulo: p.nombre, sub:"Ir a la pantalla",
+      accion: function(){ irA(p.tab); }
+    });
+  });
+
+  /* Primero los clientes, que es lo que más se busca; después los papeles. */
+  var orden = { Clientes:0, Papeles:1, Pantallas:2 };
+  out.sort(function(a, b){ return orden[a.grupo] - orden[b.grupo]; });
+  return out.slice(0, 40);
+}
+
+function pintarResultados(q){
+  var cont = $("buscadorResultados");
+  _resBusqueda = buscarEnTodo(q);
+  _resElegido = 0;
+
+  if (!q.trim()){
+    cont.innerHTML = '<div class="bus-ayuda">Buscá un cliente por nombre o CUIT, un papel por su nombre, ' +
+      "o el nombre de una pantalla." +
+      (_papelesBuscables === null ? "<br>Todavía estoy trayendo los papeles…" : "") + "</div>";
+    return;
+  }
+  if (!_resBusqueda.length){
+    cont.innerHTML = '<div class="bus-ayuda">Nada coincide con «' + esc(q) + "».</div>";
+    return;
+  }
+
+  var grupoAnterior = "";
+  cont.innerHTML = _resBusqueda.map(function(r, i){
+    var cabecera = r.grupo !== grupoAnterior ? '<div class="bus-grupo">' + r.grupo + "</div>" : "";
+    grupoAnterior = r.grupo;
+    return cabecera + '<div class="bus-item' + (i === 0 ? " elegido" : "") + '" data-i="' + i + '">' +
+      '<span class="ico">' + r.icono + "</span>" +
+      '<div class="crece"><div class="tit">' + esc(r.titulo) + "</div>" +
+      '<div class="sub">' + esc(r.sub) + "</div></div></div>";
+  }).join("");
+
+  Array.prototype.forEach.call(cont.querySelectorAll(".bus-item"), function(el){
+    el.onclick = function(){ elegirResultado(parseInt(el.dataset.i, 10)); };
+    el.onmouseenter = function(){ marcarElegido(parseInt(el.dataset.i, 10)); };
+  });
+}
+
+function marcarElegido(i){
+  var items = $("buscadorResultados").querySelectorAll(".bus-item");
+  if (!items.length) return;
+  _resElegido = Math.max(0, Math.min(i, items.length - 1));
+  Array.prototype.forEach.call(items, function(el, n){ el.classList.toggle("elegido", n === _resElegido); });
+  if (items[_resElegido].scrollIntoView) items[_resElegido].scrollIntoView({ block:"nearest" });
+}
+
+function elegirResultado(i){
+  var r = _resBusqueda[i];
+  if (!r) return;
+  cerrarBuscador();
+  r.accion();
+}
+
+$("btnBuscar").onclick = abrirBuscador;
+$("buscadorFondo").onclick = function(e){ if (e.target === this) cerrarBuscador(); };
+$("buscadorTexto").oninput = function(){ pintarResultados(this.value); };
+$("buscadorTexto").onkeydown = function(e){
+  if (e.key === "ArrowDown"){ e.preventDefault(); marcarElegido(_resElegido + 1); }
+  else if (e.key === "ArrowUp"){ e.preventDefault(); marcarElegido(_resElegido - 1); }
+  else if (e.key === "Enter"){ e.preventDefault(); elegirResultado(_resElegido); }
+};
+
+/* Ctrl+K (⌘K en Mac) abre el buscador desde cualquier pantalla. Escape lo
+   cierra, y se atiende antes que el resto para no pisarle el cierre al modal. */
+document.addEventListener("keydown", function(e){
+  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")){
+    if (!$("app").classList.contains("visible")) return;
+    e.preventDefault();
+    if ($("buscadorFondo").classList.contains("abierto")) cerrarBuscador(); else abrirBuscador();
+    return;
+  }
+  if (e.key === "Escape" && $("buscadorFondo").classList.contains("abierto")){
+    e.stopImmediatePropagation();
+    cerrarBuscador();
+  }
+}, true);
+
 /* ---------- 12. CLIENTES ---------- */
 /* La etiqueta del impuesto es además el acceso al organismo: se toca y el
    sistema copia las claves de la bóveda y abre el sitio. Es un <button> y no
@@ -2758,38 +3012,147 @@ function etiquetaImpuesto(clienteId, clave, claseColor, texto){
     ' onclick="accesoRapido(\'' + clienteId + "','" + clave + '\')">' + esc(texto) + " ↗</button>";
 }
 
+/* ---------- EL LISTADO DE CLIENTES, CON FILTRO EN CADA COLUMNA ----------
+
+   La tabla se dibuja una sola vez y después se repintan SOLO las filas. Si se
+   volviera a armar entera con cada tecla, el campo donde se está escribiendo
+   se destruye y se pierde el foco: uno escribe una letra y el cursor se va.
+
+   Los filtros viven en una variable y no en el DOM, así sobreviven a un
+   guardado o a un ir y volver de pantalla. */
+var FILTROS_CLI = {
+  nombre:"", cuit:"", actividad:"", categoria:"", impuesto:"", situacion:"", honorario:""
+};
+
+var SITUACIONES = [
+  { clave:"ok",       nombre:"Al día" },
+  { clave:"sube",     nombre:"Debe recategorizar" },
+  { clave:"baja",     nombre:"Puede bajar" },
+  { clave:"cerca",    nombre:"Cerca del tope" },
+  { clave:"excluido", nombre:"Excluido" },
+  { clave:"sincat",   nombre:"Sin categoría" }
+];
+
+function _opciones(lista, valor, vacio){
+  return '<option value="">' + vacio + "</option>" + lista.map(function(o){
+    return '<option value="' + esc(o.clave) + '"' + (valor === o.clave ? " selected" : "") + ">" + esc(o.nombre) + "</option>";
+  }).join("");
+}
+function _filtroTexto(campo, ancho){
+  return '<input type="text" class="f-col" data-filtro="' + campo + '" value="' + esc(FILTROS_CLI[campo]) +
+    '" placeholder="—" style="width:' + (ancho || 100) + '%">';
+}
+function _filtroSelect(campo, lista, vacio){
+  return '<select class="f-col" data-filtro="' + campo + '">' + _opciones(lista, FILTROS_CLI[campo], vacio) + "</select>";
+}
+
 function renderClientes(){
-  var q    = ($("filtroCliente").value || "").toLowerCase().trim();
-  var imp  = $("filtroImpuesto").value;
-  var act  = $("filtroActividad").value;
-  var verInact = $("filtroInactivos").checked;
-
-  var ids = Object.keys(ESTADO.clientes).filter(function(id){
-    var c = ESTADO.clientes[id];
-    if (!verInact && c.activo === false) return false;
-    if (imp && !(c.impuestos && c.impuestos[imp])) return false;
-    if (act && c.actividad !== act) return false;
-    if (q){
-      var txt = (c.razonSocial + " " + c.cuit).toLowerCase();
-      if (txt.indexOf(q) === -1) return false;
-    }
-    return true;
-  });
-  ids.sort(function(a,b){ return (ESTADO.clientes[a].razonSocial||"").localeCompare(ESTADO.clientes[b].razonSocial||""); });
-
-  if (!ids.length){
-    $("tablaClientes").innerHTML = '<div class="vacio"><div class="ico">👥</div><div>' +
-      (Object.keys(ESTADO.clientes).length ? "Ningún cliente coincide con el filtro." : "Todavía no cargaste clientes.") + "</div></div>";
+  if (!Object.keys(ESTADO.clientes).length){
+    $("tablaClientes").innerHTML = '<div class="vacio"><div class="ico">👥</div><div>Todavía no cargaste clientes.</div></div>';
     return;
   }
 
-  var html = '<div class="tabla-wrap"><table><thead><tr>' +
-    "<th>Razón social</th><th>CUIT</th><th>Actividad</th><th>Cat.</th>" +
-    "<th>Impuestos</th><th class=num>Facturado 12m</th><th class=num>Honorario</th><th>Situación</th><th></th>" +
-    "</tr></thead><tbody>";
+  $("tablaClientes").innerHTML =
+    '<div class="tabla-wrap"><table><thead><tr>' +
+      "<th>Razón social</th><th>CUIT</th><th>Actividad</th><th>Cat.</th>" +
+      "<th>Impuestos</th><th class=num>Facturado 12m</th><th class=num>Honorario</th><th>Situación</th><th></th>" +
+    "</tr>" +
+    '<tr class="fila-filtros">' +
+      "<th>" + _filtroTexto("nombre") + "</th>" +
+      "<th>" + _filtroTexto("cuit") + "</th>" +
+      "<th>" + _filtroSelect("actividad", [
+        { clave:"servicios", nombre:"Servicios" },
+        { clave:"bienes",    nombre:"Venta de bienes" },
+        { clave:"mixto",     nombre:"Mixto" }
+      ], "Todas") + "</th>" +
+      "<th>" + _filtroSelect("categoria",
+        LETRAS.map(function(l){ return { clave:l, nombre:l }; }).concat([{ clave:"__sin", nombre:"Sin categoría" }]),
+        "Todas") + "</th>" +
+      "<th>" + _filtroSelect("impuesto", IMPUESTOS.map(function(i){ return { clave:i.clave, nombre:i.corto }; }), "Todos") + "</th>" +
+      '<th colspan="2">' + _filtroSelect("honorario", [
+        { clave:"con", nombre:"Con honorario" },
+        { clave:"sin", nombre:"Sin honorario" },
+        { clave:"debe", nombre:"Debe honorarios" }
+      ], "Todos") + "</th>" +
+      "<th>" + _filtroSelect("situacion", SITUACIONES, "Todas") + "</th>" +
+      '<th><button class="btn-icono" onclick="limpiarFiltrosClientes()" title="Limpiar los filtros">✕</button></th>' +
+    "</tr></thead><tbody></tbody></table></div>" +
+    '<div class="ayuda" id="contadorClientes" style="margin-top:10px"></div>';
 
+  Array.prototype.forEach.call($("tablaClientes").querySelectorAll(".f-col"), function(el){
+    var ev = el.tagName === "SELECT" ? "onchange" : "oninput";
+    el[ev] = function(){ FILTROS_CLI[el.dataset.filtro] = el.value; pintarFilasClientes(); };
+  });
+
+  pintarFilasClientes();
+}
+
+function limpiarFiltrosClientes(){
+  Object.keys(FILTROS_CLI).forEach(function(k){ FILTROS_CLI[k] = ""; });
+  $("filtroCliente").value = "";
+  renderClientes();
+}
+
+/* Un cliente pasa si pasa TODOS los filtros. El de arriba (el buscador de la
+   pantalla) sigue andando y se suma a los de las columnas. */
+function clientesFiltrados(){
+  var q        = ($("filtroCliente").value || "").toLowerCase().trim();
+  var verInact = $("filtroInactivos").checked;
+  var corte    = cortesDisponibles()[0];
+  var F        = FILTROS_CLI;
+
+  return Object.keys(ESTADO.clientes).filter(function(id){
+    var c = ESTADO.clientes[id];
+    if (!verInact && c.activo === false) return false;
+
+    if (q && ((c.razonSocial || "") + " " + (c.cuit || "") + " " + (c.nombreFantasia || "") +
+              " " + (c.email || "")).toLowerCase().indexOf(q) === -1) return false;
+
+    if (F.nombre && _sinTildes((c.razonSocial || "") + " " + (c.nombreFantasia || "")).toLowerCase()
+          .indexOf(_sinTildes(F.nombre).toLowerCase()) === -1) return false;
+    if (F.cuit && String(c.cuit || "").replace(/\D/g, "").indexOf(F.cuit.replace(/\D/g, "")) === -1) return false;
+    if (F.actividad && (c.actividad || "servicios") !== F.actividad) return false;
+
+    if (F.categoria === "__sin"){ if (c.categoriaActual) return false; }
+    else if (F.categoria && c.categoriaActual !== F.categoria) return false;
+
+    if (F.impuesto){
+      var tiene = F.impuesto === "arca" ? (c.impuestos || {}).arca !== false : (c.impuestos || {})[F.impuesto];
+      if (!tiene) return false;
+    }
+
+    if (F.honorario === "con"  && !c.honorarioMensual) return false;
+    if (F.honorario === "sin"  && c.honorarioMensual)  return false;
+    if (F.honorario === "debe" && deudaCliente(id) <= 0.005) return false;
+
+    if (F.situacion && analizar(id, corte ? corte.valor : periodoHoy()).estado !== F.situacion) return false;
+    return true;
+  }).sort(function(a, b){
+    return (ESTADO.clientes[a].razonSocial || "").localeCompare(ESTADO.clientes[b].razonSocial || "");
+  });
+}
+
+function pintarFilasClientes(){
+  var cuerpo = $("tablaClientes") && $("tablaClientes").querySelector("tbody");
+  if (!cuerpo) return;
+  var ids = clientesFiltrados();
+  var total = Object.keys(ESTADO.clientes).length;
   var corte = cortesDisponibles()[0];
-  ids.forEach(function(id){
+
+  var cont = $("contadorClientes");
+  if (cont){
+    cont.innerHTML = ids.length === total
+      ? total + (total === 1 ? " cliente" : " clientes")
+      : "<b>" + ids.length + "</b> de " + total + " clientes coinciden con los filtros";
+  }
+
+  if (!ids.length){
+    cuerpo.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--gris);padding:34px">' +
+      "Ningún cliente coincide con los filtros.</td></tr>";
+    return;
+  }
+
+  cuerpo.innerHTML = ids.map(function(id){
     var c = ESTADO.clientes[id];
     var an = analizar(id, corte ? corte.valor : periodoHoy());
     var tags = [];
@@ -2805,8 +3168,8 @@ function renderClientes(){
     }
     var actTxt = c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios");
 
-    html += "<tr" + (c.activo === false ? ' style="opacity:.5"' : "") + ">" +
-      '<td><button class="lnk-cliente" onclick="verFichaCliente(\'' + id + '\')" title="Ver la ficha">' +
+    return "<tr" + (c.activo === false ? ' style="opacity:.5"' : "") + ">" +
+      '<td><button class="lnk-cliente" onclick="abrirCliente(\'' + id + '\')" title="Entrar al cliente">' +
         esc(c.razonSocial) + "</button>" +
         (c.email ? '<div class="sub" style="color:var(--gris);font-size:12px">' + esc(c.email) + "</div>" : "") + "</td>" +
       '<td class="mono">' + esc(formatCuit(c.cuit)) + "</td>" +
@@ -2823,10 +3186,10 @@ function renderClientes(){
         (puedeEscribir()
           ? '<button class="btn-icono" onclick="editarCliente(\'' + id + '\')" title="Editar">✏️</button>'
           : "") +
-        '<button class="btn-icono" onclick="verFichaCliente(\'' + id + '\')" title="Ver ficha">📊</button>' +
+        '<button class="btn-icono" onclick="abrirCliente(\'' + id + '\')" title="Entrar al cliente">📊</button>' +
       "</td></tr>";
-  });
-  $("tablaClientes").innerHTML = html + "</tbody></table></div>";
+  }).join("");
+  _programarEtiquetado();
 }
 
 function formCliente(c, idCliente){
@@ -5110,14 +5473,38 @@ function leerConfGemini(){
 
 /* Le pide algo a Gemini a través del backend. `archivo` es opcional: un File
    del navegador (PDF o imagen). */
-function preguntarAGemini(prompt, archivo, temperatura){
+/* Cuando el modelo está saturado Google contesta "high demand", 503 o 429. No
+   es un error del archivo ni de la clave: es esperar. Se reintenta solo antes
+   de molestar a nadie, con una pausa que crece. Vale para todo lo que usa IA
+   —leer el VEP, la constancia, clasificar papeles, el asistente—, que es
+   donde único se sentía. */
+function _geminiSaturado(e){
+  var m = String((e && e.message) || e).toLowerCase();
+  return ["high demand", "overload", "unavailable", "try again", "rate limit",
+          "quota", " 503", " 429", "resource_exhausted"].some(function(t){
+    return m.indexOf(t) !== -1;
+  });
+}
+var ESPERAS_GEMINI = [3000, 8000];   /* dos reintentos, 3 s y 8 s */
+
+function preguntarAGemini(prompt, archivo, temperatura, alReintentar){
   var envio = { prompt: prompt };
   if (temperatura !== undefined) envio.temperatura = temperatura;
   var conClave = function(e){
     return leerConfGemini().then(function(c){
       if (c.key)    e.clave  = c.key;
       if (c.modelo) e.modelo = c.modelo;
-      return postAlBackend("/gemini", e).then(function(r){ return r.texto; });
+      var intento = 0;
+      var probar = function(){
+        return postAlBackend("/gemini", e).then(function(r){ return r.texto; })
+          .catch(function(err){
+            if (intento >= ESPERAS_GEMINI.length || !_geminiSaturado(err)) throw err;
+            var espera = ESPERAS_GEMINI[intento++];
+            if (alReintentar) alReintentar(intento, Math.round(espera / 1000));
+            return new Promise(function(sigue){ setTimeout(sigue, espera); }).then(probar);
+          });
+      };
+      return probar();
     });
   };
 
@@ -5875,21 +6262,95 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
 /* ---------- EL VEP EN PDF ----------
    Se guarda con la liquidación para tenerlo a mano cuando el cliente lo pide
    o cuando hay que adjuntarlo al mail. */
+/* ---------- LOS PAPELES DE UN IMPUESTO, EN SU LIQUIDACIÓN ----------
+   No todo lo que respalda un impuesto es un VEP: ARBA tiene su declaración
+   jurada y su comprobante de pago, el municipio manda una factura, y a veces
+   hace falta el resumen del banco. Se adjuntan todos acá, con el tipo al lado,
+   y caen en los papeles del cliente del mes que corresponde: ahí se los busca
+   después y desde ahí se los manda. El VEP sigue viviendo adentro de la
+   liquidación porque el sistema lo usa para contar cuántos faltan. */
 function bloqueVepArchivo(clave, d){
-  var a = d.vepArchivo;
-  return '<div class="campo"><label>VEP en PDF</label>' +
-    (a && a.contenido
-      ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-          '<span class="badge b-verde">📎 ' + esc(a.nombre || "VEP.pdf") + "</span>" +
-          '<button type="button" class="btn sec chico" onclick="verVep(\'' + clave + '\')">Ver / descargar</button>' +
-          '<button type="button" class="btn sec chico" onclick="quitarVep(\'' + clave + '\')">Quitar</button>' +
-        "</div>"
-      : "") +
-    '<input type="file" accept="application/pdf,image/*" id="lq_' + clave + '_file" style="margin-top:6px"' +
-      ' onchange="leerPapelDeLiquidacion(\'' + clave + '\')">' +
-    '<div class="ayuda">Hasta 3 MB. Queda guardado con la liquidación del mes. ' +
-      "Al elegirlo, la IA lo lee y completa el importe, el número y el vencimiento.</div>" +
+  return '<div class="campo"><label>Papeles de este impuesto</label>' +
+    '<div id="lqPapeles_' + clave + '">' + listaPapelesImpuesto(clave) + "</div>" +
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">' +
+      '<select class="pill" id="lq_' + clave + '_tipo" style="height:34px;line-height:32px;font-size:13.5px">' +
+        TIPOS_LIQ.map(function(t){
+          return '<option value="' + t + '">' + esc(nombreTipoArchivo(t)) + "</option>";
+        }).join("") + "</select>" +
+      '<input type="file" accept="application/pdf,image/*" id="lq_' + clave + '_file"' +
+        ' onchange="leerPapelDeLiquidacion(\'' + clave + '\')">' +
+    "</div>" +
+    '<div class="ayuda">Hasta 3 MB. Al elegirlo, la IA lo lee y completa el importe, el número y el vencimiento. ' +
+      "El VEP queda con la liquidación; lo demás va a los papeles del cliente, en este mes.</div>" +
     '<div id="lqIA_' + clave + '" style="margin-top:8px"></div></div>';
+}
+
+/* Lo ya adjuntado: el VEP de la liquidación y los papeles del cliente que son
+   de este mes y de este impuesto. */
+function listaPapelesImpuesto(clave){
+  var out = [];
+  var v = _vepsDelModal[clave];
+  if (v && v.contenido){
+    out.push('<li><span class="badge b-verde">VEP</span>' +
+      '<div class="crece"><div class="tit mono">' + esc(v.nombre || "VEP.pdf") + "</div></div>" +
+      '<button type="button" class="btn-icono" title="Ver" onclick="verVep(\'' + clave + '\')">📄</button>' +
+      '<button type="button" class="btn-icono" title="Quitar" onclick="quitarVep(\'' + clave + '\')">🗑️</button></li>');
+  }
+  (_papelesDelImpuesto[clave] || []).forEach(function(p, i){
+    out.push('<li><span class="badge b-azul">' + esc(nombreTipoArchivo(p.tipo)) + "</span>" +
+      '<div class="crece"><div class="tit mono">' + esc(p.nombre) + "</div></div>" +
+      '<button type="button" class="btn-icono" title="Ver" onclick="verArchivo(\'' +
+        _liqActual.clienteId + "','" + p.id + '\')">📄</button></li>');
+  });
+  return out.length
+    ? '<ul class="lista-simple" style="margin-top:6px">' + out.join("") + "</ul>"
+    : '<div class="ayuda" style="margin-top:4px">Todavía no hay papeles adjuntos de este impuesto.</div>';
+}
+
+/* Los papeles del cliente que corresponden a este mes y a este impuesto. Se
+   leen al abrir la liquidación y se refrescan al adjuntar uno nuevo. */
+var _papelesDelImpuesto = {};
+
+function cargarPapelesDelMesEnLiquidacion(){
+  if (!_liqActual) return Promise.resolve();
+  var id = _liqActual.clienteId, per = _liqActual.periodo;
+  return ref("archivos/" + id).once("value").then(function(s){
+    var todo = s.val() || {}, porImp = {};
+    Object.keys(todo).forEach(function(k){
+      var a = todo[k];
+      if ((a.periodo || "") !== per) return;
+      var imp = a.organismo || "otro";
+      (porImp[imp] = porImp[imp] || []).push({ id:k, nombre:a.nombre || "", tipo:a.tipo || "otro" });
+    });
+    _papelesDelImpuesto = porImp;
+    IMPUESTOS.forEach(function(i){
+      var cont = $("lqPapeles_" + i.clave);
+      if (cont) cont.innerHTML = listaPapelesImpuesto(i.clave);
+    });
+  }).catch(function(){ /* sin papeles no se rompe nada */ });
+}
+
+/* Guarda el adjunto donde corresponde según su tipo. */
+function guardarPapelDeImpuesto(clave, file, tipo){
+  var id = _liqActual.clienteId, per = _liqActual.periodo;
+  return leerArchivo($("lq_" + clave + "_file"), 3).then(function(leido){
+    if (!leido) return null;
+    if (tipo === "vep"){
+      _vepsDelModal[clave] = leido;                 /* se graba al guardar la liquidación */
+      $("lqPapeles_" + clave).innerHTML = listaPapelesImpuesto(clave);
+      return "vep";
+    }
+    var nuevo = ref("archivos/" + id).push().key;
+    var updates = {};
+    updates["archivos/" + id + "/" + nuevo] = {
+      tipo: tipo, organismo: clave, periodo: per,
+      nombre: file.name, nota: "", peso: file.size || 0, subido: new Date().toISOString()
+    };
+    updates["archivosContenido/" + nuevo] = leido.contenido;
+    return ref("").update(updates).then(function(){
+      return cargarPapelesDelMesEnLiquidacion();
+    }).then(function(){ return "papel"; });
+  });
 }
 
 /* ---------- LEER EL VEP O LA DDJJ Y COMPLETAR SOLO ----------
@@ -5901,7 +6362,8 @@ function bloqueVepArchivo(clave, d){
    se muestra qué dice el papel y se ofrece el cambio. Un importe escrito por
    una persona puede estar corrigiendo al papel a propósito —una compensación,
    un plan de pagos— y la IA no tiene manera de saberlo. */
-var _papelLeido = {};   /* clave de impuesto -> lo que devolvió la IA */
+var _papelLeido  = {};   /* clave de impuesto -> lo que devolvió la IA */
+var _ultimoPapel = {};   /* el último archivo elegido, para poder reintentar */
 
 var CAMPOS_VEP = [
   { dato:"importe",     campo:"monto", rotulo:"Importe" },
@@ -5909,14 +6371,25 @@ var CAMPOS_VEP = [
   { dato:"vencimiento", campo:"vto",   rotulo:"Vencimiento" }
 ];
 
-function leerPapelDeLiquidacion(clave){
+function leerPapelDeLiquidacion(clave, reintento){
   var campo = $("lq_" + clave + "_file");
-  var f = campo && campo.files && campo.files[0];
+  var f = reintento ? _ultimoPapel[clave] : (campo && campo.files && campo.files[0]);
   var est = $("lqIA_" + clave);
   if (!f || !est) return;
+  _ultimoPapel[clave] = f;
 
   var corto = (IMPUESTOS.filter(function(i){ return i.clave === clave; })[0] || {}).corto || clave;
   est.innerHTML = '<div class="aviso info"><span>⏳</span><div>Leyendo <b>' + esc(f.name) + "</b>…</div></div>";
+
+  /* Guardar primero y leer después: si la IA está caída el papel igual queda
+     adjunto, que es lo que de verdad no se puede perder. Después se vacía el
+     campo para que el guardado de la liquidación no lo tome otra vez. */
+  if (!reintento){
+    var tipo = ($("lq_" + clave + "_tipo") || {}).value || "vep";
+    guardarPapelDeImpuesto(clave, f, tipo).then(function(){
+      if (campo) campo.value = "";
+    }).catch(function(e){ toast(explicarError(e), "error"); });
+  }
 
   var prompt = "Te paso un papel de impuestos argentino: puede ser un VEP (volante electrónico de pago), " +
     "una declaración jurada o un comprobante de pago. Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
@@ -5926,13 +6399,24 @@ function leerPapelDeLiquidacion(clave){
     "vencimiento: la fecha de vencimiento o de pago en formato AAAA-MM-DD. periodo: el período fiscal en AAAAMM. " +
     "Lo que no figure en el papel va en null. No inventes ningún número.";
 
-  preguntarAGemini(prompt, f, 0).then(function(r){
+  preguntarAGemini(prompt, f, 0, function(intento, segundos){
+    est.innerHTML = '<div class="aviso warn"><span>⏳</span><div>La IA está saturada en este momento. ' +
+      "Reintento " + intento + " de " + ESPERAS_GEMINI.length + ", en " + segundos + " segundos…</div></div>";
+  }).then(function(r){
     var d = jsonDeGemini(r);
     _papelLeido[clave] = d;
     est.innerHTML = _avisoPapelLeido(clave, corto, d);
   }).catch(function(e){
-    est.innerHTML = '<div class="aviso warn"><span>⚠️</span><div>No pude leerlo: ' +
-      esc(e.message || String(e)) + ". El archivo igual queda adjunto; los datos van a mano.</div></div>";
+    var saturado = _geminiSaturado(e);
+    est.innerHTML = '<div class="aviso warn"><span>⚠️</span><div>' +
+      (saturado
+        ? "<b>La IA está saturada.</b> No es tu archivo ni la clave: es Google, que por momentos no da abasto. " +
+          "Lo intenté " + (ESPERAS_GEMINI.length + 1) + " veces."
+        : "No pude leerlo: " + esc(e.message || String(e))) +
+      " El archivo igual queda adjunto; los datos van a mano. " +
+      '<a href="#" onclick="leerPapelDeLiquidacion(\'' + clave + '\',true);return false;">Probar de nuevo</a>' +
+      (saturado ? '<div class="ayuda" style="margin-top:6px">Si sigue pasando, en <b>Configuración → Asistente (IA)</b> ' +
+        "podés poner otro modelo.</div>" : "") + "</div></div>";
   });
 }
 
@@ -6045,6 +6529,8 @@ function editarLiquidacion(clienteId, periodo){
   _liqActual = { clienteId: clienteId, periodo: periodo, c: c };
   _vepsDelModal = {};
   _papelLeido  = {};
+  _ultimoPapel = {};
+  _papelesDelImpuesto = {};
   IMPUESTOS.forEach(function(i){
     var d = liq[i.clave] || {};
     if (d.vepArchivo) _vepsDelModal[i.clave] = d.vepArchivo;
@@ -6076,6 +6562,15 @@ function editarLiquidacion(clienteId, periodo){
 
   if (!html) html = '<div class="aviso warn"><span>⚠️</span><div>Este cliente no tiene ningún impuesto tildado en su ficha.</div></div>';
 
+  if (html){
+    html += '<div class="seccion-tit">Mandarle los papeles</div>' +
+      '<div class="aviso info"><span>📧</span><div>Junta <b>todos</b> los papeles de ' + periodoLargo(periodo) +
+        " —los de acá y los que estén cargados en la ficha del cliente—, los descarga y abre el correo con el " +
+        "texto listo. Los adjuntos se arrastran a mano: el navegador no puede adjuntarlos solo." +
+        '<div style="margin-top:10px"><button type="button" class="btn sec chico" onclick="enviarPapelesDelMes(\'' +
+          clienteId + "','" + periodo + '\')">📧 Enviar los papeles del mes</button></div></div></div>';
+  }
+
   html += '<div class="seccion-tit">Observaciones para el mail</div>' +
     '<div class="campo"><textarea id="lqObs" style="min-height:80px" placeholder="Texto opcional que se agrega al mail de este cliente…">' + esc(liq.observaciones || "") + "</textarea></div>";
 
@@ -6091,6 +6586,9 @@ function editarLiquidacion(clienteId, periodo){
     { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Guardar", accion:function(){ guardarLiquidacion(clienteId, periodo); } }
   ], "ancho");
+
+  /* Los papeles que ya tenga cargados de este mes, para no volver a subirlos. */
+  cargarPapelesDelMesEnLiquidacion();
 }
 
 function guardarLiquidacion(clienteId, periodo){
@@ -8249,7 +8747,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v48";
+var VERSION_APP = "v50";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

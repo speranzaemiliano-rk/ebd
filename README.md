@@ -6,6 +6,21 @@ recategorización semestral.
 
 **En línea:** <https://speranzaemiliano-rk.github.io/ebd/>
 
+## Buscador general
+
+La lupa de la barra —o **Ctrl+K** (⌘K en Mac)— abre un buscador que mira en
+todo el sistema a la vez: **clientes** (por nombre, CUIT, mail o código de
+actividad), **papeles** (por su nombre, con el cliente y el mes al lado) y las
+**pantallas**. Se elige con las flechas y se entra con Enter; un papel abre al
+cliente directo en sus papeles.
+
+## Filtros en las columnas
+
+En el listado de clientes cada columna tiene su filtro, pegado a la columna que
+filtra: nombre, CUIT, actividad, categoría, impuesto, honorario y situación. Se
+suman entre sí y con el buscador de arriba, y la ✕ del final los limpia todos.
+Abajo dice cuántos clientes quedaron de cuántos.
+
 ## Entrar a un cliente
 
 Tocar un cliente en el listado ya no abre una ventana: **se entra al cliente**.
