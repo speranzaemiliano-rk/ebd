@@ -4914,6 +4914,34 @@ function bajarPapelDeLaFicha(gi, ii){
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
+/* Borrar desde los papeles del cliente. Acá conviven las dos procedencias: un
+   papel subido (vive en `archivos`) y el VEP de una liquidación (vive adentro
+   de la liquidación). Se borran distinto, pero para el que mira la lista es
+   el mismo 🗑️. */
+function pedirBorrarPapelDeLaFicha(btn, gi, ii){
+  var it = _papelDeLaFicha(gi, ii);
+  if (!it) return;
+  var id = _papelesFicha.clienteId;
+  function repintar(){ pintarArchivosDeLaFicha(id); }
+
+  _confirmarEnFila(btn, function(){
+    var tarea;
+    if (it.origen === "liq"){
+      tarea = ref("liquidaciones/" + id + "/" + it.periodo + "/" + it.impuesto + "/vepArchivo").remove()
+        .then(function(){
+          /* La copia en memoria también, o el contador de VEP de la
+             liquidación sigue diciendo que está. */
+          var liq = (ESTADO.liquidaciones[id] || {})[it.periodo];
+          if (liq && liq[it.impuesto]) delete liq[it.impuesto].vepArchivo;
+        });
+    } else {
+      tarea = borrarPapelDeCliente(id, it.id);
+    }
+    tarea.then(function(){ toast("Papel borrado", "ok"); repintar(); })
+         .catch(function(e){ toast(explicarError(e), "error"); repintar(); });
+  }, repintar);
+}
+
 function bloqueMesPapeles(clienteId, g, gi){
   var puede = puedeEscribir();
   var titulo = g.periodo ? periodoLargo(g.periodo) : "Sin mes asignado";
@@ -4937,6 +4965,8 @@ function bloqueMesPapeles(clienteId, g, gi){
           (it.nota ? '<div class="sub">' + esc(it.nota) + "</div>" : "") + "</div>" +
         '<button class="btn-icono" title="Ver" onclick="verPapelDeLaFicha(' + gi + "," + ii + ')">📄</button>' +
         '<button class="btn-icono" title="Descargar" onclick="bajarPapelDeLaFicha(' + gi + "," + ii + ')">⬇️</button>' +
+        (puede ? '<button class="btn-icono" title="Borrar" onclick="pedirBorrarPapelDeLaFicha(this,' +
+          gi + "," + ii + ')">🗑️</button>' : "") +
       "</li>";
     }).join("") + "</ul></div>";
 }
@@ -6835,7 +6865,12 @@ function listaPapelesImpuesto(clave){
     out.push('<li><span class="badge b-azul">' + esc(nombreTipoArchivo(p.tipo)) + "</span>" +
       '<div class="crece"><div class="tit mono">' + esc(p.nombre) + "</div></div>" +
       '<button type="button" class="btn-icono" title="Ver" onclick="verArchivo(\'' +
-        _liqActual.clienteId + "','" + p.id + '\')">📄</button></li>');
+        _liqActual.clienteId + "','" + p.id + '\')">📄</button>' +
+      (puedeEscribir()
+        ? '<button type="button" class="btn-icono" title="Borrar" onclick="pedirBorrarPapelDeImpuesto(this,\'' +
+          clave + "','" + p.id + '\')">🗑️</button>'
+        : "") +
+      "</li>");
   });
   return out.length
     ? '<ul class="lista-simple" style="margin-top:6px">' + out.join("") + "</ul>"
@@ -6863,6 +6898,21 @@ function cargarPapelesDelMesEnLiquidacion(){
       if (cont) cont.innerHTML = listaPapelesImpuesto(i.clave);
     });
   }).catch(function(){ /* sin papeles no se rompe nada */ });
+}
+
+/* Borrar un papel adjunto sin cerrar la liquidación: se repinta sólo la lista
+   de ese impuesto, así no se pierde nada de lo que ya se escribió. */
+function pedirBorrarPapelDeImpuesto(btn, clave, id){
+  function repintar(){
+    var cont = $("lqPapeles_" + clave);
+    if (cont) cont.innerHTML = listaPapelesImpuesto(clave);
+  }
+  _confirmarEnFila(btn, function(){
+    borrarPapelDeCliente(_liqActual.clienteId, id)
+      .then(cargarPapelesDelMesEnLiquidacion)
+      .then(function(){ toast("Papel borrado", "ok"); })
+      .catch(function(e){ toast(explicarError(e), "error"); repintar(); });
+  }, repintar);
 }
 
 /* Guarda el adjunto donde corresponde según su tipo. */
@@ -9126,20 +9176,50 @@ function verArchivo(cli, id){
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
+/* La ficha y el contenido van juntos: dejar el contenido huérfano en
+   archivosContenido es peso muerto que nadie vuelve a ver. */
+function borrarPapelDeCliente(cli, id){
+  var updates = {};
+  updates["archivos/" + cli + "/" + id] = null;
+  updates["archivosContenido/" + id] = null;
+  return ref("").update(updates);
+}
+
 function borrarArchivo(cli, id){
   abrirModal("Borrar archivo",
     '<div class="aviso warn"><span>⚠️</span><div>Se borra el archivo y no se puede recuperar.</div></div>',
     [
       { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Borrar", clase:"peligro", accion:function(){
-          var updates = {};
-          updates["archivos/" + cli + "/" + id] = null;
-          updates["archivosContenido/" + id] = null;
-          ref("").update(updates).then(function(){
+          borrarPapelDeCliente(cli, id).then(function(){
             cerrarModal(); toast("Archivo borrado", "ok"); pintarArchivos();
           }).catch(function(e){ toast(explicarError(e), "error"); });
         } }
     ], "angosto");
+}
+
+/* ---------- PREGUNTAR EN LA MISMA FILA ----------
+   Borrar tiene que preguntar, pero en toda la app hay UN SOLO modal: abrir un
+   cuadro de confirmación arriba de la liquidación borraría lo que se está
+   cargando. Así que la pregunta va en la fila del papel — que además es la
+   fila del papel del que se está hablando, y no hay forma de confundirse de
+   archivo. Cancelar repinta la lista y no pasó nada. */
+function _confirmarEnFila(btn, alSi, alNo){
+  var li = btn;
+  while (li && li.tagName !== "LI") li = li.parentNode;
+  if (!li) return;
+  var tit = li.querySelector(".tit");
+  var nombre = tit ? tit.textContent : "este papel";
+
+  li.innerHTML = '<span class="badge b-rojo">borrar</span>' +
+    '<div class="crece"><div class="tit">¿Borrar ' + esc(nombre) + "?</div>" +
+    '<div class="sub">No se puede recuperar.</div></div>' +
+    '<button type="button" class="btn peligro chico">Sí, borrar</button>' +
+    '<button type="button" class="btn gris chico">No</button>';
+
+  var bs = li.querySelectorAll("button");
+  bs[0].onclick = alSi;
+  bs[1].onclick = alNo;
 }
 
 /* ==========================================================================
@@ -9405,7 +9485,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v55";
+var VERSION_APP = "v56";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
