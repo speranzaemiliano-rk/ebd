@@ -588,6 +588,9 @@ tbody tr:hover{background:#FAFAFC}
 #fabAsistente svg{width:40px;height:40px;display:block}
 #fabAsistente.oculto{opacity:0;pointer-events:none;transform:scale(.8)}
 /* La chispa marca que atrás hay una IA, sin tapar la marca. */
+/* Con un modal abierto el asistente estorba: en el teléfono se le pone justo
+   encima al botón Guardar, y además no se puede consultar nada mientras tanto. */
+#fabAsistente.tapado{display:none}
 #fabAsistente .chispa{
   position:absolute;top:-3px;right:-3px;width:22px;height:22px;border-radius:50%;
   background:var(--azul);color:#fff;font-size:11px;
@@ -691,10 +694,93 @@ tbody tr:hover{background:#FAFAFC}
 }
 .seccion-tit:first-child{margin-top:0}
 
+/* ---------- EN EL CELULAR ----------
+   El sistema se usa tanto desde el teléfono como desde la computadora, y con
+   el diseño de escritorio achicado no alcanzaba: la barra de arriba no entraba
+   —la página entera se corría de costado— y para leer una fila de cualquier
+   tabla había que arrastrar para los lados. Acá cambian cuatro cosas de fondo:
+
+   1. La barra se queda con lo imprescindible: logo, candado, avatar y Salir.
+   2. Los formularios pasan a una columna; los indicadores, a dos.
+   3. Las TABLAS dejan de ser tablas: cada fila se vuelve una tarjeta con
+      «etiqueta: valor», una abajo de la otra. La etiqueta sale del encabezado
+      de la propia tabla (`data-label`, lo pone etiquetarTablas), así que vale
+      para las veinte tablas del sistema sin tocar ninguna.
+   4. Los modales son de pantalla completa, con el pie fijo abajo: en una ficha
+      de cliente, Guardar queda siempre a mano en vez de a diez pantallas de
+      scroll. De paso desaparece el "clic afuera", que en el teléfono era puro
+      riesgo de perder lo cargado.
+*/
 @media(max-width:640px){
-  main{padding:16px 14px 48px} .card{padding:18px 16px} header.top{padding:0 14px} nav.tabs{padding:8px 10px}
-  .modal-body,.modal-head,.modal-pie{padding-left:18px;padding-right:18px}
+  main{padding:16px 14px 92px}   /* abajo: que el asistente no tape el final */
+  .card{padding:18px 16px;border-radius:16px}
+  .card > h2{font-size:19px}
+  nav.tabs{padding:8px 10px}
   .login-card .titulo{font-size:27px}
+
+  /* La barra de arriba */
+  header.top{padding:0 14px;gap:10px}
+  header.top .logo-txt,#verApp{display:none}
+  .solo-ancho{display:none}
+  .chip-user{background:none;padding:2px;gap:0}
+  .chip-user #nombreUser{display:none}
+
+  /* Encabezado de tarjeta: el título ocupa su renglón y los botones el de abajo */
+  .card-head{gap:8px;margin-bottom:16px}
+  .card-head h2{min-width:100%}
+
+  /* Grillas: los formularios a una columna, los indicadores a dos */
+  .grid{gap:12px}
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .grid:has(> .kpi){grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi{padding:14px 15px}
+  .kpi .lbl{font-size:12px}
+  .kpi .val{font-size:26px}
+  .kpi .pie{font-size:11.5px}
+
+  .hero-inicio{padding:20px 18px;gap:14px}
+  .hero-dato{min-width:96px;padding:12px 14px}
+
+  /* Cada fila, una tarjeta */
+  .tabla-wrap{border:0;border-radius:0;overflow:visible;background:none}
+  .tabla-wrap table{display:block;width:auto;background:none;font-size:14px}
+  .tabla-wrap thead{display:none}
+  .tabla-wrap tbody,.tabla-wrap tr,.tabla-wrap td{display:block;width:auto}
+  .tabla-wrap tbody tr{
+    background:var(--blanco);border:1px solid var(--pelo);border-radius:14px;
+    padding:4px 14px;margin-bottom:10px;
+  }
+  .tabla-wrap tbody tr:hover{background:var(--blanco)}
+  .tabla-wrap td{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:9px 0;border-bottom:1px solid rgba(0,0,0,.05);
+    text-align:right;white-space:normal;
+  }
+  .tabla-wrap tr td:last-child{border-bottom:none}
+  .tabla-wrap td:empty{display:none}
+  .tabla-wrap td::before{
+    content:attr(data-label);color:var(--gris);font-size:12.5px;
+    text-align:left;flex:0 0 auto;max-width:48%;
+  }
+  .tabla-wrap td:not([data-label])::before,.tabla-wrap td[data-label=""]::before{content:none}
+  /* La celda de acciones no tiene etiqueta: sin esto los botones quedaban uno
+     en cada punta de la tarjeta. */
+  .tabla-wrap td:not([data-label]),.tabla-wrap td[data-label=""]{justify-content:flex-end;gap:8px}
+  .tabla-wrap td > input,.tabla-wrap td > select,.tabla-wrap td > textarea{
+    flex:0 1 58%;min-width:0;width:auto;
+  }
+
+  /* Modales de pantalla completa, con el pie siempre visible */
+  .modal-fondo{padding:0;align-items:stretch}
+  .modal,.modal.ancho,.modal.angosto{max-width:none;border-radius:0;display:flex;flex-direction:column}
+  .modal-head{padding:calc(18px + env(safe-area-inset-top,0px)) 18px 0}
+  .modal-head h3{font-size:19px}
+  .modal-body{padding:18px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .modal-pie{
+    position:sticky;bottom:0;background:var(--blanco);margin-top:0;
+    padding:14px 18px calc(14px + env(safe-area-inset-bottom,0px));
+  }
+  .modal-pie .btn{flex:1 1 auto;justify-content:center}
 }
 </style>
 </head>
@@ -938,7 +1024,7 @@ tbody tr:hover{background:#FAFAFC}
     <span id="verApp" title="Versión del sistema que tenés cargada"
           style="font-size:11.5px;color:var(--gris2);letter-spacing:-.01em">&nbsp;</span>
     <div class="sep"></div>
-    <button class="btn sec chico oculto" id="btnInstalar" title="Instalar como aplicación">⬇ Instalar app</button>
+    <button class="btn sec chico oculto" id="btnInstalar" title="Instalar como aplicación">⬇<span class="solo-ancho"> Instalar app</span></button>
     <button class="btn-icono" id="btnBoveda" title="Bóveda de claves">🔒</button>
     <div class="chip-user">
       <div class="avatar" id="avatarUser">?</div>
@@ -2017,6 +2103,9 @@ function abrirModal(titulo, html, botones, ancho){
   _modalFoto    = _fotoModal();
 
   $("modalFondo").classList.add("abierto");
+  /* Mientras hay un modal, el asistente se esconde: en el teléfono queda justo
+     arriba del botón Guardar. */
+  $("fabAsistente").classList.add("tapado");
 }
 
 /* input y change burbujean, así que alcanza con escucharlos en el contenedor:
@@ -2051,6 +2140,7 @@ function cerrarModal(){
     _modalSucio = false;
     _modalFoto  = "";
   }, 160);
+  $("fabAsistente").classList.remove("tapado");
 }
 
 /* Cierre pedido por el usuario. Si hay algo cargado sin guardar, pregunta. */
@@ -2252,6 +2342,43 @@ function cargarTodo(){
 function guardarCliente(id, datos){ return ref("clientes/" + id).update(datos); }
 
 /* ---------- 10. NAVEGACIÓN POR TABS ---------- */
+/* ---------- LAS TABLAS EN EL CELULAR ----------
+   En pantalla angosta cada fila se dibuja como una tarjeta «etiqueta: valor»
+   (ver el @media del final del CSS). La etiqueta sale del encabezado de la
+   propia tabla y se copia a cada celda en `data-label`.
+
+   Se hace acá y no en cada template porque las tablas se arman con innerHTML
+   en veinte lugares distintos: ponerlo a mano sería olvidarse en la próxima.
+   En pantalla grande no corre nada. */
+function etiquetarTablas(raiz){
+  var tablas = (raiz || document).querySelectorAll(".tabla-wrap table");
+  Array.prototype.forEach.call(tablas, function(t){
+    var ths = t.querySelectorAll("thead th");
+    if (!ths.length) return;
+    Array.prototype.forEach.call(t.querySelectorAll("tbody tr"), function(tr){
+      Array.prototype.forEach.call(tr.children, function(celda, i){
+        if (celda.tagName !== "TD") return;
+        var et = ths[i] ? ths[i].textContent.trim() : "";
+        if (celda.getAttribute("data-label") !== et) celda.setAttribute("data-label", et);
+      });
+    });
+  });
+}
+
+var ANCHO_CELULAR = 640;
+var _etiqPendiente = false;
+function _programarEtiquetado(){
+  if (_etiqPendiente || window.innerWidth > ANCHO_CELULAR) return;
+  _etiqPendiente = true;
+  requestAnimationFrame(function(){ _etiqPendiente = false; etiquetarTablas(); });
+}
+/* Sólo childList: si escuchara atributos, ponerle el data-label a una celda
+   volvería a despertar al observador y no pararía nunca. */
+if (window.MutationObserver){
+  new MutationObserver(_programarEtiquetado).observe(document.body, { childList:true, subtree:true });
+}
+window.addEventListener("resize", _programarEtiquetado);
+
 function irA(tabId){
   if (ALL_TABS.indexOf(tabId) === -1) return;
   ALL_TABS.forEach(function(t){
@@ -2259,8 +2386,13 @@ function irA(tabId){
     if (el) el.classList.toggle("activo", t === tabId);
   });
   Array.prototype.forEach.call($("navTabs").children, function(b){
-    b.classList.toggle("activo", b.dataset.tab === tabId);
+    var activo = b.dataset.tab === tabId;
+    b.classList.toggle("activo", activo);
+    /* En el teléfono la barra de solapas se arrastra, así que la que se abre
+       puede quedar fuera de la pantalla. */
+    if (activo && b.scrollIntoView) b.scrollIntoView({ block:"nearest", inline:"center", behavior:"smooth" });
   });
+  _programarEtiquetado();
   if (tabId === "tabHome")         renderHome();
   if (tabId === "tabClientes")     renderClientes();
   if (tabId === "tabComprobantes") renderComprobantes();
@@ -7265,7 +7397,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v42";
+var VERSION_APP = "v43";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

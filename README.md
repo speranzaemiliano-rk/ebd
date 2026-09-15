@@ -6,6 +6,19 @@ recategorización semestral.
 
 **En línea:** <https://speranzaemiliano-rk.github.io/ebd/>
 
+## En el celular
+
+El mismo sistema, adaptado a pantalla angosta —no el de escritorio achicado—:
+
+- la barra de arriba se queda con lo imprescindible (logo, bóveda, usuario y salir);
+- los formularios pasan a una columna y los indicadores a dos;
+- **las tablas dejan de ser tablas**: cada fila se lee como una tarjeta de
+  «etiqueta: valor», sin arrastrar para los costados. La etiqueta sale sola del
+  encabezado de cada tabla, así que vale para todas las pantallas;
+- los modales ocupan la pantalla completa con **Cancelar y Guardar fijos abajo**:
+  en una ficha larga no hay que scrollear hasta el final para guardar. Y como no
+  hay "afuera" del cuadro, tampoco se cierra de un toque perdido.
+
 ## Instalarlo como app
 
 El sistema es una PWA: se instala como aplicación, con ícono propio y ventana
