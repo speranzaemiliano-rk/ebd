@@ -6,6 +6,38 @@ recategorización semestral.
 
 **En línea:** <https://speranzaemiliano-rk.github.io/ebd/>
 
+## Entrar a un cliente
+
+Tocar un cliente en el listado ya no abre una ventana: **se entra al cliente**.
+La pantalla entera pasa a ser él, con su propia barra de secciones y un camino
+de vuelta arriba a la izquierda.
+
+| Sección | Qué trae |
+|---|---|
+| **Resumen** | Los dos cortes de recategorización, todos sus datos y la alícuota de IIBB que se le aplica, con su procedencia |
+| **Comprobantes** | Lo facturado mes a mes, y el detalle de cada mes |
+| **Liquidaciones** | Qué paga por impuesto cada mes, cuántos VEP tiene y en qué estado está, con el botón para cargar |
+| **Papeles** | Las carpetas por mes (ver abajo) |
+| **Honorarios** | Lo que le corresponde al estudio mes a mes: monto, pagado, saldo y vencimiento |
+
+Es la misma información de siempre, pero ordenada alrededor de la persona en
+vez de alrededor de la tarea: antes estaba repartida en cinco solapas, cada una
+con su propio filtro «elegí el cliente».
+
+## El VEP se lee solo
+
+En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la
+IA lo lee y completa **el importe, el número y el vencimiento**.
+
+Lo que está vacío se completa solo. **Lo que ya tiene algo cargado no se pisa**:
+se muestra qué dice el papel y se ofrece el cambio, porque un importe escrito
+por una persona puede estar corrigiendo al papel a propósito —una compensación,
+un plan de pagos— y la IA no tiene manera de saberlo.
+
+Además avisa si el papel **es de otro organismo** o **de otro mes**: pegar el
+VEP de ARBA en el casillero de ARCA es un error que después no se ve por ningún
+lado.
+
 ## Los papeles de cada cliente, mes por mes
 
 Al hacer clic en un cliente, la ficha abre con **Papeles por mes**: una carpeta
