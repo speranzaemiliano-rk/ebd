@@ -34,6 +34,10 @@
      AGIP; si no carga, el alta a mano sigue funcionando igual. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
+<!-- Armador de PDF (jsPDF). Solo se usa para la ficha del cliente; si no
+     carga, el resto del sistema funciona igual. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
+
 <!-- ============================================================
      CSS PRINCIPAL — va SIEMPRE en el <head>.
      Nunca mover dentro de un div con display:none (rompe los tabs).
@@ -551,6 +555,14 @@ tbody tr:hover{background:#FAFAFC}
 }
 #barraVersion button:active{transform:scale(.97)}
 
+/* El nombre del cliente es un botón: tocarlo abre la ficha. Se ve como texto
+   porque es texto, pero se comporta como lo que es. */
+.lnk-cliente{
+  font:inherit;font-weight:600;letter-spacing:inherit;color:var(--texto);
+  text-align:left;padding:0;background:none;border:none;cursor:pointer;
+}
+.lnk-cliente:hover{color:var(--azul-link);text-decoration:underline}
+
 /* ---------- BOTÓN FLOTANTE DEL ASISTENTE ----------
    Va con el logo del estudio y no con un ícono genérico: el asistente contesta
    sobre ESTOS clientes, no es un chat cualquiera pegado encima.
@@ -570,6 +582,9 @@ tbody tr:hover{background:#FAFAFC}
 #fabAsistente.ver{display:flex}
 #fabAsistente:hover{transform:scale(1.06);box-shadow:0 10px 30px rgba(5,33,92,.45)}
 #fabAsistente:active{transform:scale(.95)}
+/* Mientras se arrastra no hay transición: si no, el botón "persigue" al dedo
+   con retraso y se siente pegajoso. */
+#fabAsistente.arrastrando{transition:none;transform:scale(1.1);cursor:grabbing}
 #fabAsistente svg{width:40px;height:40px;display:block}
 #fabAsistente.oculto{opacity:0;pointer-events:none;transform:scale(.8)}
 /* La chispa marca que atrás hay una IA, sin tapar la marca. */
@@ -1517,10 +1532,11 @@ var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
 /* Papeles que se guardan por cliente. El archivo en sí va aparte de la ficha
    (ver REF de archivosContenido) para que el listado abra liviano. */
 var TIPOS_ARCHIVO = [
-  { clave:"ddjj",     nombre:"Declaración jurada" },
-  { clave:"resumen",  nombre:"Resumen bancario" },
-  { clave:"constancia", nombre:"Constancia" },
-  { clave:"otro",     nombre:"Otro" }
+  { clave:"ddjj",       nombre:"Declaración jurada" },
+  { clave:"vep",        nombre:"VEP / comprobante de pago" },
+  { clave:"resumen",    nombre:"Resumen bancario" },
+  { clave:"constancia", nombre:"Constancia de inscripción" },
+  { clave:"otro",       nombre:"Otro" }
 ];
 
 /* Cuentas que se crean solas la primera vez que arranca el sistema. */
@@ -2421,7 +2437,9 @@ function renderClientes(){
     var actTxt = c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios");
 
     html += "<tr" + (c.activo === false ? ' style="opacity:.5"' : "") + ">" +
-      "<td><b>" + esc(c.razonSocial) + "</b>" + (c.email ? '<div class="sub" style="color:var(--gris);font-size:12px">' + esc(c.email) + "</div>" : "") + "</td>" +
+      '<td><button class="lnk-cliente" onclick="verFichaCliente(\'' + id + '\')" title="Ver la ficha">' +
+        esc(c.razonSocial) + "</button>" +
+        (c.email ? '<div class="sub" style="color:var(--gris);font-size:12px">' + esc(c.email) + "</div>" : "") + "</td>" +
       '<td class="mono">' + esc(formatCuit(c.cuit)) + "</td>" +
       "<td>" + actTxt + "</td>" +
       "<td>" + (c.categoriaActual ? '<span class="cat-chip">' + c.categoriaActual + "</span>" : '<span class="badge b-gris">—</span>') + "</td>" +
@@ -3428,7 +3446,87 @@ function asPreguntar(texto){
   });
 }
 
-$("fabAsistente").onclick = abrirAsistente;
+/* ---------- ARRASTRAR EL BOTÓN DEL ASISTENTE ----------
+
+   El botón se puede mover a cualquier lado y se queda donde lo dejan, también
+   la próxima vez que se abre el sistema. Tres decisiones:
+
+   - Se usan eventos de puntero, no de mouse: así anda igual con el dedo en el
+     celular, que es donde más estorba un botón fijo.
+   - Un toque corto sigue siendo un toque: recién a partir de 6 píxeles se
+     considera arrastre, y ahí se cancela el clic. Sin ese umbral, mover el
+     dedo un pelo al tocar abriría y cerraría el asistente.
+   - La posición se guarda en el navegador, no en la nube: dónde le queda
+     cómodo el botón depende de la pantalla de cada uno, no del estudio.
+
+   Se guarda como distancia al borde derecho e inferior para que, al rotar el
+   teléfono o achicar la ventana, el botón no quede fuera de la pantalla. */
+var FAB_POS = "rk_ebd_fab";
+
+function ubicarFab(der, aba){
+  var f = $("fabAsistente"), r = f.getBoundingClientRect();
+  var maxDer = Math.max(8, window.innerWidth  - r.width  - 8);
+  var maxAba = Math.max(8, window.innerHeight - r.height - 8);
+  f.style.right  = Math.min(Math.max(8, der), maxDer) + "px";
+  f.style.bottom = Math.min(Math.max(8, aba), maxAba) + "px";
+}
+
+(function(){
+  var f = $("fabAsistente");
+  var arrastrando = false, movio = false, x0 = 0, y0 = 0, der0 = 0, aba0 = 0;
+
+  try {
+    var g = JSON.parse(localStorage.getItem(FAB_POS) || "null");
+    if (g && typeof g.der === "number") ubicarFab(g.der, g.aba);
+  } catch (e) { /* si el navegador no deja guardar, queda donde estaba */ }
+
+  f.addEventListener("pointerdown", function(e){
+    if (e.button && e.button !== 0) return;
+    var r = f.getBoundingClientRect();
+    arrastrando = true; movio = false;
+    x0 = e.clientX; y0 = e.clientY;
+    der0 = window.innerWidth  - r.right;
+    aba0 = window.innerHeight - r.bottom;
+    f.setPointerCapture(e.pointerId);
+  });
+
+  f.addEventListener("pointermove", function(e){
+    if (!arrastrando) return;
+    var dx = e.clientX - x0, dy = e.clientY - y0;
+    if (!movio && Math.abs(dx) + Math.abs(dy) < 6) return;   /* todavía puede ser un toque */
+    movio = true;
+    f.classList.add("arrastrando");
+    ubicarFab(der0 - dx, aba0 - dy);
+  });
+
+  function soltar(e){
+    if (!arrastrando) return;
+    arrastrando = false;
+    f.classList.remove("arrastrando");
+    if (!movio) return;
+    var r = f.getBoundingClientRect();
+    try {
+      localStorage.setItem(FAB_POS, JSON.stringify({
+        der: Math.round(window.innerWidth - r.right),
+        aba: Math.round(window.innerHeight - r.bottom)
+      }));
+    } catch (err) { /* sin localStorage se pierde al recargar, nada más */ }
+  }
+  f.addEventListener("pointerup", soltar);
+  f.addEventListener("pointercancel", soltar);
+
+  /* Si se arrastró, el clic que viene después no tiene que abrir el panel. */
+  f.addEventListener("click", function(e){
+    if (movio){ e.preventDefault(); e.stopPropagation(); movio = false; return; }
+    abrirAsistente();
+  });
+
+  /* Al rotar el teléfono o achicar la ventana, se vuelve a acomodar dentro. */
+  window.addEventListener("resize", function(){
+    var r = f.getBoundingClientRect();
+    ubicarFab(window.innerWidth - r.right, window.innerHeight - r.bottom);
+  });
+})();
 $("asCerrar").onclick      = cerrarAsistente;
 $("asEnviar").onclick     = function(){ asPreguntar($("asTexto").value); };
 $("asTexto").onkeydown = function(e){
@@ -3438,6 +3536,158 @@ $("asTexto").onkeydown = function(e){
 };
 
 /* Ficha con el detalle mes a mes y el análisis de los dos cortes */
+/* ==========================================================================
+   FICHA DEL CLIENTE EN PDF
+
+   Una hoja con lo que se necesita cuando alguien pregunta por un cliente:
+   quién es, qué liquida, en qué categoría está, cuánto facturó y cuánto debe.
+   Se arma con jsPDF dibujando el texto, no imprimiendo la pantalla: así el
+   PDF sale igual en cualquier navegador y no se lleva puestos los botones.
+   ========================================================================== */
+
+function fichaPdfCliente(id){
+  var JS = window.jspdf && window.jspdf.jsPDF;
+  if (!JS){ toast("No se pudo cargar el armador de PDF. Probá recargar la página.", "error"); return; }
+
+  var c = ESTADO.clientes[id];
+  var corte = cortesDisponibles()[0];
+  var an = analizar(id, corte ? corte.valor : periodoHoy());
+  var doc = new JS({ unit: "pt", format: "a4" });
+
+  var M = 48, y = 0, ANCHO = 595 - M * 2;
+  var AZUL = [0, 113, 227], GRIS = [110, 110, 115], NEGRO = [29, 29, 31];
+
+  /* Encabezado con la marca del estudio */
+  doc.setFillColor(29, 29, 31);
+  doc.rect(0, 0, 595, 96, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold").setFontSize(22);
+  doc.text("EBD", M, 46);
+  /* El ancho se mide, no se estima: con un número fijo "CONSULTORES" quedaba
+     pegado a la D. */
+  var anchoMarca = doc.getTextWidth("EBD");
+  doc.setFont("helvetica", "normal").setFontSize(8.5);
+  doc.setTextColor(180, 190, 205);
+  doc.text("C O N S U L T O R E S", M + anchoMarca + 14, 46);
+  doc.setFontSize(15).setTextColor(255, 255, 255).setFont("helvetica", "bold");
+  doc.text("Ficha del cliente", M, 74);
+  y = 130;
+
+  function titulo(t){
+    doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(NEGRO[0], NEGRO[1], NEGRO[2]);
+    doc.text(t, M, y); y += 6;
+    doc.setDrawColor(210, 210, 215).line(M, y, M + ANCHO, y); y += 18;
+  }
+  /* Dos columnas: la etiqueta en gris chico arriba del valor. Entra más y se
+     lee mejor que una lista de "etiqueta: valor" a lo largo. */
+  function dato(etiqueta, valor, col){
+    var x = M + (col ? ANCHO / 2 : 0);
+    doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+    doc.text(String(etiqueta), x, y);
+    doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(NEGRO[0], NEGRO[1], NEGRO[2]);
+    var txt = doc.splitTextToSize(String(valor === undefined || valor === null || valor === "" ? "—" : valor), ANCHO / 2 - 14);
+    doc.text(txt, x, y + 14);
+    if (col) y += 14 + txt.length * 13 + 12;
+  }
+  function fila(e1, v1, e2, v2){ dato(e1, v1, 0); dato(e2, v2, 1); }
+
+  titulo("Datos del contribuyente");
+  fila("Razón social / Nombre", c.razonSocial || "", "CUIT", formatCuit(c.cuit || ""));
+  fila("Nº de Ingresos Brutos", c.nroIIBB || "", "Actividad (monotributo)",
+       c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios"));
+  fila("Correo electrónico", c.email || "", "Teléfono", c.telefono || "");
+  if (c.actividadIIBB || c.codigoNAES) fila("Actividad (ingresos brutos)", c.actividadIIBB || "", "Código NAES", c.codigoNAES || "");
+  y += 8;
+
+  titulo("Monotributo");
+  fila("Categoría actual", c.categoriaActual || "sin categoría",
+       "Facturado 12 meses", pesos(an.ingresos));
+  var sit = an.estado === "sube" ? "Debe recategorizar a " + an.categoriaSugerida
+          : an.estado === "baja" ? "Puede bajar a " + an.categoriaSugerida
+          : an.estado === "excluido" ? "Excluido: se pasó del tope"
+          : an.estado === "sincat" ? "Sin categoría cargada" : "Al día";
+  fila("Situación", sit, "Cuota sugerida", an.cuotaSugerida ? pesos(an.cuotaSugerida) : "—");
+  y += 8;
+
+  titulo("Impuestos que liquida");
+  var imp = c.impuestos || {}, iibb = c.iibb || {};
+  function lineaImp(nombre, activo, conf){
+    if (!activo) return;
+    doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(NEGRO[0], NEGRO[1], NEGRO[2]);
+    var txt = nombre;
+    if (conf && conf.exento) txt += "  —  EXENTO" + (conf.motivoExencion ? ": " + conf.motivoExencion : "");
+    else if (conf && conf.alicuota) txt += "  —  alícuota " + conf.alicuota + "%" + (conf.minimo ? ", mínimo " + pesos(conf.minimo) : "");
+    doc.text(doc.splitTextToSize(txt, ANCHO), M, y);
+    y += 16;
+  }
+  lineaImp("ARCA — Monotributo", imp.arca !== false, null);
+  lineaImp("ARBA — IIBB Provincia de Buenos Aires", imp.arba, iibb.arba);
+  lineaImp("AGIP — IIBB Ciudad de Buenos Aires", imp.agip, iibb.agip);
+  lineaImp("Tasa municipal" + (c.municipio ? " — " + c.municipio : ""), imp.municipal, iibb.municipal);
+  if (!imp.arca && !imp.arba && !imp.agip && !imp.municipal){
+    doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+    doc.text("Ninguno tildado en la ficha.", M, y); y += 16;
+  }
+  y += 12;
+
+  titulo("Honorarios del estudio");
+  var deuda = deudaCliente(id);
+  fila("Honorario mensual", c.honorarioMensual ? pesos(c.honorarioMensual) : "sin honorario cargado",
+       "Cobra a", c.honorarioModalidad === "vencido" ? "Mes vencido" : "Mes en curso");
+  fila("Deuda acumulada", deuda > 0.005 ? pesos(deuda) : "Al día",
+       "Cobra desde", c.honorarioDesde ? periodoLargo(c.honorarioDesde.replace("-", "")) : "—");
+
+  /* Pie: de cuándo es la hoja. Sin esto, dos impresiones distintas del mismo
+     cliente son indistinguibles. */
+  var hoy = new Date();
+  var fecha = String(hoy.getDate()).padStart(2, "0") + "/" +
+              String(hoy.getMonth() + 1).padStart(2, "0") + "/" + hoy.getFullYear();
+  doc.setDrawColor(225, 225, 230).line(M, 780, M + ANCHO, 780);
+  doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(GRIS[0], GRIS[1], GRIS[2]);
+  doc.text("EBD Consultores · ficha generada el " + fecha, M, 796);
+  doc.text("Los datos salen del sistema y valen a la fecha de arriba.", M, 808);
+
+  var nombre = "ficha-" + String(c.razonSocial || "cliente").replace(/[^A-Za-z0-9]+/g, "-").toLowerCase() + ".pdf";
+  doc.save(nombre);
+  toast("Ficha descargada", "ok");
+}
+
+/* Los papeles del cliente se leen recién al abrir la ficha, no al arrancar el
+   sistema: los adjuntos pesan y cargarlos todos de entrada haría lento el
+   arranque para algo que casi nunca se mira. */
+function pintarArchivosDeLaFicha(id){
+  var cont = $("fcArchivos");
+  if (!cont) return;
+  ref("archivos/" + id).once("value").then(function(s){
+    if (!$("fcArchivos")) return;   /* cerró el modal mientras tanto */
+    var arch = s.val() || {};
+    var ids = Object.keys(arch).sort(function(a, b){
+      return String(arch[b].subido || "").localeCompare(String(arch[a].subido || ""));
+    });
+
+    if (!ids.length){
+      cont.innerHTML = '<div class="ayuda">Todavía no hay papeles guardados de este cliente. ' +
+        "Se suben desde la solapa <b>Archivos</b>, o leyendo su constancia desde <b>Clientes</b>.</div>";
+      return;
+    }
+
+    cont.innerHTML = '<div class="tabla-wrap"><table><thead><tr><th>Tipo</th><th>Archivo</th>' +
+      "<th>Período</th><th></th></tr></thead><tbody>" +
+      ids.map(function(k){
+        var a = arch[k];
+        return "<tr><td>" + esc(nombreTipoArchivo(a.tipo)) +
+            (a.tipo === "constancia" ? ' <span class="badge b-azul">constancia</span>' : "") + "</td>" +
+          '<td class="mono">' + esc(a.nombre || "") +
+            (a.nota ? '<div style="color:var(--gris);font-size:11.5px" class="">' + esc(a.nota) + "</div>" : "") + "</td>" +
+          "<td>" + (a.periodo ? periodoLargo(a.periodo) : "—") + "</td>" +
+          '<td><button class="btn sec chico" onclick="verArchivo(\'' + id + "','" + k + '\')">Ver</button></td></tr>';
+      }).join("") + "</tbody></table></div>";
+  }).catch(function(e){
+    if ($("fcArchivos")) $("fcArchivos").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
+      esc(explicarError(e)) + "</div></div>";
+  });
+}
+
 function verFichaCliente(id){
   var c = ESTADO.clientes[id];
   var cortes = cortesDisponibles().slice(0,2);
@@ -3475,10 +3725,15 @@ function verFichaCliente(id){
   }
   html += "</tbody></table></div>";
 
+  html += '<div class="seccion-tit">Papeles del cliente</div><div id="fcArchivos"><div class="ayuda">Buscando…</div></div>';
+
   abrirModal(c.razonSocial + " · " + formatCuit(c.cuit), html, [
+    { texto:"Cerrar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Editar cliente", clase:"sec", accion:function(){ cerrarModal(); setTimeout(function(){ editarCliente(id); }, 180); } },
-    { texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }
+    { texto:"📄 Ficha en PDF", accion:function(){ fichaPdfCliente(id); } }
   ], "ancho");
+
+  pintarArchivosDeLaFicha(id);
 }
 
 $("btnNuevoCliente").onclick = function(){ abrirFormCliente(null); };
@@ -5687,7 +5942,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v37";
+var VERSION_APP = "v38";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
