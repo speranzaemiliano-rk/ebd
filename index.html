@@ -2696,6 +2696,17 @@ function formCliente(c, idCliente){
     '<div class="campo"><label>Teléfono</label><input type="text" id="fcTel" value="' + esc(c.telefono || "") + '"></div>' +
   '</div>' +
 
+  /* El domicilio va desarmado y no en un solo renglón: la localidad y el
+     código postal hacen falta por separado para las presentaciones, para las
+     notas al municipio y para saber qué tasa le corresponde. */
+  '<div class="campo"><label>Domicilio</label><input type="text" id="fcDomicilio" value="' + esc(c.domicilio || "") +
+    '" placeholder="Av. Mitre 1234, piso 2 A"></div>' +
+  '<div class="grid g3">' +
+    '<div class="campo"><label>Localidad</label><input type="text" id="fcLocalidad" value="' + esc(c.localidad || "") + '" placeholder="Avellaneda"></div>' +
+    '<div class="campo"><label>Provincia</label><input type="text" id="fcProvincia" value="' + esc(c.provincia || "") + '" placeholder="Buenos Aires"></div>' +
+    '<div class="campo"><label>Código postal</label><input type="text" id="fcCP" value="' + esc(c.codigoPostal || "") + '" placeholder="1870 o B1870ABC"></div>' +
+  '</div>' +
+
   '<div class="seccion-tit">Monotributo</div>' +
   '<div class="grid g3">' +
     '<div class="campo"><label>Actividad *</label><select id="fcActividad">' +
@@ -2948,6 +2959,10 @@ function guardarFormCliente(id){
     nroIIBB: $("fcIIBB").value.trim(),
     email: $("fcMail").value.trim(),
     telefono: $("fcTel").value.trim(),
+    domicilio: $("fcDomicilio").value.trim(),
+    localidad: $("fcLocalidad").value.trim(),
+    provincia: $("fcProvincia").value.trim(),
+    codigoPostal: $("fcCP").value.trim().toUpperCase(),
     honorarioMensual: parseFloat($("fcHonMonto").value) || 0,
     honorarioModalidad: $("fcHonModalidad").value,
     honorarioDesde: $("fcHonDesde").value,
@@ -3087,7 +3102,8 @@ function parsearConstancia(texto){
   var t = _sinTildes(texto);
   var T = t.toUpperCase();
   var out = { organismo:"", cuit:"", cuitDudoso:false, razonSocial:"", actividad:"",
-              codigoActividad:"", categoria:"", nroIIBB:"", regimen:"" };
+              codigoActividad:"", categoria:"", nroIIBB:"", regimen:"",
+              domicilio:"", codigoPostal:"" };
 
   /* Quién la emitió. AGIP nombra a la Ciudad y a Ingresos Brutos; ARCA y AFIP
      nombran al monotributo o al organismo nacional. */
@@ -3111,6 +3127,16 @@ function parsearConstancia(texto){
      "Razón Social". Se corta en la etiqueta siguiente. */
   out.razonSocial = _valorTrasEtiqueta(t, "(?:Apellido y Nombre|Denominaci[oó]n(?: Social)?|Raz[oó]n Social)");
   if (out.razonSocial.length > 120) out.razonSocial = out.razonSocial.slice(0, 120).trim();
+
+  /* Domicilio fiscal. El código postal sale de adentro del mismo domicilio:
+     en las constancias viene pegado ahí («... - CP 1870 - ...») y no como un
+     campo aparte. Si no está rotulado no se inventa: cuatro dígitos sueltos
+     bien pueden ser la altura de la calle. */
+  out.domicilio = _valorTrasEtiqueta(t, "Domicilio(?: Fiscal)?");
+  if (out.domicilio.length > 160) out.domicilio = out.domicilio.slice(0, 160).trim();
+  var mCP = out.domicilio.match(/\bC\.?\s?P\.?\s*:?\s*([A-Za-z]?\d{4}[A-Za-z]{0,3})\b/) ||
+            t.match(/\bC[oó]digo Postal\s*:?\s*([A-Za-z]?\d{4}[A-Za-z]{0,3})\b/i);
+  if (mCP) out.codigoPostal = mCP[1].toUpperCase();
 
   /* Actividad: código de 6 dígitos y descripción, cortada en el código
      siguiente, en una fecha o en la etiqueta que venga. El primero es el
@@ -3144,6 +3170,8 @@ function parsearConstancia(texto){
   var campos = [
     { clave:"cuit",        nombre:"CUIT" },
     { clave:"razonSocial", nombre:"Razón social / Nombre" },
+    { clave:"domicilio",   nombre:"Domicilio" },
+    { clave:"codigoPostal",nombre:"Código postal" },
     { clave:"actividad",   nombre:"Actividad" },
     { clave:"categoria",   nombre:"Categoría de monotributo" },
     { clave:"nroIIBB",     nombre:"Nº de Ingresos Brutos" }
@@ -3228,7 +3256,9 @@ function leerConstanciaConIA(){
     "de ARCA (ex AFIP) o de AGIP (ingresos brutos de la Ciudad de Buenos Aires). " +
     "Devolvé SOLO un objeto JSON, sin texto alrededor, con estas claves exactas:\n" +
     '{"organismo":"arca|agip","cuit":"11 dígitos sin guiones","razonSocial":"","actividad":"descripción de la actividad principal",' +
-    '"codigoActividad":"6 dígitos","categoria":"letra A a K del monotributo","nroIIBB":"","regimen":""}\n' +
+    '"codigoActividad":"6 dígitos","categoria":"letra A a K del monotributo","nroIIBB":"","regimen":"",' +
+    '"domicilio":"calle, número, piso y departamento del domicilio fiscal, sin la localidad",' +
+    '"localidad":"","provincia":"","codigoPostal":"sólo el código postal, por ejemplo 1870 o B1870ABC"}\n' +
     "Reglas: si un dato no está en la constancia, poné cadena vacía. No inventes nada. " +
     "El CUIT es el del contribuyente, NO el del organismo que emite la constancia. " +
     "La categoría es la del monotributo, una sola letra." +
@@ -3245,6 +3275,7 @@ function leerConstanciaConIA(){
 
     var campos = [
       { clave:"cuit", nombre:"CUIT" }, { clave:"razonSocial", nombre:"Razón social / Nombre" },
+      { clave:"domicilio", nombre:"Domicilio" }, { clave:"codigoPostal", nombre:"Código postal" },
       { clave:"actividad", nombre:"Actividad" }, { clave:"categoria", nombre:"Categoría de monotributo" },
       { clave:"nroIIBB", nombre:"Nº de Ingresos Brutos" }
     ];
@@ -3306,6 +3337,14 @@ function cambiosDesdeConstancia(clienteId, d){
           function(u){ u.codigoNAES = d.codigoActividad; });
   agregar("Nº de Ingresos Brutos", c.nroIIBB, d.nroIIBB,
           function(u){ u.nroIIBB = d.nroIIBB; });
+  agregar("Domicilio", c.domicilio, d.domicilio,
+          function(u){ u.domicilio = d.domicilio; });
+  agregar("Localidad", c.localidad, d.localidad,
+          function(u){ u.localidad = d.localidad; });
+  agregar("Provincia", c.provincia, d.provincia,
+          function(u){ u.provincia = d.provincia; });
+  agregar("Código postal", c.codigoPostal, d.codigoPostal,
+          function(u){ u.codigoPostal = d.codigoPostal; });
 
   /* Los impuestos se escriben por camino relativo (impuestos/agip) para no
      pisar el resto del objeto: tildar AGIP no puede destildar ARBA. */
@@ -3514,6 +3553,10 @@ function abrirFichaDesdeConstancia(){
     razonSocial:   d.razonSocial,
     cuit:          d.cuit,
     nroIIBB:       d.nroIIBB,
+    domicilio:     d.domicilio,
+    localidad:     d.localidad,
+    provincia:     d.provincia,
+    codigoPostal:  d.codigoPostal,
     categoriaActual: d.categoria,
     actividadIIBB: d.actividad,
     codigoNAES:    d.codigoActividad,
@@ -3832,6 +3875,9 @@ function fichaPdfCliente(id){
   fila("Nº de Ingresos Brutos", c.nroIIBB || "", "Actividad (monotributo)",
        c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios"));
   fila("Correo electrónico", c.email || "", "Teléfono", c.telefono || "");
+  fila("Domicilio", c.domicilio || "", "Localidad y código postal",
+       [c.localidad || "", c.codigoPostal ? "(" + c.codigoPostal + ")" : "", c.provincia || ""]
+         .filter(function(x){ return x; }).join(" "));
   if (c.actividadIIBB || c.codigoNAES) fila("Actividad (ingresos brutos)", c.actividadIIBB || "", "Código NAES", c.codigoNAES || "");
   y += 8;
 
@@ -3943,7 +3989,9 @@ function verFichaCliente(id){
   var cortes = cortesDisponibles().slice(0,2);
   var t = ESTADO.totales[id] || {};
 
-  var html = '<div class="grid g2" style="margin-bottom:6px">';
+  var dom = domicilioTexto(c);
+  var html = (dom ? '<div class="ayuda" style="margin:0 0 12px">📍 ' + esc(dom) + "</div>" : "") +
+    '<div class="grid g2" style="margin-bottom:6px">';
   cortes.forEach(function(co){
     var an = analizar(id, co.valor);
     var pct = Math.min(an.porcentaje, 100);
@@ -3996,10 +4044,12 @@ function verFichaCliente(id){
 
 $("btnNuevoCliente").onclick = function(){ abrirFormCliente(null); };
 $("btnExportClientes").onclick = function(){
-  var filas = [["Razon social","CUIT","Actividad","Categoria","Email","ARCA","ARBA","AGIP","Municipal","Municipio","Activo"]];
+  var filas = [["Razon social","CUIT","Actividad","Categoria","Email","Telefono","Domicilio","Localidad",
+                "Provincia","Codigo postal","ARCA","ARBA","AGIP","Municipal","Municipio","Activo"]];
   Object.keys(ESTADO.clientes).forEach(function(id){
     var c = ESTADO.clientes[id], i = c.impuestos || {};
     filas.push([c.razonSocial, formatCuit(c.cuit), c.actividad, c.categoriaActual || "", c.email || "",
+      c.telefono || "", c.domicilio || "", c.localidad || "", c.provincia || "", c.codigoPostal || "",
       i.arca?"SI":"NO", i.arba?"SI":"NO", i.agip?"SI":"NO", i.municipal?"SI":"NO", c.municipio || "", c.activo===false?"NO":"SI"]);
   });
   bajarCSV(filas, "clientes.csv");
@@ -7610,6 +7660,15 @@ function aplicarTabDeLaUrl(){
    ========================================================================== */
 
 /* En los listados manda el nombre de fantasía si está cargado. */
+/* El domicilio en un renglón, para mostrarlo: "Av. Mitre 1234 · Avellaneda
+   (1870), Buenos Aires". Salta solo lo que esté vacío. */
+function domicilioTexto(c){
+  if (!c) return "";
+  var lugar = [c.localidad || "", c.codigoPostal ? "(" + c.codigoPostal + ")" : "", c.provincia ? "· " + c.provincia : ""]
+    .filter(function(x){ return x; }).join(" ");
+  return [c.domicilio || "", lugar].filter(function(x){ return x; }).join(" · ");
+}
+
 function nombreCliente(id){
   var c = ESTADO.clientes[id];
   if (!c) return "(cliente eliminado)";
