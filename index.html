@@ -1252,10 +1252,7 @@ tbody tr:hover{background:#FAFAFC}
   <nav class="tabs" id="navTabs">
     <button data-tab="tabHome" class="activo">Inicio</button>
     <button data-tab="tabClientes">Clientes</button>
-    <button data-tab="tabComprobantes">Comprobantes</button>
     <button data-tab="tabRecat">Recategorización</button>
-    <button data-tab="tabLiquidacion">Liquidación</button>
-    <button data-tab="tabHonorarios">Honorarios</button>
     <button data-tab="tabSocios" id="tabBtnSocios">Socios</button>
     <button data-tab="tabCaja">Caja</button>
     <button data-tab="tabMails">Mails</button>
@@ -1335,6 +1332,7 @@ tbody tr:hover{background:#FAFAFC}
 
     <!-- ---------- CLIENTES ---------- -->
     <section class="panel" id="tabClientes">
+      <nav class="sub-tabs subnav-clientes"></nav>
       <div class="card">
         <div class="card-head">
           <h2>Clientes</h2>
@@ -1352,6 +1350,7 @@ tbody tr:hover{background:#FAFAFC}
 
     <!-- ---------- COMPROBANTES ---------- -->
     <section class="panel" id="tabComprobantes">
+      <nav class="sub-tabs subnav-clientes"></nav>
       <div class="card">
         <h2>Importar comprobantes</h2>
         <p class="desc">Arrastrá el archivo exportado desde <b>Mis Comprobantes</b> de ARCA, en CSV o en Excel. Sirve tanto para emitidos como para recibidos — el sistema detecta cuál es por las columnas del archivo.</p>
@@ -1425,6 +1424,7 @@ tbody tr:hover{background:#FAFAFC}
 
     <!-- ---------- LIQUIDACIÓN ---------- -->
     <section class="panel" id="tabLiquidacion">
+      <nav class="sub-tabs subnav-clientes"></nav>
       <div class="card">
         <div class="card-head">
           <h2>Liquidación mensual</h2>
@@ -1437,6 +1437,7 @@ tbody tr:hover{background:#FAFAFC}
 
     <!-- ---------- HONORARIOS ---------- -->
     <section class="panel" id="tabHonorarios">
+      <nav class="sub-tabs subnav-clientes"></nav>
       <div class="grid g4" style="margin-bottom:18px">
         <div class="kpi"><div class="lbl">Honorarios del año</div><div class="val" id="kpiHonAsignado">—</div><div class="pie">lo que corresponde cobrar</div></div>
         <div class="kpi ok"><div class="lbl">Cobrado</div><div class="val" id="kpiHonCobrado">—</div><div class="pie" id="kpiHonPct">&nbsp;</div></div>
@@ -2624,13 +2625,47 @@ if (window.MutationObserver){
 }
 window.addEventListener("resize", _programarEtiquetado);
 
+/* ---------- TODO LO DEL CLIENTE, EN UN SOLO LUGAR ----------
+   Comprobantes, Liquidación y Honorarios ya no son solapas sueltas arriba:
+   son las vistas "de todos los clientes" que cuelgan de Clientes. Adentro de
+   un cliente están las mismas, pero filtradas a él (ver CLI_VISTAS). Así hay
+   una sola puerta de entrada y la barra de arriba deja de tener cinco solapas
+   que hablaban de lo mismo. */
+var TABS_CLIENTES = [
+  { tab:"tabClientes",     nombre:"Clientes" },
+  { tab:"tabComprobantes", nombre:"Comprobantes" },
+  { tab:"tabLiquidacion",  nombre:"Liquidación" },
+  { tab:"tabHonorarios",   nombre:"Honorarios" }
+];
+function esDeClientes(tabId){
+  if (tabId === "tabCliente") return true;
+  for (var i = 0; i < TABS_CLIENTES.length; i++) if (TABS_CLIENTES[i].tab === tabId) return true;
+  return false;
+}
+/* Se pinta sólo adentro del panel que se está mostrando: los otros tres
+   quedan con la sub-barra vieja, que nadie ve, y se repinta al entrar. */
+function pintarSubnavClientes(tabId){
+  var panel = $(tabId);
+  if (!panel) return;
+  var barra = panel.querySelector(".subnav-clientes");
+  if (!barra) return;
+  barra.innerHTML = TABS_CLIENTES.map(function(v){
+    return '<button data-tab="' + v.tab + '"' + (v.tab === tabId ? ' class="activo"' : "") +
+      ">" + v.nombre + "</button>";
+  }).join("");
+  Array.prototype.forEach.call(barra.children, function(b){
+    b.onclick = function(){ irA(b.dataset.tab); };
+  });
+}
+
 function irA(tabId){
   if (ALL_TABS.indexOf(tabId) === -1) return;
   ALL_TABS.forEach(function(t){
     var el = $(t);
     if (el) el.classList.toggle("activo", t === tabId);
   });
-  var tabMarcado = tabId === "tabCliente" ? "tabClientes" : tabId;
+  pintarSubnavClientes(tabId);
+  var tabMarcado = esDeClientes(tabId) ? "tabClientes" : tabId;
   Array.prototype.forEach.call($("navTabs").children, function(b){
     var activo = b.dataset.tab === tabMarcado;
     b.classList.toggle("activo", activo);
@@ -2860,10 +2895,10 @@ function badgeEstado(an){
 var PANTALLAS_BUSCABLES = [
   { tab:"tabHome",         nombre:"Inicio" },
   { tab:"tabClientes",     nombre:"Clientes" },
-  { tab:"tabComprobantes", nombre:"Comprobantes" },
+  { tab:"tabComprobantes", nombre:"Comprobantes",   en:"Clientes" },
   { tab:"tabRecat",        nombre:"Recategorización" },
-  { tab:"tabLiquidacion",  nombre:"Liquidación" },
-  { tab:"tabHonorarios",   nombre:"Honorarios" },
+  { tab:"tabLiquidacion",  nombre:"Liquidación",     en:"Clientes" },
+  { tab:"tabHonorarios",   nombre:"Honorarios",      en:"Clientes" },
   { tab:"tabSocios",       nombre:"Socios" },
   { tab:"tabCaja",         nombre:"Caja" },
   { tab:"tabMails",        nombre:"Mails" },
@@ -2937,7 +2972,8 @@ function buscarEnTodo(q){
   PANTALLAS_BUSCABLES.forEach(function(p){
     if (_sinTildes(p.nombre).toLowerCase().indexOf(t) === -1) return;
     out.push({
-      grupo:"Pantallas", icono:"🧭", titulo: p.nombre, sub:"Ir a la pantalla",
+      grupo:"Pantallas", icono:"🧭", titulo: p.nombre,
+      sub: p.en ? "Ir a la pantalla · está en " + p.en : "Ir a la pantalla",
       accion: function(){ irA(p.tab); }
     });
   });
@@ -5113,14 +5149,29 @@ function _dato(rotulo, valor){
 }
 
 /* --- Comprobantes: lo facturado mes a mes, y el detalle de cada mes --- */
+
+/* La importación es una pantalla sola (arrastrar un archivo, traer de ARCA) y
+   no tiene sentido repetirla adentro de cada cliente: se va a ella con el
+   cliente ya elegido, así no hay que buscarlo de nuevo en el desplegable. */
+function importarComprobantesDe(id){
+  irA("tabComprobantes");
+  if ($("impCliente"))     $("impCliente").value = id;
+  if ($("verCompCliente")){ $("verCompCliente").value = id; renderTablaComprobantes(); }
+}
+
 function vistaComprobantesCliente(id){
   var t = ESTADO.totales[id] || {};
   var pers = Object.keys(t).sort().reverse();
+  var botonImportar = puedeEscribir()
+    ? '<button class="btn sec chico" onclick="importarComprobantesDe(\'' + id + '\')">📥 Importar comprobantes</button>'
+    : "";
   if (!pers.length){
     return '<div class="vacio"><div class="ico">📄</div><div>Sin comprobantes cargados.</div>' +
-      '<div class="ayuda" style="margin-top:8px">Se importan desde <b>Comprobantes</b>, del archivo de Mis Comprobantes o del web service de ARCA.</div></div>';
+      '<div class="ayuda" style="margin-top:8px">Se importan del archivo de Mis Comprobantes o del web service de ARCA.</div>' +
+      (botonImportar ? '<div style="margin-top:14px">' + botonImportar + "</div>" : "") + "</div>";
   }
-  var html = '<div class="tabla-wrap"><table><thead><tr><th>Período</th>' +
+  var html = (botonImportar ? '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">' + botonImportar + "</div>" : "") +
+    '<div class="tabla-wrap"><table><thead><tr><th>Período</th>' +
     "<th class=num>Emitido</th><th class=num>Recibido</th><th class=num>Comprobantes</th><th></th>" +
     "</tr></thead><tbody>";
   pers.forEach(function(p){
@@ -6402,7 +6453,8 @@ function pintarFilasLiquidacion(){
     var d = datos[id], c = d.c, liq = d.liq;
     totales.general += d.total;
 
-    var fila = "<tr><td><b>" + esc(c.razonSocial) + "</b>" +
+    var fila = '<tr><td><button class="lnk-cliente" onclick="abrirCliente(\'' + id + '\',\'liquidaciones\')" title="Entrar al cliente"><b>' +
+      esc(c.razonSocial) + "</b></button>" +
       (c.categoriaActual ? ' <span class="cat-chip" style="width:22px;height:22px;font-size:12px;vertical-align:middle">' + c.categoriaActual + "</span>" : "") + "</td>";
 
     IMPUESTOS.forEach(function(i){
@@ -9042,7 +9094,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v52";
+var VERSION_APP = "v53";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
@@ -9434,7 +9486,8 @@ function renderHonorarios(){
 
     var etiqueta = cli.honorarioModalidad === "vencido" ? "mes vencido" : "mes en curso";
     var ultima   = ultimaActualizacionHon(cli);
-    html += '<tr><td class="cli"><b>' + esc(nombreCliente(id)) + "</b>" +
+    html += '<tr><td class="cli"><button class="lnk-cliente" onclick="abrirCliente(\'' + id + '\',\'honorarios\')" title="Entrar al cliente"><b>' +
+      esc(nombreCliente(id)) + "</b></button>" +
       '<div style="color:var(--gris);font-size:11.5px">' + pesos(cli.honorarioMensual || 0) + " · " + etiqueta +
       (ultima ? ' · <span title="Última actualización">↑ ' + periodoCorto(ultima) + "</span>" : "") +
       "</div></td>";
