@@ -420,6 +420,20 @@ nav.tabs button:active{transform:scale(.98)}
   .bus-campo kbd{display:none}
 }
 
+/* Un encabezado que además es botón. La flechita está siempre —apagada cuando
+   no es la columna activa— para que se vea que se puede tocar sin tener que
+   descubrirlo pasando el mouse. */
+.th-orden{
+  display:inline-flex;align-items:center;gap:5px;font:inherit;color:inherit;
+  padding:0;background:none;border:none;cursor:pointer;letter-spacing:inherit;
+}
+.th-orden .flecha{font-size:10px;opacity:.28;transition:opacity .15s}
+.th-orden:hover{color:var(--texto)}
+.th-orden:hover .flecha{opacity:.6}
+.th-orden.activo{color:var(--texto);font-weight:600}
+.th-orden.activo .flecha{opacity:1;color:var(--azul-link)}
+th.num .th-orden{justify-content:flex-end}
+
 /* La fila de filtros vive dentro del encabezado de la tabla, pegada a la
    columna que filtra: si estuviera arriba en una barra aparte, habría que
    acordarse de cuál corresponde a cuál. */
@@ -2586,7 +2600,9 @@ function etiquetarTablas(raiz){
     Array.prototype.forEach.call(t.querySelectorAll("tbody tr"), function(tr){
       Array.prototype.forEach.call(tr.children, function(celda, i){
         if (celda.tagName !== "TD") return;
-        var et = ths[i] ? ths[i].textContent.trim() : "";
+        /* Sin la flechita del orden: es parte del encabezado pero no del
+           nombre de la columna, y en el celular quedaba "Razón social↑". */
+        var et = ths[i] ? ths[i].textContent.replace(/[\u2191\u2193\u2195]/g, "").trim() : "";
         if (celda.getAttribute("data-label") !== et) celda.setAttribute("data-label", et);
       });
     });
@@ -3012,6 +3028,74 @@ function etiquetaImpuesto(clienteId, clave, claseColor, texto){
     ' onclick="accesoRapido(\'' + clienteId + "','" + clave + '\')">' + esc(texto) + " ↗</button>";
 }
 
+/* ---------- BUSCAR POR EL PRINCIPIO ----------
+   Buscar la letra en cualquier parte del nombre parece más generoso, pero con
+   cincuenta clientes es peor: escribís "p" y te quedan treinta, porque casi
+   todo nombre tiene una p en el medio. Uno escribe el PRINCIPIO de lo que
+   busca, no una letra suelta del medio.
+
+   Entonces se busca al principio de cualquier palabra: "p" trae Panadería y
+   Pérez, no "Transportes". Sin tildes, para no pelearse con Rodríguez. */
+function empiezaCon(texto, q) {
+  var t = _sinTildes(texto || "").toLowerCase();
+  var b = _sinTildes(q || "").toLowerCase().trim();
+  if (!b) return true;
+  if (t.indexOf(b) === 0) return true;
+  var palabras = t.split(/[\s,.\-\/]+/);
+  for (var i = 0; i < palabras.length; i++) if (palabras[i].indexOf(b) === 0) return true;
+  /* Si escribió varias palabras, se acepta también en el medio: ahí ya no es
+     una letra al voleo sino una frase, y buscar "la espiga" tiene que andar. */
+  return b.indexOf(" ") !== -1 && t.indexOf(b) !== -1;
+}
+
+/* ---------- ORDENAR ----------
+   El encabezado ordena al tocarlo y la flechita dice por cuál está. Las
+   columnas de números arrancan de mayor a menor y las de texto de la A a la Z,
+   que es lo que uno espera de cada una sin tener que probar. */
+var CAMPOS_NUM = ["facturado", "honorario", "total", "arca", "arba", "agip", "municipal", "veps", "deuda"];
+
+function alternarOrden(orden, campo, alTerminar){
+  if (orden.campo === campo) orden.desc = !orden.desc;
+  else { orden.campo = campo; orden.desc = CAMPOS_NUM.indexOf(campo) !== -1; }
+  if (alTerminar) alTerminar();
+}
+
+function thOrden(orden, campo, texto, fn, clase){
+  var activo = orden.campo === campo;
+  return "<th" + (clase ? ' class="' + clase + '"' : "") + ">" +
+    '<button class="th-orden' + (activo ? " activo" : "") + '" onclick="' + fn + "('" + campo + "')\">" +
+      esc(texto) + '<span class="flecha">' + (activo ? (orden.desc ? "↓" : "↑") : "↕") + "</span></button></th>";
+}
+
+/* Comparar de a dos, con el texto siempre en orden alfabético de verdad
+   (localeCompare sabe que la ñ va después de la n) y los vacíos al final. */
+function compararPor(valorDe, orden){
+  return function(a, b){
+    var x = valorDe(a), y = valorDe(b);
+    var vacioX = x === null || x === undefined || x === "";
+    var vacioY = y === null || y === undefined || y === "";
+    if (vacioX && vacioY) return 0;
+    if (vacioX) return 1;            /* lo que falta va al final, se ordene como se ordene */
+    if (vacioY) return -1;
+    var r = (typeof x === "number" && typeof y === "number")
+      ? x - y
+      : String(x).localeCompare(String(y), "es", { sensitivity:"base", numeric:true });
+    return orden.desc ? -r : r;
+  };
+}
+
+/* El selector "Ordenar por…", para quien prefiere elegirlo a dedo en vez de
+   ir a buscar la columna. Hace exactamente lo mismo que tocar el encabezado. */
+function selectorOrden(orden, campos, fn, idSel){
+  return '<select class="pill" id="' + idSel + '" onchange="' + fn + "(this.value)\">" +
+      campos.map(function(c){
+        return '<option value="' + c.clave + '"' + (orden.campo === c.clave ? " selected" : "") + ">" +
+          esc(c.nombre) + "</option>";
+      }).join("") + "</select>" +
+    '<button class="btn sec chico" onclick="' + fn + "('" + orden.campo + "')\" title=\"Dar vuelta el orden\">" +
+      (orden.desc ? "↓ Mayor a menor" : "↑ Menor a mayor") + "</button>";
+}
+
 /* ---------- EL LISTADO DE CLIENTES, CON FILTRO EN CADA COLUMNA ----------
 
    La tabla se dibuja una sola vez y después se repintan SOLO las filas. Si se
@@ -3023,6 +3107,43 @@ function etiquetaImpuesto(clienteId, clave, claseColor, texto){
 var FILTROS_CLI = {
   nombre:"", cuit:"", actividad:"", categoria:"", impuesto:"", situacion:"", honorario:""
 };
+var ORDEN_CLI = { campo:"nombre", desc:false };
+var CAMPOS_ORDEN_CLI = [
+  { clave:"nombre",     nombre:"Razón social (A-Z)" },
+  { clave:"cuit",       nombre:"CUIT" },
+  { clave:"actividad",  nombre:"Actividad" },
+  { clave:"categoria",  nombre:"Categoría" },
+  { clave:"facturado",  nombre:"Facturado 12 meses" },
+  { clave:"honorario",  nombre:"Honorario" },
+  { clave:"deuda",      nombre:"Deuda de honorarios" },
+  { clave:"situacion",  nombre:"Situación" }
+];
+function ordenarClientesPor(campo){
+  alternarOrden(ORDEN_CLI, campo, renderClientes);
+}
+
+/* Cuánto "vale" un cliente en cada columna, para poder compararlos. */
+function _valorClientePara(campo){
+  var corte = cortesDisponibles()[0];
+  var ORDEN_SIT = { excluido:0, sube:1, cerca:2, sincat:3, baja:4, ok:5 };
+  return function(id){
+    var c = ESTADO.clientes[id] || {};
+    if (campo === "nombre")    return c.razonSocial || "";
+    if (campo === "cuit")      return String(c.cuit || "");
+    if (campo === "actividad") return c.actividad || "servicios";
+    if (campo === "categoria") return c.categoriaActual || "";
+    /* null y no 0: "no tiene honorario" no es "tiene cero". Con 0 la fila se
+       ordenaba como un número más y al dar vuelta el orden los que no tienen
+       se iban arriba de todo, que no es lo que nadie busca. Facturado sí deja
+       el 0, porque ahí facturar cero es un dato. */
+    if (campo === "honorario") return c.honorarioMensual || null;
+    if (campo === "deuda")     return deudaCliente(id) || null;
+    var an = analizar(id, corte ? corte.valor : periodoHoy());
+    if (campo === "facturado") return an.ingresos || 0;
+    if (campo === "situacion") return ORDEN_SIT[an.estado] === undefined ? 9 : ORDEN_SIT[an.estado];
+    return c.razonSocial || "";
+  };
+}
 
 var SITUACIONES = [
   { clave:"ok",       nombre:"Al día" },
@@ -3052,10 +3173,21 @@ function renderClientes(){
     return;
   }
 
+  var O = "ordenarClientesPor";
   $("tablaClientes").innerHTML =
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">' +
+      '<span class="ayuda">Ordenar por</span>' +
+      selectorOrden(ORDEN_CLI, CAMPOS_ORDEN_CLI, O, "selOrdenCli") + "</div>" +
     '<div class="tabla-wrap"><table><thead><tr>' +
-      "<th>Razón social</th><th>CUIT</th><th>Actividad</th><th>Cat.</th>" +
-      "<th>Impuestos</th><th class=num>Facturado 12m</th><th class=num>Honorario</th><th>Situación</th><th></th>" +
+      thOrden(ORDEN_CLI, "nombre", "Razón social", O) +
+      thOrden(ORDEN_CLI, "cuit", "CUIT", O) +
+      thOrden(ORDEN_CLI, "actividad", "Actividad", O) +
+      thOrden(ORDEN_CLI, "categoria", "Cat.", O) +
+      "<th>Impuestos</th>" +
+      thOrden(ORDEN_CLI, "facturado", "Facturado 12m", O, "num") +
+      thOrden(ORDEN_CLI, "honorario", "Honorario", O, "num") +
+      thOrden(ORDEN_CLI, "situacion", "Situación", O) +
+      "<th></th>" +
     "</tr>" +
     '<tr class="fila-filtros">' +
       "<th>" + _filtroTexto("nombre") + "</th>" +
@@ -3090,6 +3222,7 @@ function renderClientes(){
 function limpiarFiltrosClientes(){
   Object.keys(FILTROS_CLI).forEach(function(k){ FILTROS_CLI[k] = ""; });
   $("filtroCliente").value = "";
+  ORDEN_CLI.campo = "nombre"; ORDEN_CLI.desc = false;
   renderClientes();
 }
 
@@ -3105,11 +3238,14 @@ function clientesFiltrados(){
     var c = ESTADO.clientes[id];
     if (!verInact && c.activo === false) return false;
 
-    if (q && ((c.razonSocial || "") + " " + (c.cuit || "") + " " + (c.nombreFantasia || "") +
-              " " + (c.email || "")).toLowerCase().indexOf(q) === -1) return false;
+    if (q){
+      var texto = (c.razonSocial || "") + " " + (c.nombreFantasia || "") + " " + (c.email || "");
+      var cuitLimpio = String(c.cuit || "").replace(/\D/g, "");
+      var soloNums = q.replace(/\D/g, "");
+      if (!empiezaCon(texto, q) && !(soloNums.length >= 2 && cuitLimpio.indexOf(soloNums) !== -1)) return false;
+    }
 
-    if (F.nombre && _sinTildes((c.razonSocial || "") + " " + (c.nombreFantasia || "")).toLowerCase()
-          .indexOf(_sinTildes(F.nombre).toLowerCase()) === -1) return false;
+    if (F.nombre && !empiezaCon((c.razonSocial || "") + " " + (c.nombreFantasia || ""), F.nombre)) return false;
     if (F.cuit && String(c.cuit || "").replace(/\D/g, "").indexOf(F.cuit.replace(/\D/g, "")) === -1) return false;
     if (F.actividad && (c.actividad || "servicios") !== F.actividad) return false;
 
@@ -3127,9 +3263,7 @@ function clientesFiltrados(){
 
     if (F.situacion && analizar(id, corte ? corte.valor : periodoHoy()).estado !== F.situacion) return false;
     return true;
-  }).sort(function(a, b){
-    return (ESTADO.clientes[a].razonSocial || "").localeCompare(ESTADO.clientes[b].razonSocial || "");
-  });
+  }).sort(compararPor(_valorClientePara(ORDEN_CLI.campo), ORDEN_CLI));
 }
 
 function pintarFilasClientes(){
@@ -6122,60 +6256,182 @@ function totalLiq(cli, liq){
   return s;
 }
 
+/* ---------- LA LIQUIDACIÓN DEL MES, CON FILTROS Y ORDEN ----------
+   Mismo criterio que el listado de clientes: la tabla se arma una vez y
+   después se repintan sólo las filas, así el campo donde se escribe no se
+   destruye con cada tecla. */
+var FILTROS_LIQ = { cliente:"", estado:"", falta:"", vep:"" };
+var ORDEN_LIQ   = { campo:"cliente", desc:false };
+var CAMPOS_ORDEN_LIQ = [
+  { clave:"cliente",   nombre:"Cliente (A-Z)" },
+  { clave:"arca",      nombre:"ARCA" },
+  { clave:"arba",      nombre:"ARBA" },
+  { clave:"agip",      nombre:"AGIP" },
+  { clave:"municipal", nombre:"Tasa municipal" },
+  { clave:"total",     nombre:"Total del mes" },
+  { clave:"veps",      nombre:"VEP cargados" },
+  { clave:"estado",    nombre:"Estado" }
+];
+function ordenarLiquidacionPor(campo){ alternarOrden(ORDEN_LIQ, campo, pintarFilasLiquidacion); }
+function limpiarFiltrosLiquidacion(){
+  Object.keys(FILTROS_LIQ).forEach(function(k){ FILTROS_LIQ[k] = ""; });
+  ORDEN_LIQ.campo = "cliente"; ORDEN_LIQ.desc = false;
+  renderLiquidacion();
+}
+
+/* Cuántos impuestos le faltan cargar y cuántos VEP tiene: se usa para filtrar,
+   para ordenar y para pintar, así que se calcula una sola vez por cliente. */
+function _estadoLiqDe(id, periodo){
+  var c = ESTADO.clientes[id], liq = liqDe(id, periodo);
+  var pedidos = 0, sinCargar = [], veps = 0;
+  IMPUESTOS.forEach(function(i){
+    if (!(c.impuestos && c.impuestos[i.clave])) return;
+    if (exentoDe(c, i.clave)) return;
+    pedidos++;
+    if (!((liq[i.clave] || {}).monto)) sinCargar.push(i.clave);
+    if ((liq[i.clave] || {}).vep || (liq[i.clave] || {}).vepArchivo) veps++;
+  });
+  var tot = totalLiq(c, liq);
+  return {
+    c: c, liq: liq, total: tot, veps: veps, pedidos: pedidos, sinCargar: sinCargar,
+    estado: liq.enviado ? "enviado" : (tot ? "listo" : "pendiente")
+  };
+}
+
 function renderLiquidacion(){
   var periodo = monthInputAPeriodo($("liqPeriodo").value);
-  var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
-  ids.sort(function(a,b){ return ESTADO.clientes[a].razonSocial.localeCompare(ESTADO.clientes[b].razonSocial); });
-
-  if (!ids.length){
+  if (!Object.keys(ESTADO.clientes).length){
     $("tablaLiquidacion").innerHTML = '<div class="vacio"><div class="ico">💰</div><div>No hay clientes cargados.</div></div>';
     return;
   }
+  var O = "ordenarLiquidacionPor";
 
-  var html = '<div class="tabla-wrap"><table><thead><tr><th>Cliente</th>' +
-    IMPUESTOS.map(function(i){ return '<th class="num">' + i.corto + "</th>"; }).join("") +
-    "<th class=num>Total</th><th>VEP</th><th>Estado</th><th></th></tr></thead><tbody>";
+  $("tablaLiquidacion").innerHTML =
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">' +
+      '<span class="ayuda">Ordenar por</span>' +
+      selectorOrden(ORDEN_LIQ, CAMPOS_ORDEN_LIQ, O, "selOrdenLiq") + "</div>" +
+    '<div class="tabla-wrap"><table><thead><tr>' +
+      thOrden(ORDEN_LIQ, "cliente", "Cliente", O) +
+      IMPUESTOS.map(function(i){ return thOrden(ORDEN_LIQ, i.clave, i.corto, O, "num"); }).join("") +
+      thOrden(ORDEN_LIQ, "total", "Total", O, "num") +
+      thOrden(ORDEN_LIQ, "veps", "VEP", O) +
+      thOrden(ORDEN_LIQ, "estado", "Estado", O) +
+      "<th></th>" +
+    "</tr>" +
+    '<tr class="fila-filtros">' +
+      '<th><input type="text" class="f-liq" data-filtro="cliente" value="' + esc(FILTROS_LIQ.cliente) + '" placeholder="—"></th>' +
+      '<th colspan="' + IMPUESTOS.length + '"><select class="f-liq" data-filtro="falta">' +
+        '<option value="">Todos</option>' +
+        '<option value="alguno"' + (FILTROS_LIQ.falta === "alguno" ? " selected" : "") + ">Le falta alguno</option>" +
+        IMPUESTOS.map(function(i){
+          return '<option value="' + i.clave + '"' + (FILTROS_LIQ.falta === i.clave ? " selected" : "") +
+            ">Le falta " + esc(i.corto) + "</option>";
+        }).join("") + "</select></th>" +
+      "<th></th>" +
+      '<th><select class="f-liq" data-filtro="vep">' +
+        '<option value="">Todos</option>' +
+        '<option value="completos"' + (FILTROS_LIQ.vep === "completos" ? " selected" : "") + ">Completos</option>" +
+        '<option value="faltan"' + (FILTROS_LIQ.vep === "faltan" ? " selected" : "") + ">Faltan</option>" +
+      "</select></th>" +
+      '<th><select class="f-liq" data-filtro="estado">' +
+        '<option value="">Todos</option>' +
+        '<option value="pendiente"' + (FILTROS_LIQ.estado === "pendiente" ? " selected" : "") + ">Pendiente</option>" +
+        '<option value="listo"' + (FILTROS_LIQ.estado === "listo" ? " selected" : "") + ">Listo</option>" +
+        '<option value="enviado"' + (FILTROS_LIQ.estado === "enviado" ? " selected" : "") + ">Enviado</option>" +
+      "</select></th>" +
+      '<th><button class="btn-icono" onclick="limpiarFiltrosLiquidacion()" title="Limpiar los filtros">✕</button></th>' +
+    "</tr></thead><tbody></tbody></table></div>" +
+    '<div class="ayuda" id="contadorLiq" style="margin-top:10px"></div>';
+
+  Array.prototype.forEach.call($("tablaLiquidacion").querySelectorAll(".f-liq"), function(el){
+    el.className = "f-liq f-col";
+    var ev = el.tagName === "SELECT" ? "onchange" : "oninput";
+    el[ev] = function(){ FILTROS_LIQ[el.dataset.filtro] = el.value; pintarFilasLiquidacion(); };
+  });
+
+  pintarFilasLiquidacion();
+}
+
+function pintarFilasLiquidacion(){
+  var cuerpo = $("tablaLiquidacion") && $("tablaLiquidacion").querySelector("tbody");
+  if (!cuerpo) return;
+  var periodo = monthInputAPeriodo($("liqPeriodo").value);
+  var F = FILTROS_LIQ;
+
+  var activos = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+  var datos = {};
+  activos.forEach(function(id){ datos[id] = _estadoLiqDe(id, periodo); });
+
+  var ids = activos.filter(function(id){
+    var d = datos[id];
+    if (F.cliente && !empiezaCon(d.c.razonSocial || "", F.cliente)) return false;
+    if (F.estado && d.estado !== F.estado) return false;
+    if (F.falta === "alguno" && !d.sinCargar.length) return false;
+    if (F.falta && F.falta !== "alguno" && d.sinCargar.indexOf(F.falta) === -1) return false;
+    if (F.vep === "completos" && !(d.pedidos && d.veps >= d.pedidos)) return false;
+    if (F.vep === "faltan" && d.veps >= d.pedidos) return false;
+    return true;
+  });
+
+  var ORDEN_EST = { pendiente:0, listo:1, enviado:2 };
+  ids.sort(compararPor(function(id){
+    var d = datos[id], campo = ORDEN_LIQ.campo;
+    if (campo === "cliente") return d.c.razonSocial || "";
+    if (campo === "total")   return d.total;
+    if (campo === "veps")    return d.veps;
+    if (campo === "estado")  return ORDEN_EST[d.estado];
+    return (d.liq[campo] || {}).monto || 0;     /* una columna de impuesto */
+  }, ORDEN_LIQ));
+
+  var cont = $("contadorLiq");
+  if (cont){
+    cont.innerHTML = ids.length === activos.length
+      ? activos.length + (activos.length === 1 ? " cliente activo" : " clientes activos")
+      : "<b>" + ids.length + "</b> de " + activos.length + " clientes coinciden con los filtros";
+  }
+
+  if (!ids.length){
+    cuerpo.innerHTML = '<tr><td colspan="' + (IMPUESTOS.length + 5) + '" style="text-align:center;color:var(--gris);padding:34px">' +
+      "Ningún cliente coincide con los filtros.</td></tr>";
+    return;
+  }
 
   var totales = { arca:0, arba:0, agip:0, municipal:0, general:0 };
-  ids.forEach(function(id){
-    var c = ESTADO.clientes[id], liq = liqDe(id, periodo);
-    var tot = totalLiq(c, liq);
-    totales.general += tot;
+  var html = ids.map(function(id){
+    var d = datos[id], c = d.c, liq = d.liq;
+    totales.general += d.total;
 
-    html += "<tr><td><b>" + esc(c.razonSocial) + "</b>" +
+    var fila = "<tr><td><b>" + esc(c.razonSocial) + "</b>" +
       (c.categoriaActual ? ' <span class="cat-chip" style="width:22px;height:22px;font-size:12px;vertical-align:middle">' + c.categoriaActual + "</span>" : "") + "</td>";
 
     IMPUESTOS.forEach(function(i){
       if (!(c.impuestos && c.impuestos[i.clave])){
-        html += '<td class="num" style="color:var(--gris2)">—</td>';
+        fila += '<td class="num" style="color:var(--gris2)">—</td>';
       } else if (exentoDe(c, i.clave)){
-        html += '<td class="num"><span class="badge b-verde">exento</span></td>';
+        fila += '<td class="num"><span class="badge b-verde">exento</span></td>';
       } else {
-        var m = (liq[i.clave] && liq[i.clave].monto) || 0;
+        var m = (liq[i.clave] || {}).monto || 0;
         totales[i.clave] += m;
-        html += '<td class="num"' + (m ? "" : ' style="color:var(--amar)"') + ">" + (m ? pesos(m) : "falta") + "</td>";
+        fila += '<td class="num"' + (m ? "" : ' style="color:var(--amar)"') + ">" + (m ? pesos(m) : "falta") + "</td>";
       }
     });
 
-    var veps = IMPUESTOS.filter(function(i){ return liq[i.clave] && liq[i.clave].vep; }).length;
-    /* De los exentos no se espera ningún VEP, así que no cuentan en el total. */
-    var pedidos = IMPUESTOS.filter(function(i){
-      return c.impuestos && c.impuestos[i.clave] && !exentoDe(c, i.clave);
-    }).length;
-
-    html += '<td class="num"><b>' + pesos(tot) + "</b></td>" +
-      "<td>" + (veps ? '<span class="badge b-verde">' + veps + "/" + pedidos + "</span>" : '<span class="badge b-gris">0/' + pedidos + "</span>") + "</td>" +
-      "<td>" + (liq.enviado ? '<span class="badge b-verde">Enviado</span>'
-                : (tot ? '<span class="badge b-azul">Listo</span>' : '<span class="badge b-amar">Pendiente</span>')) + "</td>" +
+    return fila + '<td class="num"><b>' + pesos(d.total) + "</b></td>" +
+      '<td><span class="badge ' + (d.veps && d.veps >= d.pedidos ? "b-verde" : (d.veps ? "b-amar" : "b-gris")) + '">' +
+        d.veps + "/" + d.pedidos + "</span></td>" +
+      "<td>" + (d.estado === "enviado" ? '<span class="badge b-verde">Enviado</span>'
+                : (d.estado === "listo" ? '<span class="badge b-azul">Listo</span>' : '<span class="badge b-amar">Pendiente</span>')) + "</td>" +
       "<td>" + (puedeEscribir()
         ? '<button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + periodo + '\')">Cargar</button>'
         : "") + "</td></tr>";
-  });
+  }).join("");
 
   html += '<tr style="background:var(--fondo)"><td><b>Totales</b></td>' +
     IMPUESTOS.map(function(i){ return '<td class="num"><b>' + pesos(totales[i.clave]) + "</b></td>"; }).join("") +
     '<td class="num"><b>' + pesos(totales.general) + "</b></td><td colspan=3></td></tr>";
-  $("tablaLiquidacion").innerHTML = html + "</tbody></table></div>";
+
+  cuerpo.innerHTML = html;
+  _programarEtiquetado();
 }
 
 /* ---------- CÁLCULO DE INGRESOS BRUTOS ----------
@@ -8747,7 +9003,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v50";
+var VERSION_APP = "v51";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
