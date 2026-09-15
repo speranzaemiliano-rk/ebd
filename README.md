@@ -89,6 +89,30 @@ sin emitir. El importe sí se aprovecha.
 Para todo lo demás sigue estando la lista, que arranca en **VEP**: es lo que se
 sube sin pensar, y lo que el bloque es.
 
+## El sitio de cada municipio
+
+ARCA, ARBA y AGIP se pagan siempre en la misma web y el sistema ya las sabe.
+**La tasa municipal es la excepción**: cada municipio tiene la suya, y era el
+único impuesto donde había que acordarse de a dónde entrar.
+
+Ahora el link se carga **una vez por municipio** —el nombre que está en la
+ficha del cliente— y lo usan todos los clientes de ese municipio:
+
+- en la **liquidación**, el bloque de la tasa municipal muestra el enlace al
+  sitio, listo para abrir;
+- en la **bóveda de claves**, «🔑 Entrar» del municipio ya abre la página, igual
+  que los otros tres organismos;
+- si el cliente todavía no tiene municipio, se cargan el nombre y el link
+  juntos **desde la propia liquidación**, sin salir a editar la ficha.
+
+Se administran en **Configuración → Municipios** (agregar, editar, borrar). El
+campo *Municipio* de la ficha sugiere los ya cargados, para que escribir
+«Avellaneda» de dos formas distintas no termine en dos municipios de los cuales
+uno se queda sin link.
+
+Un link pegado sin `https://` se completa solo; uno que no sea `http`/`https`
+se rechaza, porque termina adentro de un enlace de verdad.
+
 ## El VEP se lee solo
 
 En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la
