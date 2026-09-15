@@ -366,6 +366,18 @@ th{
   border-bottom:1px solid var(--pelo);white-space:nowrap;
 }
 td{padding:13px 15px;border-bottom:1px solid rgba(0,0,0,.055);vertical-align:middle}
+/* Las listas se ordenan tocando el título de la columna: una vez sube, otra
+   baja. Las columnas sin título son las de los botones y no ordenan nada, por
+   eso el :not(:empty). */
+thead th:not(:empty){cursor:pointer;user-select:none;-webkit-user-select:none}
+thead th:not(:empty):hover{color:var(--texto)}
+thead th[data-ord]{color:var(--azul-link)}
+thead th[data-ord="asc"]::after{content:" ↑"}
+thead th[data-ord="desc"]::after{content:" ↓"}
+/* En el celular la tabla se vuelve tarjetas y no queda encabezado que tocar:
+   ahí aparece esta barra con las mismas columnas. En pantalla grande no se
+   muestra nunca. */
+.orden-movil{display:none}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:#FAFAFC}
 .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -745,6 +757,14 @@ tbody tr:hover{background:#FAFAFC}
 
   .hero-inicio{padding:20px 18px;gap:14px}
   .hero-dato{min-width:96px;padding:12px 14px}
+
+  .orden-movil{display:flex;gap:8px;align-items:center;margin:0 0 12px}
+  .orden-movil select{
+    flex:1;min-width:0;padding:11px 13px;border:1px solid var(--borde);border-radius:var(--r2);
+    background:var(--blanco);color:var(--texto);outline:none;font-size:15px;letter-spacing:-.016em;
+  }
+  .orden-movil select:focus{border-color:var(--azul);box-shadow:0 0 0 4px rgba(0,113,227,.22)}
+  .orden-movil button{flex:none;padding:11px 15px;font-size:15px}
 
   /* Cada fila, una tarjeta */
   .tabla-wrap{border:0;border-radius:0;overflow:visible;background:none}
@@ -2375,14 +2395,196 @@ var _etiqPendiente = false;
 function _programarEtiquetado(){
   if (_etiqPendiente || window.innerWidth > ANCHO_CELULAR) return;
   _etiqPendiente = true;
-  requestAnimationFrame(function(){ _etiqPendiente = false; etiquetarTablas(); });
+  requestAnimationFrame(function(){ _etiqPendiente = false; etiquetarTablas(); _barrasOrdenMovil(); });
 }
 /* Sólo childList: si escuchara atributos, ponerle el data-label a una celda
    volvería a despertar al observador y no pararía nunca. */
 if (window.MutationObserver){
-  new MutationObserver(_programarEtiquetado).observe(document.body, { childList:true, subtree:true });
+  new MutationObserver(function(){ _programarEtiquetado(); _programarOrden(); })
+    .observe(document.body, { childList:true, subtree:true });
 }
 window.addEventListener("resize", _programarEtiquetado);
+
+/* ---------- ORDENAR LAS LISTAS ----------
+   Se hace clic en el título de una columna y las filas se acomodan por esa
+   columna: una vez para arriba, otra para abajo. Vale para todas las tablas
+   del sistema y, como el etiquetado del celular, no toca ninguna de las
+   veinte funciones que dibujan: trabaja sobre las filas que ya están puestas.
+
+   Dos clases de fila no se mueven nunca y quedan al final: las de totales
+   (marcadas con la clase `fija`) y los carteles de «no hay nada», que son una
+   sola celda con colspan. */
+
+var _ordenTablas = {};    /* clave de la tabla -> { col, dir } */
+var _ordenando   = false; /* mientras acomoda, para que el observador no se persiga la cola */
+
+/* Cada tabla se reconoce por el id del contenedor más cercano (tablaClientes,
+   tablaCaja, …). Así el orden elegido sobrevive a que la tabla se vuelva a
+   dibujar, que es lo que pasa cada vez que cambian los datos o un filtro. */
+function _claveTabla(tabla){
+  var n = tabla;
+  while (n && n !== document.body){
+    if (n.id) return n.id;
+    n = n.parentNode;
+  }
+  return "";
+}
+
+/* Con qué se compara una celda: una fecha, un mes, un número (plata,
+   cantidades, porcentajes) o el texto tal cual. Vacío devuelve null y esas
+   filas van siempre al final, ordene para arriba o para abajo. */
+function _valorOrden(td){
+  if (!td) return null;
+  var t = (td.textContent || "").replace(/\s+/g, " ").trim();
+  if (!t || t === "—" || t === "-") return null;
+
+  var f = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (f) return +f[3] * 10000 + +f[2] * 100 + +f[1];
+
+  var pc = t.match(/^(\d{2})\/(\d{4})$/);                 /* 09/2026 */
+  if (pc) return +pc[2] * 100 + +pc[1];
+
+  var mes = _sinTildes(t).toLowerCase().match(/^([a-z]+) de (\d{4})$/);  /* septiembre de 2026 */
+  if (mes){
+    var i = MESES.indexOf(mes[1]);
+    if (i !== -1) return +mes[2] * 100 + i + 1;
+  }
+
+  /* Plata y cantidades: "$ 1.234,56", "12", "45 %", "180 KB". Ojo con el
+     formato de acá: el punto separa los miles y la coma los decimales, al
+     revés de lo que entiende parseFloat. */
+  if (/^[^\d-]{0,3}-?[\d.]+(,\d+)?[^\d]{0,4}$/.test(t)){
+    var n = parseFloat(t.replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", "."));
+    if (!isNaN(n)) return n;
+  }
+  return _sinTildes(t).toLowerCase();
+}
+
+function _ordenarTabla(tabla, col, dir){
+  var tb = tabla.tBodies[0];
+  if (!tb) return;
+
+  var mover = [], fijas = [];
+  Array.prototype.forEach.call(tb.rows, function(tr){
+    var conColspan = Array.prototype.some.call(tr.cells, function(td){ return td.colSpan > 1; });
+    if (conColspan || tr.classList.contains("fija") || !tr.cells[col]) fijas.push(tr);
+    else mover.push(tr);
+  });
+  if (mover.length < 2) return;
+
+  /* Se guarda la posición original para desempatar: sin eso, dos filas iguales
+     se dan vuelta entre ellas cada vez que se redibuja la tabla. */
+  mover.forEach(function(tr, i){ tr._orden = [_valorOrden(tr.cells[col]), i]; });
+  mover.sort(function(a, b){
+    var x = a._orden[0], y = b._orden[0];
+    if (x === null || y === null) return x === null ? (y === null ? a._orden[1] - b._orden[1] : 1) : -1;
+    var c = (typeof x === "number" && typeof y === "number")
+      ? x - y
+      : String(x).localeCompare(String(y), "es", { numeric:true });
+    return c ? c * dir : a._orden[1] - b._orden[1];
+  });
+
+  _ordenando = true;
+  mover.forEach(function(tr){ tb.appendChild(tr); });
+  fijas.forEach(function(tr){ tb.appendChild(tr); });
+  if (tabla.tHead && tabla.tHead.rows.length){
+    Array.prototype.forEach.call(tabla.tHead.rows[0].cells, function(celda, i){
+      if (i === col) celda.setAttribute("data-ord", dir === 1 ? "asc" : "desc");
+      else celda.removeAttribute("data-ord");
+    });
+  }
+  setTimeout(function(){ _ordenando = false; }, 0);
+}
+
+document.addEventListener("click", function(e){
+  var th = e.target && e.target.closest ? e.target.closest("th") : null;
+  if (!th || !th.textContent.trim()) return;
+  var tabla = th.closest("table"), fila = th.parentNode;
+  /* Sólo el primer renglón del encabezado: en una tabla con dos pisos de
+     títulos, el de arriba agrupa columnas y no ordena nada. */
+  if (!tabla || !tabla.tHead || fila.parentNode !== tabla.tHead || fila !== tabla.tHead.rows[0]) return;
+
+  var col = Array.prototype.indexOf.call(fila.cells, th);
+  var clave = _claveTabla(tabla), actual = _ordenTablas[clave];
+  var dir = (actual && actual.col === col && actual.dir === 1) ? -1 : 1;
+  if (clave) _ordenTablas[clave] = { col: col, dir: dir };
+  _ordenarTabla(tabla, col, dir);
+});
+
+/* En el celular cada fila es una tarjeta y el encabezado no se muestra, así
+   que no hay título donde hacer clic. Para esas pantallas se arma arriba de
+   cada lista un «Ordenar por» con las mismas columnas y un botón para dar
+   vuelta el orden. Se pone sólo en las listas de las pantallas (las que
+   cuelgan de un contenedor `tabla…`), no en las tablas de adentro de un
+   cuadro, que son de paso. */
+function _barrasOrdenMovil(){
+  if (window.innerWidth > ANCHO_CELULAR) return;
+  Array.prototype.forEach.call(document.querySelectorAll(".tabla-wrap"), function(wrap){
+    var tabla = wrap.querySelector("table");
+    if (!tabla || !tabla.tHead || !tabla.tHead.rows.length) return;
+    if (!tabla.tBodies[0] || tabla.tBodies[0].rows.length < 2) return;
+    var clave = _claveTabla(tabla);
+    if (clave.indexOf("tabla") !== 0) return;
+
+    var columnas = [];
+    Array.prototype.forEach.call(tabla.tHead.rows[0].cells, function(th, i){
+      var t = th.textContent.trim();
+      if (t) columnas.push({ i: i, t: t });
+    });
+    if (!columnas.length) return;
+
+    var barra = wrap.previousElementSibling;
+    if (!barra || !barra.classList.contains("orden-movil")){
+      barra = document.createElement("div");
+      barra.className = "orden-movil";
+      barra.innerHTML = '<select aria-label="Ordenar por"></select>' +
+                        '<button type="button" class="btn sec chico" title="Dar vuelta el orden">↑</button>';
+      barra.querySelector("select").onchange = function(){ _ordenarDesdeBarra(tabla, barra); };
+      barra.querySelector("button").onclick  = function(){
+        barra.dataset.dir = barra.dataset.dir === "-1" ? "1" : "-1";
+        _ordenarDesdeBarra(tabla, barra);
+      };
+      wrap.parentNode.insertBefore(barra, wrap);
+    }
+
+    var sel = barra.querySelector("select");
+    var opciones = columnas.map(function(c){ return '<option value="' + c.i + '">' + esc(c.t) + "</option>"; }).join("");
+    if (sel.dataset.opc !== opciones){
+      sel.innerHTML = '<option value="">Ordenar por…</option>' + opciones;
+      sel.dataset.opc = opciones;
+    }
+    /* La barra refleja el orden que ya tenga la tabla, venga de donde venga. */
+    var o = _ordenTablas[clave];
+    sel.value = o ? String(o.col) : "";
+    barra.dataset.dir = o ? String(o.dir) : "1";
+    barra.querySelector("button").textContent = barra.dataset.dir === "-1" ? "↓" : "↑";
+  });
+}
+
+function _ordenarDesdeBarra(tabla, barra){
+  var col = parseInt(barra.querySelector("select").value, 10);
+  if (isNaN(col)) return;
+  var dir = barra.dataset.dir === "-1" ? -1 : 1;
+  var clave = _claveTabla(tabla);
+  if (clave) _ordenTablas[clave] = { col: col, dir: dir };
+  barra.querySelector("button").textContent = dir === -1 ? "↓" : "↑";
+  _ordenarTabla(tabla, col, dir);
+}
+
+/* Cuando la tabla se vuelve a dibujar se le devuelve el orden que tenía: si
+   no, cambiar un filtro lo perdía y había que volver a hacer clic. */
+var _ordenPendiente = false;
+function _programarOrden(){
+  if (_ordenPendiente || _ordenando) return;
+  _ordenPendiente = true;
+  requestAnimationFrame(function(){
+    _ordenPendiente = false;
+    Array.prototype.forEach.call(document.querySelectorAll("table"), function(t){
+      var o = _ordenTablas[_claveTabla(t)];
+      if (o) _ordenarTabla(t, o.col, o.dir);
+    });
+  });
+}
 
 function irA(tabId){
   if (ALL_TABS.indexOf(tabId) === -1) return;
@@ -4322,7 +4524,7 @@ function mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreAr
       '<td class="num"><b>' + pesos(porPeriodo[p].monto) + "</b></td>" +
       '<td class="num" style="color:var(--gris)">' + (ya ? pesos(ya) : "—") + "</td></tr>";
   });
-  html += '<tr style="background:var(--fondo)"><td><b>Total</b></td><td class="num"><b>' + registros.length +
+  html += '<tr class="fija" style="background:var(--fondo)"><td><b>Total</b></td><td class="num"><b>' + registros.length +
     '</b></td><td class="num"><b>' + pesos(totalGeneral) + "</b></td><td></td></tr>";
   html += "</tbody></table></div>";
 
@@ -4858,7 +5060,7 @@ function renderTablaComprobantes(){
   });
   /* Con un mes elegido, la suma de arriba es la de ese mes; el año entero se
      agrega abajo para no perderlo de vista. */
-  html += '<tr style="background:var(--fondo)"><td><b>Total ' + (mes ? periodoLargo(anio + mes) : anio) + "</b></td>";
+  html += '<tr class="fija" style="background:var(--fondo)"><td><b>Total ' + (mes ? periodoLargo(anio + mes) : anio) + "</b></td>";
   if (tipoF !== "recibido") html += '<td class="num"><b>' + pesos(sumE) + "</b></td><td></td>";
   if (tipoF !== "emitido")  html += '<td class="num"><b>' + pesos(sumR) + "</b></td><td></td>";
   html += "<td></td></tr>";
@@ -5010,7 +5212,7 @@ function renderRecat(){
   });
 
   var totalFact = analisis.reduce(function(a,b){ return a + b.ingresos; }, 0);
-  html += '<tr style="background:var(--fondo)"><td><b>' + analisis.length + " clientes</b></td><td></td>" +
+  html += '<tr class="fija" style="background:var(--fondo)"><td><b>' + analisis.length + " clientes</b></td><td></td>" +
     '<td class="num"><b>' + pesos(totalFact) + "</b></td><td colspan=6></td></tr>";
   $("tablaRecat").innerHTML = html + "</tbody></table></div>";
 }
@@ -5132,7 +5334,7 @@ function renderLiquidacion(){
         : "") + "</td></tr>";
   });
 
-  html += '<tr style="background:var(--fondo)"><td><b>Totales</b></td>' +
+  html += '<tr class="fija" style="background:var(--fondo)"><td><b>Totales</b></td>' +
     IMPUESTOS.map(function(i){ return '<td class="num"><b>' + pesos(totales[i.clave]) + "</b></td>"; }).join("") +
     '<td class="num"><b>' + pesos(totales.general) + "</b></td><td colspan=3></td></tr>";
   $("tablaLiquidacion").innerHTML = html + "</tbody></table></div>";
@@ -8505,7 +8707,7 @@ function renderSocios(){
        asignado no se le imputan a nadie. */
     var repartido = 0;
     ids.forEach(function(sid){ repartido += porSocio[sid] || 0; });
-    h += '<tr style="background:var(--fondo)"><td><b>Totales</b></td><td></td>' +
+    h += '<tr class="fija" style="background:var(--fondo)"><td><b>Totales</b></td><td></td>' +
       '<td class="num"><b>' + (Math.round(sumaGeneral * 100) / 100) + "%</b></td><td></td>" +
       '<td class="num"><b>' + pesos(repartido) + "</b>" +
       (cobradoTotal - repartido > 0.5
@@ -8911,7 +9113,7 @@ function renderCaja(){
       "</td></tr>";
   });
 
-  html += '<tr style="background:var(--fondo)"><td colspan="5"><b>Totales de ' + periodoLargo(per) + "</b></td>" +
+  html += '<tr class="fija" style="background:var(--fondo)"><td colspan="5"><b>Totales de ' + periodoLargo(per) + "</b></td>" +
     '<td class="num"><b style="color:var(--verde)">' + pesos(ing) + "</b></td>" +
     '<td class="num"><b style="color:var(--rojo)">' + pesos(egr) + "</b></td>" +
     '<td class="num"><b>' + pesos(ing - egr) + "</b></td><td></td></tr>";
