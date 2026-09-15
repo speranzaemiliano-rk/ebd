@@ -2227,7 +2227,18 @@ function cargarTodo(){
     ref("totales").once("value"),
     ref("liquidaciones").once("value"),
     ref("escalas").once("value"),
-    ref("config").once("value"),
+    /* Los hijos de config uno por uno y NO el nodo entero: adentro vive la
+       tabla de alícuotas de IIBB, que son mil actividades y más de 100 KB. Si
+       viniera con el arranque, cada pantalla del sistema pagaría el peso de
+       una tabla que se usa en dos. Se carga sola cuando hace falta
+       (asegurarAlicuotas). */
+    Promise.all(["estudio","emailjs","plantilla","backend","boveda"].map(function(k){
+      return ref("config/" + k).once("value").then(function(s){ return [k, s.val()]; });
+    })).then(function(pares){
+      var cfg = {};
+      pares.forEach(function(par){ if (par[1] !== null) cfg[par[0]] = par[1]; });
+      return { val: function(){ return cfg; } };
+    }),
     ref("honorarios").once("value"),
     ref("caja").once("value"),
     ref("proveedores").once("value"),
@@ -2903,7 +2914,10 @@ function abrirBovedaDesdeFicha(idCliente){
 
    Con `id`, lo guardado es la base y la precarga lo pisa campo por campo. Sin
    `id` —cliente nuevo—, la precarga es todo lo que hay. */
+var _formClienteId = null;   /* para poder ubicar el tramo de facturación */
+
 function abrirFormCliente(id, precarga){
+  _formClienteId = id || null;
   var c = id ? Object.assign({}, ESTADO.clientes[id] || {}, precarga || {})
              : (precarga || null);
   abrirModal(id ? "Editar cliente" : "Nuevo cliente", formCliente(c, id), [
@@ -2925,6 +2939,7 @@ function abrirFormCliente(id, precarga){
   pintarSugNaes();
   pintarBusquedaNaes();
   pintarSugAlic();
+  asegurarTodasLasAlicuotas().then(function(){ if ($("sugAlic_arba")) pintarSugAlic(); });
   cargarClavesEnFicha(id, !!precarga);
   /* Con datos precargados el formulario arranca "sucio" a propósito: lo que
      leyó una constancia, o lo que sobrevivió a un paso por la bóveda, son
@@ -3794,6 +3809,12 @@ $("asTexto").onkeydown = function(e){
 function fichaPdfCliente(id){
   var JS = window.jspdf && window.jspdf.jsPDF;
   if (!JS){ toast("No se pudo cargar el armador de PDF. Probá recargar la página.", "error"); return; }
+  /* La ficha imprime la alícuota que se aplica, así que la tabla tiene que
+     estar en memoria antes de dibujar. */
+  if (!alicuotasEnMemoria("arba") || !alicuotasEnMemoria("agip")){
+    asegurarTodasLasAlicuotas().then(function(){ fichaPdfCliente(id); });
+    return;
+  }
 
   var c = ESTADO.clientes[id];
   var corte = cortesDisponibles()[0];
@@ -3873,7 +3894,7 @@ function fichaPdfCliente(id){
          conviene que figure la que se aplica, no sólo la escrita a mano. */
       var ef = clave ? alicuotaEfectiva(c, clave) : null;
       if (ef && ef.exento) txt += "  —  exento según la tabla de " + _cortoJuris(clave);
-      else if (ef) txt += "  —  alícuota " + ef.alicuota + "%" +
+      else if (ef) txt += "  —  alícuota " + pct(ef.alicuota) +
         (ef.minimo ? ", mínimo " + pesos(ef.minimo) : "") +
         (ef.origen === "ficha" ? "" : " (" + origenAlicuota(ef, clave) + ")");
     }
@@ -5124,7 +5145,8 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
   /* La alícuota puede salir de la ficha o de la tabla de la jurisdicción, por
      el código de actividad. De donde salga se dice abajo del cálculo: en una
      liquidación de impuestos importa tanto el número como su procedencia. */
-  var ef = alicuotaEfectiva(c, clave);
+  var facturacion = ingresosParaTramo(clienteId, periodo);
+  var ef = alicuotaEfectiva(c, clave, facturacion.monto);
 
   if (!ef){
     var sinTabla = (clave === "arba" || clave === "agip") &&
@@ -5156,7 +5178,7 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
   var ret      = parseFloat(d.retenciones) || 0;
   var aPagar   = Math.max(0, base - ret);
 
-  var detalle = pesos(ventas) + " × " + ef.alicuota + "% = <b>" + pesos(porAlic) + "</b>";
+  var detalle = pesos(ventas) + " × " + pct(ef.alicuota) + " = <b>" + pesos(porAlic) + "</b>";
   if (usoMinimo) detalle += "; como es menor al mínimo de " + pesos(ef.minimo) + ", se toma el mínimo";
   if (ret)       detalle += "; menos " + pesos(ret) + " de retenciones";
 
@@ -5164,7 +5186,9 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
     " → <b>" + pesos(aPagar) + "</b> " +
     '<a href="#" onclick="document.getElementById(\'lq_' + clave + '_monto\').value=' + aPagar.toFixed(2) +
     ';return false;">Usar este importe</a>' +
-    (ef.origen === "ficha" ? "" : '<div class="ayuda" style="margin-top:6px">' + esc(origenAlicuota(ef, clave)) + "</div>") +
+    (ef.origen === "ficha" ? "" : '<div class="ayuda" style="margin-top:6px">' + esc(origenAlicuota(ef, clave)) +
+      (ef.tramo && facturacion.base ? ", según " + esc(facturacion.base) + " (" + pesos(facturacion.monto) + ")" : "") +
+      "</div>") +
     "</div></div>";
 }
 
@@ -5223,6 +5247,13 @@ function leerArchivo(input, maxMB){
 }
 
 function editarLiquidacion(clienteId, periodo){
+  /* El cálculo de IIBB sale de la tabla de alícuotas, que se baja sola la
+     primera vez. Sin esto el primer cliente que se abre calcularía a mano y el
+     segundo ya no: una inconsistencia difícil de entender desde afuera. */
+  if (!alicuotasEnMemoria("arba") || !alicuotasEnMemoria("agip")){
+    asegurarTodasLasAlicuotas().then(function(){ editarLiquidacion(clienteId, periodo); });
+    return;
+  }
   var c = ESTADO.clientes[clienteId], liq = liqDe(clienteId, periodo);
   var html = "";
 
@@ -5767,8 +5798,41 @@ function _cortoJuris(j){
   return String(j || "").toUpperCase();
 }
 
+/* Los porcentajes se escriben como acá se escriben: 3,5% y no 3.5%. */
+function pct(n){
+  if (n === null || n === undefined || isNaN(n)) return "";
+  return String(n).replace(".", ",") + "%";
+}
+
 function alicTabla(juris){ return ((ESTADO.config.alicuotas || {})[juris]) || {}; }
 function alicFilas(juris){ return alicTabla(juris).filas || {}; }
+
+/* La tabla NO viene con el arranque: son mil actividades y más de 100 KB, y se
+   usa en dos pantallas. Se baja la primera vez que alguna la necesita y queda
+   en memoria. Todo lo que dependa de ella tiene que pasar por acá antes de
+   pintar. */
+var _alicCargadas = {};   /* juris -> promesa en curso o cumplida */
+
+function asegurarAlicuotas(juris){
+  if (_alicCargadas[juris]) return _alicCargadas[juris];
+  _alicCargadas[juris] = ref("config/alicuotas/" + juris).once("value").then(function(snap){
+    if (!ESTADO.config.alicuotas) ESTADO.config.alicuotas = {};
+    ESTADO.config.alicuotas[juris] = snap.val() || {};
+    return ESTADO.config.alicuotas[juris];
+  }).catch(function(e){
+    _alicCargadas[juris] = null;   /* que se pueda reintentar */
+    throw e;
+  });
+  return _alicCargadas[juris];
+}
+
+/* Las dos juntas, sin que el error de una tumbe a la otra. */
+function asegurarTodasLasAlicuotas(){
+  return Promise.all(JURIS_ALIC.map(function(j){
+    return asegurarAlicuotas(j.clave).catch(function(){ return null; });
+  }));
+}
+function alicuotasEnMemoria(juris){ return !!_alicCargadas[juris]; }
 
 /* El id de la fila es el código pelado. Así reimportar el anexo del año que
    viene actualiza los porcentajes en vez de duplicar mil actividades. */
@@ -5805,22 +5869,66 @@ function buscarAlicuota(juris, codigo){
   return null;
 }
 
+/* ---------- LOS TRAMOS POR FACTURACIÓN ----------
+   En ARBA la alícuota de una misma actividad cambia según cuánto facturó el
+   contribuyente en el año anterior (art. 28 de la Ley Impositiva). Un estudio
+   jurídico chico paga 3,5% y uno grande 4,5% con el mismo código. Ignorar el
+   tramo sería cobrarle de más a casi todos los clientes de un estudio que
+   atiende monotributistas.
+
+   `tramos` es [[hasta, alícuota], …] ordenado de menor a mayor, con `hasta`
+   null en el último ("de ahí para arriba"). */
+function tramoDe(fila, ingresos){
+  var tr = (fila || {}).tramos;
+  if (!tr || !tr.length || ingresos === null || ingresos === undefined) return null;
+  for (var i = 0; i < tr.length; i++){
+    if (tr[i][0] === null || tr[i][0] === undefined || ingresos <= tr[i][0]){
+      return { alicuota: tr[i][1], hasta: tr[i][0], indice: i, total: tr.length };
+    }
+  }
+  return { alicuota: tr[tr.length-1][1], hasta: tr[tr.length-1][0], indice: tr.length-1, total: tr.length };
+}
+
+/* Lo facturado que mira ARBA es el año calendario anterior. Si de ese año no
+   hay nada cargado —cliente nuevo, o el estudio lo tomó hace poco— se usan los
+   últimos 12 meses y se avisa, porque no es lo mismo. */
+function ingresosParaTramo(clienteId, periodo){
+  if (!clienteId) return { monto: null, base: "" };
+  var anioAnterior = parseInt(String(periodo || periodoHoy()).slice(0,4), 10) - 1;
+  var meses = [];
+  for (var m = 1; m <= 12; m++) meses.push(anioAnterior + String(m).padStart(2,"0"));
+  var delAnio = facturadoEn(clienteId, meses);
+  if (delAnio) return { monto: delAnio, base: "lo facturado en " + anioAnterior };
+
+  var ult12 = facturadoEn(clienteId, ventana12(periodo || periodoHoy()));
+  if (ult12) return { monto: ult12, base: "los últimos 12 meses (no hay datos de " + anioAnterior + ")" };
+  return { monto: null, base: "" };
+}
+
 /* La alícuota que se usa para calcular, en orden de prioridad:
    1) la de la ficha del cliente —la puso una persona, manda siempre—,
-   2) la de la tabla, por el código de actividad,
+   2) la de la tabla, por el código de actividad y el tramo de facturación,
    3) la general (subsidiaria) de la jurisdicción.
-   Devuelve null si no hay ninguna: ahí el importe va a mano, como antes. */
-function alicuotaEfectiva(cli, clave){
+   Devuelve null si no hay ninguna: ahí el importe va a mano, como antes.
+   `ingresos` es lo facturado que define el tramo; si no se sabe, va null y se
+   usa la alícuota general de la actividad. */
+function alicuotaEfectiva(cli, clave, ingresos){
   var conf = ((cli || {}).iibb || {})[clave] || {};
   if (conf.alicuota) return { alicuota: conf.alicuota, minimo: conf.minimo || null, origen: "ficha" };
   if (clave !== "arba" && clave !== "agip") return null;   /* la tasa municipal no tiene tabla */
 
+  var t = alicTabla(clave);
   var f = buscarAlicuota(clave, (cli || {}).codigoNAES);
   if (f && f.exento) return { alicuota: 0, minimo: null, origen: "tabla", fila: f, exento: true };
-  if (f && f.alicuota){
-    return { alicuota: f.alicuota, minimo: (conf.minimo || f.minimo || null), origen: "tabla", fila: f };
+  if (f && (f.alicuota || f.alicuota === 0)){
+    var tr = tramoDe(f, ingresos === undefined ? null : ingresos);
+    return {
+      alicuota: tr ? tr.alicuota : f.alicuota,
+      minimo: (conf.minimo || f.minimo || t.minimo || null),
+      origen: "tabla", fila: f, tramo: tr,
+      sinTramo: !!((f.tramos || []).length) && !tr   /* hay tramos pero no sabemos cuánto facturó */
+    };
   }
-  var t = alicTabla(clave);
   if (t.general) return { alicuota: t.general, minimo: (conf.minimo || t.minimo || null), origen: "general" };
   return null;
 }
@@ -5833,9 +5941,16 @@ function origenAlicuota(ef, juris){
   if (ef.origen === "general") return "alícuota general de " + _cortoJuris(juris) +
     (alicTabla(juris).vigencia ? " " + alicTabla(juris).vigencia : "") + " (la actividad no figura en la tabla)";
   var f = ef.fila || {};
-  return "tabla de " + _cortoJuris(juris) + (alicTabla(juris).vigencia ? " " + alicTabla(juris).vigencia : "") +
+  var txt = "tabla de " + _cortoJuris(juris) + (alicTabla(juris).vigencia ? " " + alicTabla(juris).vigencia : "") +
     ", código " + f.codigo + (f.exacto ? "" : " (renglón general del rubro)") +
     (descActividad(f.codigo, f.desc) ? " — " + descActividad(f.codigo, f.desc) : "");
+  if (ef.tramo){
+    txt += "; tramo " + (ef.tramo.indice + 1) + " de " + ef.tramo.total +
+      (ef.tramo.hasta ? " (hasta " + pesos(ef.tramo.hasta) + " facturados)" : " (el más alto)");
+  } else if (ef.sinTramo){
+    txt += "; alícuota general de la actividad porque no hay facturación cargada para ubicar el tramo";
+  }
+  return txt;
 }
 
 /* ---------- LA PANTALLA ---------- */
@@ -5846,6 +5961,14 @@ var _alicEdit = {};
 
 function renderAlicuotas(){
   var juris = $("selJurisAlic").value || "arba";
+  if (!alicuotasEnMemoria(juris)){
+    $("tablaAlicuotas").innerHTML = '<div class="vacio"><div class="ico">⏳</div><div>Buscando la tabla…</div></div>';
+    asegurarAlicuotas(juris).then(renderAlicuotas).catch(function(e){
+      $("tablaAlicuotas").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>No pude leer la tabla: ' +
+        esc(e.message || String(e)) + "</div></div>";
+    });
+    return;
+  }
   var t = alicTabla(juris);
   $("alicVigencia").value = t.vigencia || "";
   $("alicGeneral").value  = t.general  || "";
@@ -5875,6 +5998,18 @@ function _alicCodigosVista(juris){
   });
   out.sort();
   return out;
+}
+
+/* Los tramos, en una línea. No se editan a mano —son la escala del art. 28 y
+   vienen del archivo oficial—, pero hay que poder verlos. */
+function textoTramos(f){
+  var tr = (f || {}).tramos;
+  if (!tr || !tr.length) return "";
+  return tr.map(function(t, i){
+    var p = pct(t[1]);
+    if (t[0] === null || t[0] === undefined) return (i ? "más: " : "") + p;
+    return "hasta " + pesosCorto(t[0]) + ": " + p;
+  }).join(" · ");
 }
 
 var ALIC_TOPE_VISTA = 300;
@@ -5907,8 +6042,8 @@ function pintarAlicuotas(){
   var puede = esAdminRol();
   var est = 'text-align:right;padding:6px 9px;border:1px solid var(--borde);border-radius:6px';
   var html = '<div class="tabla-wrap"><table><thead><tr>' +
-    "<th>Código</th><th>Actividad</th><th class=num>Alícuota %</th><th class=num>Mínimo</th>" +
-    "<th>Exenta</th><th>Notas</th>" + (puede ? "<th></th>" : "") + "</tr></thead><tbody>";
+    "<th>Código</th><th>Actividad</th><th class=num>Alícuota %</th><th>Por facturación</th>" +
+    "<th class=num>Mínimo</th><th>Exenta</th><th>Notas</th>" + (puede ? "<th></th>" : "") + "</tr></thead><tbody>";
 
   mostrados.forEach(function(cod){
     var f = _alicFilaDe(juris, cod) || {};
@@ -5927,6 +6062,7 @@ function pintarAlicuotas(){
         '" style="width:100%;min-width:220px;padding:6px 9px;border:1px solid var(--borde);border-radius:6px"></td>' +
       '<td class="num"><input type="number" step="0.001" data-cod="' + cod + '" data-campo="alicuota" value="' +
         (f.alicuota || "") + '" style="width:90px;' + est + '"></td>' +
+      '<td style="font-size:12.5px;color:var(--gris);white-space:nowrap">' + esc(textoTramos(f) || "—") + "</td>" +
       '<td class="num"><input type="number" step="0.01" data-cod="' + cod + '" data-campo="minimo" value="' +
         (f.minimo || "") + '" style="width:110px;' + est + '"></td>' +
       '<td style="text-align:center"><input type="checkbox" data-cod="' + cod + '" data-campo="exento"' +
@@ -5957,6 +6093,9 @@ function _alicTomarInput(inp){
     exento:   !!base.exento,
     notas:    base.notas || ""
   };
+  /* Los tramos por facturación no se editan en la grilla, pero viajan con la
+     fila: sin esto, tocar una descripción borraría la escala del art. 28. */
+  if (base.tramos) f.tramos = base.tramos;
   if (inp.dataset.campo === "exento") f.exento = inp.checked;
   else if (inp.dataset.campo === "desc" || inp.dataset.campo === "notas") f[inp.dataset.campo] = inp.value.trim();
   else f[inp.dataset.campo] = _numAr(inp.value);
@@ -6127,6 +6266,7 @@ function _colQueDiga(enc, claves){
 
 function parsearAlicuotasFilas(filas){
   if (!filas || !filas.length) return [];
+  if (esAlicuotariaArba(filas[0])) return parsearAlicuotariaArba(filas);
   /* El encabezado no siempre está en la primera fila: los anexos traen dos o
      tres renglones de título arriba. Se busca en las primeras diez. */
   var iEnc = -1, enc = [];
@@ -6163,17 +6303,135 @@ function parsearAlicuotasFilas(filas){
   return out;
 }
 
+/* ---------- EL ARCHIVO DE ARBA ----------
+   ARBA publica el nomenclador NAIIB-18 en arba.gov.ar/archivos/Publicaciones/naiib.html.
+   El archivo «Alicuotaria» se llama .xls pero adentro es texto separado por
+   tabulaciones, en ISO-8859, con TODOS los años y varias filas por actividad:
+   una «G» con la alícuota general y una «N» por cada tramo de facturación del
+   art. 28. Se queda con el período más nuevo y arma una fila por actividad. */
+function _encNorm(v){
+  return _sinTildes(String(v == null ? "" : v)).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+function esAlicuotariaArba(enc){
+  var e = (enc || []).map(_encNorm);
+  return e.indexOf("tipoalicuota") !== -1 && e.indexOf("periodovigentedesde") !== -1 && e.indexOf("codigo") !== -1;
+}
+
+var ALIC_TOPE_ARBA = 9999999999999;   /* el "hasta" del último tramo en el archivo */
+
+function parsearAlicuotariaArba(filas){
+  var enc = (filas[0] || []).map(_encNorm);
+  var c = {};
+  ["codigo","descripcion","periodovigentedesde","tipoalicuota","montominimoalicuota",
+   "alicuota","montoinferioralicuota","montosuperioralicuota","articulo"].forEach(function(n){
+    c[n] = enc.indexOf(n);
+  });
+
+  /* Primero cuál es el período más nuevo que trae el archivo. */
+  var periodo = "";
+  for (var i = 1; i < filas.length; i++){
+    var p = String(filas[i][c.periodovigentedesde] || "").trim();
+    if (p && p > periodo) periodo = p;
+  }
+  if (!periodo) return [];
+
+  var act = {};
+  for (var j = 1; j < filas.length; j++){
+    var f = filas[j];
+    if (String(f[c.periodovigentedesde] || "").trim() !== periodo) continue;
+    var cod = _alicClave(f[c.codigo]);
+    if (!cod) continue;
+    var a = act[cod] || (act[cod] = {
+      codigo: cod,
+      desc: String(f[c.descripcion] || "").replace(/\s+/g, " ").trim(),
+      alicuota: null, minimo: null, exento: false, notas: "", _tr: []
+    });
+    var alic = _numAr(f[c.alicuota]);
+    if (String(f[c.tipoalicuota] || "").trim().toUpperCase() === "G"){
+      a.alicuota = alic;
+      a.minimo   = _numAr(f[c.montominimoalicuota]);
+      continue;
+    }
+    var inf = _numAr(f[c.montoinferioralicuota]);
+    var sup = _numAr(f[c.montosuperioralicuota]);
+    /* Ojo: no todo renglón "N" es un tramo por facturación. Los que traen los
+       dos montos en cero son disposiciones puntuales (art. 134, art. 22, …)
+       que no dependen de cuánto facturó nadie. Tomarlos como tramo metía un
+       "hasta $0" en el medio de la escala y le cambiaba la alícuota a todos.
+       Se guardan como nota, para no perderlos de vista. */
+    if (!inf && !sup){
+      var art = String(f[c.articulo] || "").trim();
+      if (art) a.notas = (a.notas ? a.notas + "; " : "") + art + ": " + pct(alic);
+      continue;
+    }
+    a._tr.push([inf, sup, alic]);
+  }
+
+  /* El tramo se define por su TECHO, así que se ordena por ahí y no por el
+     piso: el archivo trae pisos repetidos (917.163.000 y 917.163.000,01) que
+     ordenados al revés dejaban la escala dada vuelta. */
+  var techo = function(v){ return (v === null || v === undefined || v >= ALIC_TOPE_ARBA) ? null : v; };
+  var out = Object.keys(act).sort().map(function(cod){
+    var a = act[cod];
+    a._tr.sort(function(x, y){
+      var hx = techo(x[1]) === null ? Infinity : techo(x[1]);
+      var hy = techo(y[1]) === null ? Infinity : techo(y[1]);
+      return hx - hy;
+    });
+    var tr = [];
+    a._tr.forEach(function(t){
+      var h = techo(t[1]), ult = tr[tr.length - 1];
+      /* El mismo tramo repetido en el archivo (pasa con el último) se ignora. */
+      if (ult && ult[0] === h && ult[1] === t[2]) return;
+      tr.push([h, t[2]]);
+    });
+    if (tr.length) a.tramos = tr;
+    delete a._tr;
+    return a;
+  }).filter(function(a){ return a.alicuota !== null || a.tramos; });
+  out._periodo = periodo;
+  return out;
+}
+
+/* El archivo de ARBA viene en ISO-8859 aunque se llame .xls. Se decide por el
+   contenido y no por el nombre: un .xls de verdad arranca con la firma de OLE2
+   o de ZIP. */
+function _esExcelBinario(buf){
+  var b = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+  return (b[0] === 0xD0 && b[1] === 0xCF) || (b[0] === 0x50 && b[1] === 0x4B);
+}
+function _textoDeBuffer(buf){
+  var u8 = new Uint8Array(buf);
+  var t = new TextDecoder("utf-8").decode(u8);
+  /* Si aparece el rombo de reemplazo, no era UTF-8. */
+  if (t.indexOf("\uFFFD") !== -1) t = new TextDecoder("iso-8859-1").decode(u8);
+  return t;
+}
+function _filasDeTexto(txt){
+  return txt.split(/\r?\n/).filter(function(l){ return l.length; })
+            .map(function(l){ return l.split("\t"); });
+}
+
 function abrirImportarAlicuotas(){
   if (!esAdminRol()){ toast("Sólo un administrador puede cargar la tabla", "error"); return; }
   var juris = $("selJurisAlic").value || "arba";
   _alicImport = [];
   abrirModal("Cargar la tabla de " + _cortoJuris(juris),
-    '<div class="aviso info"><span>ℹ️</span><div>La tabla sale del <b>anexo de alícuotas de la Ley Impositiva</b> o del <b>nomenclador</b> del organismo. ' +
-      "Tres caminos: subir el <b>Excel o CSV</b> del nomenclador, <b>pegar el texto</b> del anexo, o subir un <b>PDF</b>. " +
+    (TABLAS_OFICIALES[juris]
+      ? '<div class="aviso ok"><span>⭐</span><div><b>Atajo:</b> la tabla oficial de ' +
+          esc(TABLAS_OFICIALES[juris].nombre) + ' ya viene con el sistema, con las ' +
+          esc(TABLAS_OFICIALES[juris].cuantas) + ' actividades del nomenclador y los tramos por facturación. ' +
+          '<button type="button" class="btn sec chico" id="iaOficial" style="margin-top:8px">Traer la tabla de ' +
+          esc(TABLAS_OFICIALES[juris].nombre) + "</button></div></div>"
+      : "") +
+    '<div class="aviso info"><span>ℹ️</span><div>O la cargás vos. La tabla sale del <b>anexo de alícuotas de la Ley Impositiva</b> o del <b>nomenclador</b> del organismo. ' +
+      "Tres caminos: subir el <b>archivo del nomenclador</b> (el .xls de ARBA entra tal cual), <b>pegar el texto</b> del anexo, o subir un <b>PDF</b>. " +
       "Del PDF se intenta primero leer el texto solo; si no alcanza, lo lee la IA. " +
       "Antes de guardar vas a ver todo en una tabla que podés corregir.</div></div>" +
-    '<div class="campo"><label>Archivo (Excel, CSV o PDF)</label>' +
-      '<input type="file" id="iaArchivo" accept=".xlsx,.xlsm,.xls,.csv,.txt,.pdf"></div>' +
+    '<div class="campo"><label>Archivo (Excel, CSV, el .xls de ARBA o un PDF)</label>' +
+      '<input type="file" id="iaArchivo" accept=".xlsx,.xlsm,.xls,.csv,.txt,.tsv,.pdf">' +
+      '<div class="ayuda">El archivo <b>Alicuotaria</b> del nomenclador NAIIB-18 de ARBA entra tal cual, sin abrirlo ni convertirlo: ' +
+      "se queda con el período más nuevo y arma los tramos por facturación. Pesa varios MB, así que tarda unos segundos.</div></div>" +
     '<div class="campo"><label>…o pegá acá el texto del anexo</label>' +
       '<textarea id="iaTexto" rows="7" placeholder="691001 Servicios jurídicos 5,00&#10;692000 Servicios de contabilidad 5,00"></textarea>' +
       '<div class="ayuda">Un renglón por actividad. No importa el orden de las columnas mientras el código vaya antes del nombre.</div></div>' +
@@ -6187,6 +6445,51 @@ function abrirImportarAlicuotas(){
       { texto:"Guardar en la tabla", accion:confirmarImportAlicuotas, id:"iaBtnGuardar" }
     ], "ancho");
   $("iaBtnGuardar").disabled = true;
+  if ($("iaOficial")) $("iaOficial").onclick = traerTablaOficial;
+}
+
+/* ---------- LA TABLA OFICIAL QUE VIENE CON EL SISTEMA ----------
+   Es el archivo «Alicuotaria» del nomenclador NAIIB-18 de ARBA, ya interpretado
+   y guardado en el repositorio. Los porcentajes son los del archivo oficial, no
+   una estimación: por eso queda anotada la fuente, para poder chequearlo.
+   Cuando salga la ley del año que viene se baja el archivo nuevo de ARBA y se
+   carga con «Interpretar»: el sistema lo entiende igual. */
+var TABLAS_OFICIALES = {
+  arba: { archivo: "datos/alicuotas-arba-2026.json", nombre: "ARBA 2026", cuantas: "1.022" }
+};
+
+function traerTablaOficial(){
+  var juris = $("selJurisAlic").value || "arba";
+  var t = TABLAS_OFICIALES[juris];
+  if (!t){ toast("Todavía no viene una tabla oficial para " + _cortoJuris(juris), "error"); return; }
+
+  $("iaOficial").disabled = true;
+  _iaEstado('<div class="aviso info"><span>⏳</span><div>Trayendo la tabla oficial de ' + esc(t.nombre) + "…</div></div>");
+  fetch(t.archivo, { cache: "no-store" }).then(function(r){
+    if (!r.ok) throw new Error("no la pude bajar (HTTP " + r.status + ")");
+    return r.json();
+  }).then(function(d){
+    if (d.vigencia) $("alicVigencia").value = d.vigencia;
+    if (d.fuente)   $("alicFuente").value   = d.fuente;
+    if (d.minimo)   $("alicMinimo").value   = d.minimo;
+    var filas = Object.keys(d.filas || {}).sort().map(function(cod){
+      var f = d.filas[cod] || {};
+      return {
+        codigo: cod, desc: f.desc || "",
+        alicuota: (f.alicuota === undefined ? null : f.alicuota),
+        minimo:   (f.minimo   === undefined ? null : f.minimo),
+        exento: !!f.exento, notas: f.notas || "",
+        tramos: f.tramos || null
+      };
+    });
+    $("iaOficial").disabled = false;
+    _alicImport = _alicUnificar(filas);
+    pintarPreviewAlicuotas();
+  }).catch(function(e){
+    $("iaOficial").disabled = false;
+    _iaEstado('<div class="aviso bad"><span>⚠️</span><div>No pude traer la tabla oficial: ' +
+      esc(e.message || String(e)) + ". Podés cargarla igual con el archivo de ARBA o pegando el texto.</div></div>");
+  });
 }
 $("btnImportarAlic").onclick = abrirImportarAlicuotas;
 
@@ -6245,25 +6548,6 @@ function interpretarAlicuotas(){
 
   if (!f){ listo(parsearAlicuotasTexto(txt)); return; }
 
-  if (esExcel(f)){
-    if (typeof XLSX === "undefined"){ mal(new Error("No se pudo cargar el lector de Excel")); return; }
-    var lec = new FileReader();
-    lec.onload = function(e){
-      try {
-        var libro = XLSX.read(new Uint8Array(e.target.result), { type:"array", cellDates:true });
-        var todas = [];
-        libro.SheetNames.forEach(function(n){
-          todas = todas.concat(XLSX.utils.sheet_to_json(libro.Sheets[n], { header:1, raw:true, defval:"" })
-                     .map(function(fl){ return fl.map(celdaATexto); }));
-        });
-        listo(parsearAlicuotasFilas(todas));
-      } catch (err){ mal(err); }
-    };
-    lec.onerror = function(){ mal(new Error("No pude leer el archivo")); };
-    lec.readAsArrayBuffer(f);
-    return;
-  }
-
   if (/\.pdf$/i.test(f.name)){
     textoDePdf(f).then(function(r){
       var filas = parsearAlicuotasTexto(r.texto);
@@ -6277,17 +6561,39 @@ function interpretarAlicuotas(){
     return;
   }
 
-  /* CSV o texto plano */
-  var lecT = new FileReader();
-  lecT.onload = function(e){
-    var filas;
-    try { filas = parsearAlicuotasFilas(parseCSV(e.target.result)); }
-    catch (err){ filas = parsearAlicuotasTexto(e.target.result); }
-    if (!filas.length) filas = parsearAlicuotasTexto(e.target.result);
+  /* Todo lo demás se lee como bytes y se decide por el CONTENIDO, no por el
+     nombre: el archivo de ARBA se llama .xls y adentro es texto separado por
+     tabulaciones en ISO-8859. Confiar en la extensión era mandarlo al lector de
+     Excel, que no lo abre. */
+  var lec = new FileReader();
+  lec.onload = function(e){
+    var buf = e.target.result;
+    if (_esExcelBinario(buf)){
+      if (typeof XLSX === "undefined"){ mal(new Error("No se pudo cargar el lector de Excel")); return; }
+      try {
+        var libro = XLSX.read(new Uint8Array(buf), { type:"array", cellDates:true });
+        var todas = [];
+        libro.SheetNames.forEach(function(n){
+          todas = todas.concat(XLSX.utils.sheet_to_json(libro.Sheets[n], { header:1, raw:true, defval:"" })
+                     .map(function(fl){ return fl.map(celdaATexto); }));
+        });
+        listo(parsearAlicuotasFilas(todas));
+      } catch (err){ mal(err); }
+      return;
+    }
+
+    var texto = _textoDeBuffer(buf);
+    var porTab = _filasDeTexto(texto);
+    if (esAlicuotariaArba(porTab[0] || [])){ listo(parsearAlicuotariaArba(porTab)); return; }
+
+    var filas = [];
+    try { filas = parsearAlicuotasFilas(parseCSV(texto)); } catch (err){ filas = []; }
+    if (!filas.length && porTab.length > 1) filas = parsearAlicuotasFilas(porTab);
+    if (!filas.length) filas = parsearAlicuotasTexto(texto);
     listo(filas);
   };
-  lecT.onerror = function(){ mal(new Error("No pude leer el archivo")); };
-  lecT.readAsText(f, "UTF-8");
+  lec.onerror = function(){ mal(new Error("No pude leer el archivo")); };
+  lec.readAsArrayBuffer(f);
 }
 
 /* Un mismo código puede venir dos veces (el anexo lo repite por jurisdicción o
@@ -6303,11 +6609,38 @@ function _alicUnificar(filas){
     var cod = _alicClave(f.codigo);
     if (!cod) return;
     if (mapa[cod]) repetidos++;
-    mapa[cod] = { codigo: cod, desc: descActividad(cod, f.desc), alicuota: f.alicuota, minimo: f.minimo, exento: !!f.exento, notas: f.notas || "" };
+    mapa[cod] = { codigo: cod, desc: descActividad(cod, f.desc), alicuota: f.alicuota, minimo: f.minimo,
+                  exento: !!f.exento, notas: f.notas || "" };
+    if (f.tramos && f.tramos.length) mapa[cod].tramos = f.tramos;
   });
   var out = Object.keys(mapa).sort().map(function(c){ return mapa[c]; });
   out._repetidos = repetidos;
+  if (filas && filas._periodo) out._periodo = filas._periodo;
   return out;
+}
+
+/* El archivo sabe más que la pantalla: si trae el período y un mínimo igual
+   para todas las actividades, se completan los campos de arriba que hayan
+   quedado vacíos. Sin esto, cargar el archivo del año que viene dejaba la
+   tabla sin vigencia y —peor— sin el mínimo mensual, que es el que hace que a
+   un cliente chico no le liquide dos pesos. */
+function _alicCompletarCabecera(filas){
+  var juris = $("selJurisAlic").value || "arba";
+  if (filas._periodo && !$("alicVigencia").value.trim()){
+    $("alicVigencia").value = filas._periodo.slice(0, 4);
+  }
+  if (filas._periodo && !$("alicFuente").value.trim()){
+    $("alicFuente").value = "Archivo del nomenclador de " + _cortoJuris(juris) + ", período " + filas._periodo;
+  }
+  /* Sólo se sube a la cabecera si TODAS tienen el mismo mínimo. Si una sola lo
+     trae, es de esa actividad y ahí se queda. */
+  var mins = {}, conMinimo = 0;
+  filas.forEach(function(f){ if (f.minimo){ mins[String(f.minimo)] = 1; conMinimo++; } });
+  var claves = Object.keys(mins);
+  if (claves.length === 1 && conMinimo === filas.length && !$("alicMinimo").value.trim()){
+    $("alicMinimo").value = claves[0];
+    filas.forEach(function(f){ f.minimo = null; });
+  }
 }
 
 function pintarPreviewAlicuotas(){
@@ -6321,11 +6654,14 @@ function pintarPreviewAlicuotas(){
     $("iaBtnGuardar").disabled = true;
     return;
   }
+  _alicCompletarCabecera(filas);
+
   var yaHay = alicFilas(juris), pisa = 0;
   filas.forEach(function(f){ if (yaHay[f.codigo]) pisa++; });
 
   _iaEstado('<div class="aviso ok"><span>✓</span><div>Interpreté <b>' + filas.length + "</b> actividad" +
     (filas.length === 1 ? "" : "es") +
+    (filas._periodo ? " del período <b>" + esc(filas._periodo) + "</b> (el más nuevo del archivo)" : "") +
     (filas._repetidos ? " (" + filas._repetidos + " código/s repetido/s, quedó el último)" : "") +
     (pisa ? " · <b>" + pisa + "</b> ya estaban en la tabla y se van a actualizar" : "") +
     ". Revisalas antes de guardar: lo que corrijas acá es lo que se guarda.</div></div>");
@@ -6333,14 +6669,15 @@ function pintarPreviewAlicuotas(){
   var est = 'padding:5px 8px;border:1px solid var(--borde);border-radius:6px';
   var TOPE = 200;
   var html = '<div class="tabla-wrap" style="max-height:340px;overflow:auto"><table><thead><tr>' +
-    "<th></th><th>Código</th><th>Actividad</th><th class=num>Alícuota %</th><th class=num>Mínimo</th><th>Exenta</th>" +
-    "</tr></thead><tbody>";
+    "<th></th><th>Código</th><th>Actividad</th><th class=num>Alícuota %</th><th>Por facturación</th>" +
+    "<th class=num>Mínimo</th><th>Exenta</th></tr></thead><tbody>";
   filas.slice(0, TOPE).forEach(function(f, i){
     html += "<tr>" +
       '<td><input type="checkbox" class="ia-chk" data-i="' + i + '" checked></td>' +
       '<td><input type="text" class="ia-cod" data-i="' + i + '" value="' + esc(f.codigo) + '" style="width:90px;' + est + '"></td>' +
       '<td><input type="text" class="ia-desc" data-i="' + i + '" value="' + esc(f.desc) + '" style="width:100%;min-width:200px;' + est + '"></td>' +
       '<td class="num"><input type="number" step="0.001" class="ia-alic" data-i="' + i + '" value="' + (f.alicuota == null ? "" : f.alicuota) + '" style="width:85px;text-align:right;' + est + '"></td>' +
+      '<td style="font-size:12.5px;color:var(--gris);white-space:nowrap">' + esc(textoTramos(f) || "—") + "</td>" +
       '<td class="num"><input type="number" step="0.01" class="ia-min" data-i="' + i + '" value="' + (f.minimo == null ? "" : f.minimo) + '" style="width:105px;text-align:right;' + est + '"></td>' +
       '<td style="text-align:center"><input type="checkbox" class="ia-ex" data-i="' + i + '"' + (f.exento ? " checked" : "") + "></td>" +
       "</tr>";
@@ -6384,11 +6721,12 @@ function confirmarImportAlicuotas(){
   if ($("alicFuente").value.trim())   upd[base + "/fuente"]   = $("alicFuente").value.trim();
   if (_numAr($("alicGeneral").value) !== null) upd[base + "/general"] = _numAr($("alicGeneral").value);
   if (_numAr($("alicMinimo").value)  !== null) upd[base + "/minimo"]  = _numAr($("alicMinimo").value);
-  elegidas.forEach(function(f){
-    upd[base + "/filas/" + f.codigo] = {
-      desc: f.desc || "", alicuota: f.alicuota, minimo: f.minimo, exento: !!f.exento, notas: f.notas || ""
-    };
-  });
+  var _fila = function(f){
+    var o = { desc: f.desc || "", alicuota: f.alicuota, minimo: f.minimo, exento: !!f.exento, notas: f.notas || "" };
+    if (f.tramos && f.tramos.length) o.tramos = f.tramos;
+    return o;
+  };
+  elegidas.forEach(function(f){ upd[base + "/filas/" + f.codigo] = _fila(f); });
 
   $("iaBtnGuardar").disabled = true;
   ref("").update(upd).then(function(){
@@ -6400,9 +6738,7 @@ function confirmarImportAlicuotas(){
     if ($("alicFuente").value.trim())   t.fuente   = $("alicFuente").value.trim();
     if (_numAr($("alicGeneral").value) !== null) t.general = _numAr($("alicGeneral").value);
     if (_numAr($("alicMinimo").value)  !== null) t.minimo  = _numAr($("alicMinimo").value);
-    elegidas.forEach(function(f){
-      t.filas[f.codigo] = { desc: f.desc || "", alicuota: f.alicuota, minimo: f.minimo, exento: !!f.exento, notas: f.notas || "" };
-    });
+    elegidas.forEach(function(f){ t.filas[f.codigo] = _fila(f); });
     cerrarModal();
     toast(elegidas.length + " alícuota" + (elegidas.length === 1 ? "" : "s") + " cargada" + (elegidas.length === 1 ? "" : "s"), "ok");
     renderAlicuotas();
@@ -6500,7 +6836,7 @@ function pintarSugAlic(){
     if (!f){
       el.innerHTML = t.general
         ? "El código " + esc(cod) + " no figura en la tabla de " + corto + ". Le correspondería la <b>general del " +
-          t.general + "%</b>. " + _linkUsarAlic(k, t.general, t.minimo)
+          pct(t.general) + "</b>. " + _linkUsarAlic(k, t.general, t.minimo)
         : "El código " + esc(cod) + " no figura en la tabla de " + corto + " y no hay alícuota general cargada.";
       return;
     }
@@ -6510,11 +6846,25 @@ function pintarSugAlic(){
         (f.notas ? " " + esc(f.notas) : "");
       return;
     }
+    /* Con tramos por facturación, el porcentaje que le toca a ESTE cliente
+       depende de cuánto facturó: se muestra el que le corresponde y, abajo, la
+       escala entera para que se vea de dónde sale. */
+    var fact = ingresosParaTramo(_formClienteId, periodoHoy());
+    var tr   = tramoDe(f, fact.monto);
+    var alic = tr ? tr.alicuota : f.alicuota;
+    var minimo = f.minimo || t.minimo || null;
+
     el.innerHTML = "Tabla de " + corto + (t.vigencia ? " " + esc(t.vigencia) : "") + ": código " + esc(f.codigo) +
       (f.exacto ? "" : " (renglón general del rubro)") +
       (descActividad(f.codigo, f.desc) ? " — " + esc(descActividad(f.codigo, f.desc)) : "") +
-      " → <b>" + f.alicuota + "%</b>" + (f.minimo ? ", mínimo " + pesos(f.minimo) : "") +
-      (f.notas ? ". " + esc(f.notas) : "") + " " + _linkUsarAlic(k, f.alicuota, f.minimo);
+      " → <b>" + pct(alic) + "</b>" + (minimo ? ", mínimo " + pesos(minimo) : "") +
+      (f.notas ? ". " + esc(f.notas) : "") + " " + _linkUsarAlic(k, alic, minimo) +
+      (tr ? '<div style="margin-top:4px">Tramo ' + (tr.indice + 1) + " de " + tr.total +
+            ", por " + esc(fact.base) + " (" + pesos(fact.monto) + "). Escala: " + esc(textoTramos(f)) + "</div>"
+          : ((f.tramos || []).length
+              ? '<div style="margin-top:4px">La alícuota cambia según lo facturado (' + esc(textoTramos(f)) +
+                "). Como todavía no hay facturación cargada, se muestra la general de la actividad.</div>"
+              : ""));
   });
 }
 function _linkUsarAlic(k, alic, min){
@@ -7688,7 +8038,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v41";
+var VERSION_APP = "v42";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

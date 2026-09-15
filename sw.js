@@ -16,7 +16,7 @@
    naiib.js se sirve de la caché: sin subir VERSION queda el nomenclador viejo.
    ========================================================================== */
 
-var VERSION = "v43";
+var VERSION = "v44";
 var CACHE   = "ebd-" + VERSION;
 
 /* Archivos propios que se guardan para que la app abra sin conexión. */

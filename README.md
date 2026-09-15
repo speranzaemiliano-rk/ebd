@@ -149,10 +149,10 @@ La escala de ARCA vigente desde el 01/08/2026 ya viene cargada. Cuando publiquen
 próxima (enero 2027), andá a **Escalas ARCA → + Nueva vigencia** en vez de editar la
 existente: así los cálculos de períodos anteriores siguen dando bien.
 
-Las **alícuotas de ingresos brutos** sí hay que cargarlas una vez: bajá el anexo
-o el nomenclador del organismo y usá **Alícuotas IIBB → Cargar la tabla** (ver
-más abajo). Sin eso, los importes de ARBA y AGIP siguen yendo a mano, como hasta
-ahora.
+Las **alícuotas de ARBA 2026** también vienen cargadas: se traen con un botón
+desde **Alícuotas IIBB → Cargar la tabla** (ver más abajo). Las de AGIP se cargan
+con el anexo de la Ley Impositiva de la Ciudad; mientras no estén, los importes
+de AGIP siguen yendo a mano.
 
 ---
 
@@ -182,10 +182,14 @@ La alícuota de IIBB no depende del cliente sino de la **actividad**: el código
 NAIIB en ARBA —alineado al NAES—, el mismo NAES en AGIP. Y el porcentaje de cada
 código lo fija todos los años la **Ley Impositiva** de la jurisdicción.
 
-Por eso la tabla **no viene cargada de fábrica**: los porcentajes tienen que salir
-del anexo oficial, no de una estimación. Se carga una sola vez, en la pantalla
-**Alícuotas IIBB**, y de ahí en más cada cliente saca la suya por su código de
-actividad, sin escribirla ficha por ficha.
+La de **ARBA 2026 ya viene cargada**: son las 1.022 actividades del nomenclador
+NAIIB-18 con sus tramos por facturación, sacadas del archivo oficial de ARBA
+(ver `datos/README.md`). Se traen con un botón desde **Alícuotas IIBB → Cargar la
+tabla → Traer la tabla de ARBA 2026**. La de AGIP se carga igual, con el anexo
+de la Ley Impositiva de la Ciudad.
+
+Ningún porcentaje está estimado: salen del archivo del organismo, y la pantalla
+guarda de dónde salieron.
 
 **Cargar la tabla** acepta tres formatos:
 
@@ -196,8 +200,26 @@ actividad, sin escribirla ficha por ficha.
 - un **PDF**, del que primero intenta leer el texto solo y, si no alcanza, lo
   lee con IA.
 
+El archivo **Alicuotaria** de ARBA entra tal cual, sin abrirlo ni convertirlo:
+se llama `.xls` pero adentro es texto separado por tabulaciones, trae todos los
+años y varias filas por actividad. El sistema se queda con el período más nuevo,
+arma los tramos y completa solo la vigencia, el mínimo y la fuente.
+
 Salga de donde salga, antes de guardar se muestra todo en una **tabla editable**:
 lo que corrijas ahí es lo que se guarda. El sistema no inventa ningún porcentaje.
+
+### Los tramos por facturación
+
+En ARBA la alícuota de una misma actividad **cambia según cuánto facturó el
+contribuyente el año anterior** (art. 28 de la Ley Impositiva). Un estudio
+jurídico que facturó 8 millones paga **3,5%**; con el mismo código, uno que
+facturó 2.000 millones paga **4,5%**. Ignorar el tramo sería cobrarle de más a
+casi todos los clientes de un estudio que atiende monotributistas.
+
+El sistema ubica el tramo solo, con lo facturado del año calendario anterior que
+ya tiene cargado de los comprobantes. Si de ese año no hay datos usa los últimos
+12 meses y lo aclara; si no hay nada, usa la alícuota general de la actividad y
+también lo aclara.
 
 Con la tabla cargada:
 
@@ -220,7 +242,9 @@ importar el anexo: los códigos que ya estaban se actualizan, no se duplican.
 
 La tabla vive en `config/alicuotas/<jurisdicción>` dentro de la base, así que
 **no hay que tocar las reglas de Firebase** para usarla: la rama `config` ya está
-publicada desde el paso 4.
+publicada desde el paso 4. Son mil actividades y más de 100 KB, así que **no se
+baja con el arranque**: se carga sola la primera vez que se abre la pantalla de
+alícuotas, una ficha de cliente o una liquidación.
 
 ## Intimaciones, con aviso antes de que se venzan
 
