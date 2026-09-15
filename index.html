@@ -2770,9 +2770,14 @@ function guardarFormCliente(id){
     ESTADO.clientes[id] = Object.assign(ESTADO.clientes[id] || {}, datos);
     /* Las claves van después: si fallaran, el cliente ya quedó guardado y se
        avisa sólo por las claves, en vez de perder toda la carga. */
-    return guardarClavesDeFicha(id, cuit).catch(function(e){
+    var pendientes = [guardarClavesDeFicha(id, cuit).catch(function(e){
       toast("El cliente se guardó, pero las claves no: " + e.message, "error");
-    });
+    })];
+    if (_constanciaArchivo){
+      pendientes.push(guardarConstanciaDeCliente(id, _constanciaArchivo.file, _constanciaArchivo.organismo));
+      _constanciaArchivo = null;
+    }
+    return Promise.all(pendientes);
   }).then(function(){
     cerrarModal();
     toast("Cliente guardado", "ok");
@@ -2856,14 +2861,15 @@ function parsearConstancia(texto){
 
   /* Quién la emitió. AGIP nombra a la Ciudad y a Ingresos Brutos; ARCA y AFIP
      nombran al monotributo o al organismo nacional. */
-  if (/AGIP|ADMINISTRACION GUBERNAMENTAL DE INGRESOS PUBLICOS|CIUDAD DE BUENOS AIRES/.test(T)) out.organismo = "agip";
+  if (/\bARBA\b|AGENCIA DE RECAUDACION DE LA PROVINCIA DE BUENOS AIRES|PROVINCIA DE BUENOS AIRES/.test(T)) out.organismo = "arba";
+  else if (/AGIP|ADMINISTRACION GUBERNAMENTAL DE INGRESOS PUBLICOS|CIUDAD DE BUENOS AIRES/.test(T)) out.organismo = "agip";
   else if (/ARCA|AFIP|ADMINISTRACION FEDERAL|MONOTRIBUTO/.test(T)) out.organismo = "arca";
 
   /* CUIT: se descartan los del propio organismo, que vienen impresos en el
      encabezado. Se prefiere uno con dígito verificador válido, pero si no hay
      ninguno se toma el primero y se marca como dudoso: mejor mostrarlo para
      que lo revisen que dejar el campo vacío sin explicación. */
-  var CUITS_ORGANISMO = ["33693450239", "34999032089", "33999242109"];
+  var CUITS_ORGANISMO = ["33693450239", "34999032089", "33999242109", "30710404092"];
   var cand = (t.match(/\b\d{2}-?\d{8}-?\d\b/g) || [])
     .map(function(c){ return c.replace(/\D/g, ""); })
     .filter(function(c){ return c.length === 11 && CUITS_ORGANISMO.indexOf(c) === -1; });
@@ -2903,7 +2909,7 @@ function parsearConstancia(texto){
 
   if (/CONVENIO MULTILATERAL/.test(T))                                    out.regimen = "Convenio Multilateral";
   else if (/REGIMEN SIMPLIFICADO/.test(T))                                out.regimen = "Régimen Simplificado";
-  else if (out.organismo === "agip" && /CONTRIBUYENTE LOCAL|\bLOCAL\b/.test(T)) out.regimen = "Local";
+  else if (/CONTRIBUYENTE LOCAL|\bLOCAL\b/.test(T) && (out.organismo === "agip" || out.organismo === "arba")) out.regimen = "Local";
 
   var campos = [
     { clave:"cuit",        nombre:"CUIT" },
@@ -2926,6 +2932,8 @@ function abrirLeerConstancia(){
       '<div class="ayuda">Sirve el PDF que descargás del organismo y también una foto o captura. ' +
         "<b>Leer con IA</b> entiende cualquiera de los dos, incluso un escaneo; <b>Leer el PDF</b> " +
         "busca el texto adentro del archivo, no usa internet y es instantáneo, pero necesita un PDF con texto.</div></div>" +
+    '<label class="check"><input type="checkbox" id="ctcGuardar" checked> ' +
+      "Guardar también el archivo en la ficha del cliente</label>" +
     '<div id="ctcResultado"></div>' +
     '<div class="seccion-tit" style="margin-top:22px">…o pegá el texto a mano</div>' +
     '<div class="ayuda" style="margin-bottom:8px">Si el PDF no se deja leer, abrilo, seleccioná todo (Ctrl+A), ' +
@@ -3076,11 +3084,63 @@ function cambiosDesdeConstancia(clienteId, d){
     out.push({ nombre:"Liquida AGIP — ingresos brutos CABA", actual:"no", nuevo:"sí", falta:true,
                aplicar:function(u){ u["impuestos/agip"] = true; } });
   }
+  if (d.organismo === "arba" && !imp.arba){
+    out.push({ nombre:"Liquida ARBA — ingresos brutos Provincia", actual:"no", nuevo:"sí", falta:true,
+               aplicar:function(u){ u["impuestos/arba"] = true; } });
+  }
   if (d.organismo === "arca" && imp.arca === false){
     out.push({ nombre:"Liquida ARCA — monotributo", actual:"no", nuevo:"sí", falta:true,
                aplicar:function(u){ u["impuestos/arca"] = true; } });
   }
   return out;
+}
+
+var NOMBRE_ORGANISMO = { arca:"ARCA", arba:"ARBA", agip:"AGIP" };
+
+/* ---------- GUARDAR LA CONSTANCIA EN LA FICHA ----------
+
+   Leer la constancia para sacarle los datos y después no quedarse con el papel
+   es media función: cuando alguien pide "mandame la constancia de este
+   cliente", el archivo tiene que estar. Se guarda como un papel más del
+   cliente, con el organismo adentro, así conviven la de ARCA y la de ARBA sin
+   pisarse.
+
+   Para un cliente que ya existe se guarda en el momento. Para uno nuevo no se
+   puede: todavía no tiene id. Ahí queda esperando y se guarda apenas la ficha
+   se graba. */
+var _constanciaArchivo = null;   /* { file, organismo } esperando un cliente nuevo */
+
+function guardarConstanciaDeCliente(clienteId, file, organismo){
+  if (!clienteId || !file) return Promise.resolve();
+  if (file.size > 5 * 1024 * 1024){
+    toast("La constancia pesa más de 5 MB: los datos se cargaron, el archivo no", "error");
+    return Promise.resolve();
+  }
+  return new Promise(function(resolve, reject){
+    var fr = new FileReader();
+    fr.onload = function(e){ resolve(e.target.result); };
+    fr.onerror = function(){ reject(new Error("No pude leer el archivo")); };
+    fr.readAsDataURL(file);
+  }).then(function(contenido){
+    var id = ref("archivos/" + clienteId).push().key;
+    var updates = {};
+    updates["archivos/" + clienteId + "/" + id] = {
+      tipo: "constancia",
+      organismo: organismo || "",
+      nombre: file.name || "constancia.pdf",
+      nota: "Constancia de " + (NOMBRE_ORGANISMO[organismo] || "inscripción"),
+      peso: file.size || 0,
+      periodo: "",
+      subido: new Date().toISOString()
+    };
+    updates["archivosContenido/" + id] = contenido;
+    return ref("").update(updates);
+  }).then(function(){
+    toast("Constancia guardada en la ficha", "ok");
+  }).catch(function(e){
+    /* Que falle el archivo no puede tirar abajo la carga de los datos. */
+    toast("Los datos se cargaron, pero la constancia no se pudo guardar: " + e.message, "error");
+  });
 }
 
 var _constanciaCliente = null;   /* id del cliente ya cargado con ese CUIT */
@@ -3112,85 +3172,19 @@ function aplicarConstanciaAlCliente(){
     cerrarModal();
     toast("Ficha completada con los datos de la constancia", "ok");
     renderClientes(); renderHome();
+    if (_guardarConstanciaTildado()) guardarConstanciaDeCliente(id, _archivoConstanciaElegido(), (_constanciaLeida || {}).organismo);
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
-/* Qué le agrega la constancia a un cliente que ya está cargado.
-
-   Se separan dos cosas, porque no se tratan igual:
-   - lo que FALTA: el campo está vacío y la constancia lo trae. Se ofrece
-     tildado, porque completar un vacío no pisa nada.
-   - lo que está DISTINTO: el cliente ya tiene un valor y la constancia dice
-     otro. Se ofrece DESTILDADO. Puede ser que el dato cambió en el organismo
-     —una recategorización, por ejemplo— o que la constancia sea vieja, y eso
-     lo sabe el contador, no el sistema.
-   Lo que ya coincide no se ofrece: sería ruido. */
-function cambiosDesdeConstancia(clienteId, d){
-  var c = ESTADO.clientes[clienteId] || {};
-  var out = [];
-
-  function agregar(nombre, actual, nuevo, aplicar){
-    if (!nuevo) return;
-    actual = (actual === undefined || actual === null) ? "" : String(actual);
-    if (actual.trim() === String(nuevo).trim()) return;
-    out.push({ nombre: nombre, actual: actual, nuevo: String(nuevo), falta: !actual.trim(), aplicar: aplicar });
-  }
-
-  agregar("Razón social / Nombre", c.razonSocial, d.razonSocial,
-          function(u){ u.razonSocial = d.razonSocial; });
-  agregar("Categoría de monotributo", c.categoriaActual, d.categoria,
-          function(u){ u.categoriaActual = d.categoria; });
-  agregar("Actividad", c.actividadIIBB, d.actividad,
-          function(u){ u.actividadIIBB = d.actividad; });
-  agregar("Código de actividad (NAES)", c.codigoNAES, d.codigoActividad,
-          function(u){ u.codigoNAES = d.codigoActividad; });
-  agregar("Nº de Ingresos Brutos", c.nroIIBB, d.nroIIBB,
-          function(u){ u.nroIIBB = d.nroIIBB; });
-
-  /* Los impuestos se escriben por camino relativo (impuestos/agip) para no
-     pisar el resto del objeto: tildar AGIP no puede destildar ARBA. */
-  var imp = c.impuestos || {};
-  if (d.organismo === "agip" && !imp.agip){
-    out.push({ nombre:"Liquida AGIP — ingresos brutos CABA", actual:"no", nuevo:"sí", falta:true,
-               aplicar:function(u){ u["impuestos/agip"] = true; } });
-  }
-  if (d.organismo === "arca" && imp.arca === false){
-    out.push({ nombre:"Liquida ARCA — monotributo", actual:"no", nuevo:"sí", falta:true,
-               aplicar:function(u){ u["impuestos/arca"] = true; } });
-  }
-  return out;
+/* El archivo que está elegido en el modal, si hay uno. Con el texto pegado a
+   mano no hay papel que guardar. */
+function _archivoConstanciaElegido(){
+  var f = $("ctcFile");
+  return f && f.files && f.files[0] ? f.files[0] : null;
 }
-
-var _constanciaCliente = null;   /* id del cliente ya cargado con ese CUIT */
-var _constanciaCambios = [];
-
-function aplicarConstanciaAlCliente(){
-  var id = _constanciaCliente;
-  if (!id) return;
-  var u = {};
-  Array.prototype.forEach.call(document.querySelectorAll(".cc-chk"), function(chk){
-    if (chk.checked && _constanciaCambios[chk.dataset.i]) _constanciaCambios[chk.dataset.i].aplicar(u);
-  });
-  if (!Object.keys(u).length){ toast("No marcaste ningún dato para completar", "error"); return; }
-  u.modificado = new Date().toISOString();
-
-  ref("clientes/" + id).update(u).then(function(){
-    var c = ESTADO.clientes[id];
-    Object.keys(u).forEach(function(k){
-      /* Las claves con barra son caminos relativos: hay que bajar el objeto. */
-      var partes = k.split("/");
-      if (partes.length === 1){ c[k] = u[k]; return; }
-      var nodo = c;
-      for (var i = 0; i < partes.length - 1; i++){
-        if (!nodo[partes[i]]) nodo[partes[i]] = {};
-        nodo = nodo[partes[i]];
-      }
-      nodo[partes[partes.length - 1]] = u[k];
-    });
-    cerrarModal();
-    toast("Ficha completada con los datos de la constancia", "ok");
-    renderClientes(); renderHome();
-  }).catch(function(e){ toast(explicarError(e), "error"); });
+function _guardarConstanciaTildado(){
+  var c = $("ctcGuardar");
+  return !c || c.checked;
 }
 
 function bloqueClienteExistente(id){
@@ -3226,7 +3220,7 @@ function bloqueClienteExistente(id){
 function mostrarConstanciaLeida(d, origen){
   _constanciaLeida = d;
 
-  var quien = d.organismo === "agip" ? "AGIP" : (d.organismo === "arca" ? "ARCA" : "un organismo que no reconocí");
+  var quien = NOMBRE_ORGANISMO[d.organismo] || "un organismo que no reconocí";
   var filas = d.encontrados.map(function(c){
     var v = d[c.clave];
     if (c.clave === "cuit") v = formatCuit(v);
@@ -3282,6 +3276,10 @@ function mostrarConstanciaLeida(d, origen){
 function abrirFichaDesdeConstancia(){
   var d = _constanciaLeida;
   if (!d) return;
+  /* El cliente todavía no tiene id: el papel espera a que se grabe la ficha. */
+  _constanciaArchivo = (_guardarConstanciaTildado() && _archivoConstanciaElegido())
+    ? { file: _archivoConstanciaElegido(), organismo: d.organismo }
+    : null;
   abrirFormCliente(null, {
     razonSocial:   d.razonSocial,
     cuit:          d.cuit,
@@ -3289,7 +3287,9 @@ function abrirFichaDesdeConstancia(){
     categoriaActual: d.categoria,
     actividadIIBB: d.actividad,
     codigoNAES:    d.codigoActividad,
-    impuestos:     { arca: d.organismo !== "agip", agip: d.organismo === "agip" }
+    impuestos:     { arca: d.organismo === "arca" || !d.organismo,
+                     arba: d.organismo === "arba",
+                     agip: d.organismo === "agip" }
   });
 }
 
@@ -3676,7 +3676,7 @@ function pintarArchivosDeLaFicha(id){
       ids.map(function(k){
         var a = arch[k];
         return "<tr><td>" + esc(nombreTipoArchivo(a.tipo)) +
-            (a.tipo === "constancia" ? ' <span class="badge b-azul">constancia</span>' : "") + "</td>" +
+            (a.organismo ? ' <span class="badge b-azul">' + esc(NOMBRE_ORGANISMO[a.organismo] || a.organismo) + "</span>" : "") + "</td>" +
           '<td class="mono">' + esc(a.nombre || "") +
             (a.nota ? '<div style="color:var(--gris);font-size:11.5px" class="">' + esc(a.nota) + "</div>" : "") + "</td>" +
           "<td>" + (a.periodo ? periodoLargo(a.periodo) : "—") + "</td>" +
@@ -5942,7 +5942,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v38";
+var VERSION_APP = "v39";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
