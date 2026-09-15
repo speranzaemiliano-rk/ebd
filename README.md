@@ -246,30 +246,51 @@ publicada desde el paso 4. Son mil actividades y más de 100 KB, así que **no s
 baja con el arranque**: se carga sola la primera vez que se abre la pantalla de
 alícuotas, una ficha de cliente o una liquidación.
 
-## Intimaciones, con aviso antes de que se venzan
+## Vencimientos: intimaciones y VEP, en un solo lugar
 
-Lo que llega de ARCA, ARBA, AGIP o el municipio y tiene fecha para contestar
-tiene su propia pantalla: **Intimaciones**. Lo que las separa de cualquier otro
-papel es el plazo, porque una intimación que se vence sin contestar no es un
-papel traspapelado, es una multa.
+Una intimación y un VEP no se parecen en nada salvo en lo único que importa:
+los dos tienen fecha y pasarse cuesta plata. Por eso van en la misma pantalla,
+**Vencimientos**, ordenados por urgencia y con lo vencido arriba de todo. Si
+estuvieran en dos pantallas distintas habría que acordarse de mirar las dos,
+que es justo la forma en que se pasa un vencimiento.
 
-De cada una se carga el cliente, el organismo, el asunto, el número de
-expediente, el monto reclamado si lo hay, cuándo la notificaron, **cuándo vence**
-y el PDF. Con eso:
+**Intimaciones.** Lo que llega de ARCA, ARBA, AGIP o el municipio con plazo
+para contestar. Se carga el cliente, el organismo, el asunto, el número de
+expediente, el monto reclamado si lo hay, cuándo la notificaron, cuándo vence y
+el PDF. Un botón **✓** la marca como respondida, que es el gesto más frecuente
+y no merece abrir un formulario.
 
-- el listado ordena por urgencia, con lo vencido arriba de todo, y dice en
-  castellano cuánto falta ("vencida hace 3 días", "vence mañana");
+**VEP.** Salen solos de la liquidación de cada mes: a todo VEP con **Vence el**
+cargado le aparece su renglón acá. En la liquidación hay ahora un tilde **Ya
+está pagado**; sin eso no había forma de que un VEP dejara de figurar pendiente,
+y un aviso que avisa de todo no avisa de nada. También se puede tildar desde
+esta pantalla, sin abrir la liquidación.
+
+Además:
+
+- el listado dice en castellano cuánto falta ("vencida hace 3 días", "vence
+  mañana"): un `-3` no alarma a nadie;
 - arriba hay un resumen y al lado del nombre de la pestaña queda un número
-  —rojo si hay vencidas, amarillo si hay pendientes—, así se ve sin entrar;
-- en **Inicio**, la tarjeta de *Próximos vencimientos* dejó de ser una lista fija
-  y muestra lo que hay cargado de verdad: las intimaciones sin resolver y los
-  VEP con fecha de vencimiento, ordenados y con semáforo;
-- un botón **✓** en la fila la marca como respondida, que es el gesto más
-  frecuente y no merece abrir un formulario.
+  —rojo si hay vencidos, amarillo si hay pendientes—, así se ve sin entrar;
+- en **Inicio**, la tarjeta de *Próximos vencimientos* dejó de ser una lista
+  fija y sale de esta misma lista, recortada a lo que vence en el próximo mes.
 
-El estado guardado es sólo *pendiente*, *respondida* o *archivada*. **Vencida no
-se guarda**: se calcula contra el día de hoy, cada vez que se dibuja la pantalla.
-Un estado que depende del calendario y queda escrito se vuelve mentira solo.
+### Lo que el sistema no sabe, no lo inventa
+
+Los VEP **vencidos que se cargaron antes de que existiera el tilde de pagado**
+no avisan: no tienen el campo, así que no se sabe si se pagaron. Decir que están
+todos impagos sería precisión inventada, y taparía con años de historia lo que
+de verdad hay que hacer esta semana. Se dice cuántos son, se ven con el filtro
+**Todo**, y cada uno se arregla solo la próxima vez que se guarde esa
+liquidación.
+
+Ojo con la diferencia: un VEP con el tilde **destildado a mano** sí es un dato
+—alguien lo miró y dijo que no está pagado— y ése avisa por viejo que sea.
+
+El estado guardado de una intimación es sólo *pendiente*, *respondida* o
+*archivada*. **Vencida no se guarda**: se calcula contra el día de hoy, cada vez
+que se dibuja la pantalla. Un estado que depende del calendario y queda escrito
+se vuelve mentira solo.
 
 Las intimaciones se guardan junto con el resto de los papeles, así que también
 aparecen en **Archivos**, y **no hay que tocar las reglas de Firebase** para

@@ -968,7 +968,7 @@ tbody tr:hover{background:#FAFAFC}
     <button data-tab="tabSocios" id="tabBtnSocios">Socios</button>
     <button data-tab="tabCaja">Caja</button>
     <button data-tab="tabMails">Mails</button>
-    <button data-tab="tabIntimaciones">Intimaciones <span id="navIntimaciones"></span></button>
+    <button data-tab="tabVencimientos">Vencimientos <span id="navVencimientos"></span></button>
     <button data-tab="tabArchivos">Archivos</button>
     <button data-tab="tabEscalas">Escalas ARCA</button>
     <button data-tab="tabAlicuotas">Alícuotas IIBB</button>
@@ -1275,28 +1275,31 @@ tbody tr:hover{background:#FAFAFC}
     </section>
 
     <!-- ---------- ARCHIVOS ---------- -->
-    <!-- ---------- INTIMACIONES ---------- -->
-    <section class="panel" id="tabIntimaciones">
+    <!-- ---------- VENCIMIENTOS ---------- -->
+    <section class="panel" id="tabVencimientos">
       <div class="card">
         <div class="card-head">
-          <h2>Intimaciones y notificaciones</h2>
+          <h2>Vencimientos</h2>
           <button class="btn" id="btnNuevaIntimacion">+ Nueva intimación</button>
         </div>
-        <p class="desc">Lo que llega de ARCA, ARBA, AGIP o el municipio y tiene fecha para contestar: intimaciones, notificaciones, requerimientos. El sistema avisa antes de que se venza, no después.</p>
-        <div id="avisoIntimaciones"></div>
+        <p class="desc">Todo lo que tiene fecha y no puede pasarse, en un solo lugar: las <b>intimaciones</b> que llegan de los organismos y los <b>VEP</b> de cada liquidación. Ordenado por urgencia, lo vencido arriba.</p>
+        <div id="avisoVencimientos"></div>
         <div class="filtros">
           <select id="intCliente"></select>
+          <select id="intTipo">
+            <option value="">Intimaciones y VEP</option>
+            <option value="intimacion">Sólo intimaciones</option>
+            <option value="vep">Sólo VEP</option>
+          </select>
           <select id="intOrganismo"><option value="">Todos los organismos</option></select>
           <select id="intEstado">
-            <option value="abiertas">Sin resolver (pendientes y vencidas)</option>
-            <option value="vencida">Sólo las vencidas</option>
-            <option value="pendiente">Sólo las pendientes</option>
-            <option value="respondida">Respondidas</option>
-            <option value="archivada">Archivadas</option>
-            <option value="">Todas</option>
+            <option value="abiertas">Sin resolver</option>
+            <option value="vencida">Sólo lo vencido</option>
+            <option value="pendiente">Sólo lo que todavía no venció</option>
+            <option value="">Todo, incluso lo resuelto y lo viejo</option>
           </select>
         </div>
-        <div id="tablaIntimaciones"></div>
+        <div id="tablaVencimientos"></div>
       </div>
     </section>
 
@@ -1625,7 +1628,7 @@ var ESTADO = {
 /* Todos los IDs de panel. Si agregás un tab nuevo, sumalo acá o se rompe la navegación. */
 var ALL_TABS = ["tabHome","tabClientes","tabComprobantes","tabRecat",
                 "tabLiquidacion","tabHonorarios","tabSocios","tabCaja","tabMails",
-                "tabIntimaciones","tabArchivos","tabEscalas","tabAlicuotas","tabConfig"];
+                "tabVencimientos","tabArchivos","tabEscalas","tabAlicuotas","tabConfig"];
 
 /* Papeles que se guardan por cliente. El archivo en sí va aparte de la ficha
    (ver REF de archivosContenido) para que el listado abra liviano. */
@@ -2322,7 +2325,7 @@ function irA(tabId){
   if (tabId === "tabLiquidacion")  renderLiquidacion();
   if (tabId === "tabHonorarios")   renderHonorarios();
   if (tabId === "tabSocios")       renderSocios();
-  if (tabId === "tabIntimaciones") renderIntimaciones();
+  if (tabId === "tabVencimientos") renderVencimientos();
   if (tabId === "tabCaja")         renderCaja();
   if (tabId === "tabMails")        renderMails();
   if (tabId === "tabArchivos")     renderArchivos();
@@ -2511,49 +2514,27 @@ function renderHome(){
   /* ---------- PRÓXIMOS VENCIMIENTOS ----------
      Esto era una lista fija —"Monotributo, día 20 de cada mes"— que no miraba
      ni un solo dato: informaba el calendario, no lo que le falta hacer al
-     estudio. Ahora sale de lo cargado: las intimaciones sin resolver y los VEP
-     con fecha. El calendario general queda de respaldo, para cuando no hay
-     nada cargado todavía. */
-  pintarNavIntimaciones();
-  var vtos = [];
+     estudio.
 
-  intimacionesAbiertas().forEach(function(f){
-    var dias = diasHasta(f.a.vence);
-    if (dias === null) return;
-    vtos.push({
-      dias:  dias,
-      que:   "Intimación — " + (f.a.asunto || "sin asunto"),
-      quien: nombreOrganismoInt(f.a.organismo),
-      cli:   nombreCliente(f.cli),
-      fecha: f.a.vence,
-      tab:   "tabIntimaciones"
-    });
-  });
-
-  /* Los VEP no tienen marca de pagado, así que se muestran en una ventana
-     alrededor de hoy: diez días para atrás y treinta para adelante. Fuera de
-     esa ventana serían ruido acumulado, no un aviso. */
-  Object.keys(ESTADO.liquidaciones || {}).forEach(function(cliId){
-    var cli = ESTADO.clientes[cliId];
-    if (!cli || cli.activo === false) return;
-    var porPeriodo = ESTADO.liquidaciones[cliId] || {};
-    Object.keys(porPeriodo).forEach(function(per){
-      IMPUESTOS.forEach(function(i){
-        var d = (porPeriodo[per] || {})[i.clave];
-        if (!d || !d.vencimiento) return;
-        var dias = diasHasta(d.vencimiento);
-        if (dias === null || dias < -10 || dias > 30) return;
-        vtos.push({
-          dias:  dias,
-          que:   "VEP " + i.corto + " — " + periodoLargo(per) + (d.monto ? " · " + pesosCorto(d.monto) : ""),
-          quien: i.corto,
-          cli:   nombreCliente(cliId),
-          fecha: d.vencimiento,
-          tab:   "tabLiquidacion"
-        });
-      });
-    });
-  });
+     Ahora sale de vencimientos(), la misma función que dibuja la pantalla de
+     Vencimientos. Es a propósito que sea la misma y no una copia parecida: dos
+     listas de lo mismo calculadas en dos lugares terminan, tarde o temprano,
+     diciendo cosas distintas, y ahí el aviso deja de servir. Acá sólo se
+     recorta a lo que entra en una tarjeta: lo que vence en el próximo mes o ya
+     venció. El calendario general queda de respaldo para cuando no hay nada
+     cargado todavía. */
+  pintarNavVencimientos();
+  var vtos = vencimientosAbiertos().map(function(v){
+    return {
+      dias:  diasHasta(v.vence),
+      que:   (v.clase === "intimacion" ? "Intimación — " : "") + v.titulo +
+             (v.clase === "vep" && v.monto ? " · " + pesosCorto(v.monto) : ""),
+      quien: v.clase === "intimacion" ? nombreOrganismoInt(v.organismo) : _cortoImpuesto(v.impuesto),
+      cli:   nombreCliente(v.cli),
+      fecha: v.vence,
+      tab:   "tabVencimientos"
+    };
+  }).filter(function(v){ return v.dias !== null && v.dias <= 30; });
 
   vtos.sort(function(a, b){ return a.dias - b.dias; });
 
@@ -5289,6 +5270,11 @@ function editarLiquidacion(clienteId, periodo){
         '<div class="campo"><label>Vence el</label>' +
           '<input type="date" id="lq_' + i.clave + '_vto" value="' + esc(d.vencimiento || "") + '"></div>' +
       "</div>" +
+      /* Sin este tilde no hay forma de que un VEP deje de figurar como
+         pendiente, y la pantalla de Vencimientos se llenaría para siempre de
+         cosas ya pagadas: un aviso que avisa de todo no avisa de nada. */
+      '<label class="check"><input type="checkbox" id="lq_' + i.clave + '_pagado"' +
+        (d.pagado ? " checked" : "") + "> Ya está pagado</label>" +
       (i.clave === "arca" ? "" :
         '<div class="campo"><label>Retenciones y percepciones del mes</label>' +
           '<input type="number" step="0.01" id="lq_' + i.clave + '_ret" value="' + (d.retenciones || "") +
@@ -5333,6 +5319,7 @@ function guardarLiquidacion(clienteId, periodo){
         monto: parseFloat($("lq_" + i.clave + "_monto").value) || 0,
         vep: $("lq_" + i.clave + "_vep").value.trim(),
         vencimiento: $("lq_" + i.clave + "_vto").value,
+        pagado: $("lq_" + i.clave + "_pagado").checked,
         link: $("lq_" + i.clave + "_link").value.trim(),
         retenciones: ret ? (parseFloat(ret.value) || 0) : 0,
         vepArchivo: nuevo || _vepsDelModal[i.clave] || null
@@ -5346,7 +5333,7 @@ function guardarLiquidacion(clienteId, periodo){
     if (!ESTADO.liquidaciones[clienteId]) ESTADO.liquidaciones[clienteId] = {};
     ESTADO.liquidaciones[clienteId][periodo] = Object.assign(ESTADO.liquidaciones[clienteId][periodo] || {}, datos);
     cerrarModal(); toast("Liquidación guardada", "ok");
-    renderLiquidacion(); renderHome();
+    renderLiquidacion(); renderHome(); pintarVencimientos();
   }).catch(function(e){ toast("Error: " + e.message, "error"); });
 }
 
@@ -7330,6 +7317,11 @@ var ORGANISMOS_INT = [
   { clave:"municipal", nombre:"Municipio" },
   { clave:"otro",      nombre:"Otro" }
 ];
+function _cortoImpuesto(clave){
+  var out = String(clave || "").toUpperCase();
+  IMPUESTOS.forEach(function(i){ if (i.clave === clave) out = i.corto; });
+  return out;
+}
 function nombreOrganismoInt(clave){
   var out = clave || "—";
   ORGANISMOS_INT.forEach(function(o){ if (o.clave === clave) out = o.nombre; });
@@ -7340,6 +7332,7 @@ var ESTADOS_INT = {
   pendiente:  { nombre:"Pendiente",  badge:"b-amar"  },
   vencida:    { nombre:"Vencida",    badge:"b-rojo"  },
   respondida: { nombre:"Respondida", badge:"b-verde" },
+  pagada:     { nombre:"Pagado",     badge:"b-verde" },
   archivada:  { nombre:"Archivada",  badge:"b-gris"  }
 };
 
@@ -7405,59 +7398,141 @@ function estadoIntimacion(a){
   return (d !== null && d < 0) ? "vencida" : "pendiente";
 }
 
-/* Las que todavía le dan trabajo a alguien. Es la lista que importa: las
-   respondidas y las archivadas quedan de registro, no de tarea. */
-function intimacionesAbiertas(){
-  return intimaciones().filter(function(f){
-    var e = estadoIntimacion(f.a);
-    return e === "pendiente" || e === "vencida";
+/* ---------- LA PANTALLA: LOS DOS TIPOS DE VENCIMIENTO JUNTOS ----------
+
+   Una intimación y un VEP no se parecen en nada salvo en lo único que importa
+   acá: los dos tienen una fecha y pasarse cuesta plata. Por eso van en la misma
+   lista y salen de la misma función, `vencimientos()`. Si estuvieran en dos
+   pantallas distintas habría que acordarse de mirar las dos, que es exactamente
+   la forma en que se pasa un vencimiento.
+
+   Los VEP no viven acá: son parte de la liquidación de cada mes. Esta pantalla
+   los lee de ahí y los muestra; para editarlos abre la liquidación, que es
+   donde está el resto del cálculo. */
+
+/* La lista unificada. Cada renglón, venga de donde venga, dice lo mismo: de
+   quién es, qué es, cuándo vence y si ya está resuelto. */
+function vencimientos(){
+  var out = [];
+
+  intimaciones().forEach(function(f){
+    out.push({
+      clase:     "intimacion",
+      cli:       f.cli,
+      id:        f.id,
+      organismo: f.a.organismo || "",
+      titulo:    f.a.asunto || "sin asunto",
+      detalle:   f.a.numero || "",
+      nota:      f.a.nota || "",
+      monto:     f.a.monto || null,
+      vence:     f.a.vence || "",
+      estado:    estadoIntimacion(f.a),
+      papel:     !!f.a.nombre,
+      sinDato:   false
+    });
+  });
+
+  Object.keys(ESTADO.liquidaciones || {}).forEach(function(cli){
+    var c = ESTADO.clientes[cli];
+    if (!c || c.activo === false) return;
+    var porPeriodo = ESTADO.liquidaciones[cli] || {};
+    Object.keys(porPeriodo).forEach(function(per){
+      IMPUESTOS.forEach(function(i){
+        var d = (porPeriodo[per] || {})[i.clave];
+        if (!d || !d.vencimiento) return;
+        var dias = diasHasta(d.vencimiento);
+        if (dias === null) return;
+        out.push({
+          clase:     "vep",
+          cli:       cli,
+          periodo:   per,
+          impuesto:  i.clave,
+          organismo: i.clave,
+          titulo:    "VEP " + i.corto + " — " + periodoLargo(per),
+          detalle:   d.vep ? "Nº " + d.vep : "",
+          nota:      "",
+          monto:     d.monto || null,
+          vence:     d.vencimiento,
+          estado:    d.pagado ? "pagada" : (dias < 0 ? "vencida" : "pendiente"),
+          /* Un VEP vencido que se guardó ANTES de que existiera el tilde de
+             pagado no dice nada: no tiene el campo, así que no se sabe si se
+             pagó o no. Decir que están todos impagos sería precisión inventada,
+             y el día que esto se publique taparía con años de historia lo que
+             de verdad hay que hacer esta semana. Así que no avisan, se dice
+             cuántos son y se arregla solo: cualquier liquidación que se guarde
+             de ahora en más deja el campo escrito, tildado o sin tildar.
+             Ojo con la diferencia: `pagado === false` SÍ es un dato —alguien
+             abrió la liquidación y lo dejó sin tildar— y ese avisa igual de
+             viejo que sea. */
+          sinDato:   (dias < 0) && !d.pagado && (d.pagado === undefined)
+        });
+      });
+    });
+  });
+
+  return out;
+}
+
+/* Sin resolver: lo que todavía le da trabajo a alguien. Deja afuera lo
+   respondido, lo pagado, lo archivado y los VEP viejos. */
+function vencimientosAbiertos(){
+  return vencimientos().filter(function(v){
+    return !v.sinDato && (v.estado === "pendiente" || v.estado === "vencida");
   });
 }
 
-/* ---------- LA PANTALLA ---------- */
-
-function renderIntimaciones(){
+function renderVencimientos(){
   llenarSelectClientes($("intCliente"), true);
   var selOrg = $("intOrganismo");
   if (selOrg.options.length <= 1){
     selOrg.innerHTML = '<option value="">Todos los organismos</option>' +
       ORGANISMOS_INT.map(function(o){ return '<option value="' + o.clave + '">' + esc(o.nombre) + "</option>"; }).join("");
   }
-  $("tablaIntimaciones").innerHTML = '<div class="ayuda">Buscando…</div>';
-  refrescarArchivos().then(pintarIntimaciones).catch(function(e){
-    $("tablaIntimaciones").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(explicarError(e)) + "</div></div>";
+  $("tablaVencimientos").innerHTML = '<div class="ayuda">Buscando…</div>';
+  refrescarArchivos().then(pintarVencimientos).catch(function(e){
+    $("tablaVencimientos").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(explicarError(e)) + "</div></div>";
   });
 }
 
-function pintarIntimaciones(){
-  pintarAvisoIntimaciones();
-  var filtroCli = $("intCliente").value;
-  var filtroOrg = $("intOrganismo").value;
-  var filtroEst = $("intEstado").value;
+function pintarVencimientos(){
+  if (!$("tablaVencimientos")) return;
+  pintarAvisoVencimientos();
 
-  var filas = intimaciones().filter(function(f){
-    if (filtroCli && f.cli !== filtroCli) return false;
-    if (filtroOrg && (f.a.organismo || "") !== filtroOrg) return false;
-    var e = estadoIntimacion(f.a);
-    if (filtroEst === "abiertas") return e === "pendiente" || e === "vencida";
-    if (filtroEst) return e === filtroEst;
+  var fCli  = $("intCliente").value;
+  var fTipo = $("intTipo").value;
+  var fOrg  = $("intOrganismo").value;
+  var fEst  = $("intEstado").value;
+  var todos = vencimientos();
+
+  var filas = todos.filter(function(v){
+    if (fCli && v.cli !== fCli) return false;
+    if (fTipo && v.clase !== fTipo) return false;
+    if (fOrg && v.organismo !== fOrg) return false;
+    if (fEst === ""){ return true; }              /* todo, viejos incluidos */
+    if (v.sinDato) return false;
+    if (fEst === "abiertas")  return v.estado === "pendiente" || v.estado === "vencida";
+    if (fEst === "vencida")   return v.estado === "vencida";
+    if (fEst === "pendiente") return v.estado === "pendiente";
     return true;
   });
 
+  var sinDatoOcultos = (fEst !== "") ? todos.filter(function(v){ return v.sinDato; }).length : 0;
+
   if (!filas.length){
-    $("tablaIntimaciones").innerHTML = '<div class="vacio"><div class="ico">📬</div>' +
-      "<div>" + (intimaciones().length ? "Ninguna intimación coincide con el filtro."
-                                       : "No hay ninguna intimación cargada.") + "</div>" +
-      '<div class="ayuda" style="max-width:520px;margin:10px auto 0">' +
-      "Acá va lo que llega con plazo para contestar. Cargada una vez con su fecha de vencimiento, " +
-      "aparece en <b>Inicio</b> hasta que se resuelva.</div></div>";
+    $("tablaVencimientos").innerHTML = '<div class="vacio"><div class="ico">📬</div>' +
+      "<div>" + (todos.length ? "Nada coincide con el filtro." : "No hay nada con fecha de vencimiento cargada.") + "</div>" +
+      '<div class="ayuda" style="max-width:540px;margin:10px auto 0">' +
+      "Acá aparecen las <b>intimaciones</b> que cargues y los <b>VEP</b> a los que les pongas fecha " +
+      "de vencimiento en la liquidación del mes." +
+      (sinDatoOcultos ? " Hay " + sinDatoOcultos + " VEP vencidos de antes de que existiera el tilde de pagado: " +
+        "se ven con el filtro «Todo»." : "") + "</div></div>";
     return;
   }
 
-  /* Lo más urgente primero: lo vencido arriba de todo, y sin fecha al final
-     —no es que no urja, es que no se sabe—. */
+  /* Lo más urgente primero. Lo que no tiene fecha va al final: no es que no
+     urja, es que no se sabe. */
   filas.sort(function(x, y){
-    var dx = diasHasta(x.a.vence), dy = diasHasta(y.a.vence);
+    var dx = diasHasta(x.vence), dy = diasHasta(y.vence);
     if (dx === null) return 1;
     if (dy === null) return -1;
     return dx - dy;
@@ -7465,78 +7540,104 @@ function pintarIntimaciones(){
 
   var puede = puedeEscribir();
   var html = '<div class="tabla-wrap"><table><thead><tr>' +
-    "<th>Cliente</th><th>Organismo</th><th>Asunto</th><th class=num>Monto</th>" +
-    "<th>Notificada</th><th>Vence</th><th>Estado</th>" + (puede ? "<th></th>" : "") +
-    "</tr></thead><tbody>";
+    "<th>Cliente</th><th>Qué</th><th class=num>Monto</th><th>Vence</th><th>Estado</th>" +
+    (puede ? "<th></th>" : "") + "</tr></thead><tbody>";
 
-  filas.forEach(function(f){
-    var a = f.a, est = estadoIntimacion(a), dias = diasHasta(a.vence);
-    var cfg = ESTADOS_INT[est] || ESTADOS_INT.pendiente;
-    var abierta = (est === "pendiente" || est === "vencida");
-    html += "<tr><td><b>" + esc(nombreCliente(f.cli)) + "</b></td>" +
-      '<td><span class="badge b-azul">' + esc(nombreOrganismoInt(a.organismo)) + "</span></td>" +
-      "<td>" + esc(a.asunto || "—") +
-        (a.numero ? '<div class="ayuda mono">' + esc(a.numero) + "</div>" : "") +
-        (a.nota ? '<div class="ayuda">' + esc(a.nota) + "</div>" : "") + "</td>" +
-      '<td class="num">' + (a.monto ? pesos(a.monto) : "—") + "</td>" +
-      "<td>" + esc(fechaAR(a.notificada)) + "</td>" +
-      "<td>" + esc(fechaAR(a.vence)) +
-        (abierta ? '<div class="ayuda"><span class="badge ' + urgenciaVto(dias) + '">' +
+  filas.forEach(function(v){
+    var dias = diasHasta(v.vence);
+    var cfg  = ESTADOS_INT[v.estado] || ESTADOS_INT.pendiente;
+    var abierto = (v.estado === "pendiente" || v.estado === "vencida");
+    var esInt = v.clase === "intimacion";
+
+    html += '<tr' + (v.sinDato ? ' style="opacity:.55"' : "") + ">" +
+      "<td><b>" + esc(nombreCliente(v.cli)) + "</b></td>" +
+      "<td><span class=\"badge " + (esInt ? "b-azul" : "b-gris") + '">' +
+        (esInt ? "Intimación · " + esc(nombreOrganismoInt(v.organismo)) : "VEP") + "</span> " + esc(v.titulo) +
+        (v.detalle ? '<div class="ayuda mono">' + esc(v.detalle) + "</div>" : "") +
+        (v.nota ? '<div class="ayuda">' + esc(v.nota) + "</div>" : "") + "</td>" +
+      '<td class="num">' + (v.monto ? pesos(v.monto) : "—") + "</td>" +
+      "<td>" + esc(fechaAR(v.vence)) +
+        (abierto ? '<div class="ayuda"><span class="badge ' + urgenciaVto(dias) + '">' +
                    esc(textoPlazo(dias)) + "</span></div>" : "") + "</td>" +
       '<td><span class="badge ' + cfg.badge + '">' + esc(cfg.nombre) + "</span></td>" +
-      (puede ? '<td style="white-space:nowrap">' +
-        (abierta ? '<button class="btn-icono" onclick="responderIntimacion(\'' + f.cli + "','" + f.id +
-                   '\')" title="Marcar como respondida">✓</button>' : "") +
-        '<button class="btn-icono" onclick="editarIntimacion(\'' + f.cli + "','" + f.id + '\')" title="Editar">✏️</button>' +
-        (a.nombre ? '<button class="btn-icono" onclick="verArchivo(\'' + f.cli + "','" + f.id + '\')" title="Ver el papel">📄</button>' : "") +
-        '<button class="btn-icono" onclick="borrarIntimacion(\'' + f.cli + "','" + f.id + '\')" title="Borrar">🗑️</button>' +
-        "</td>" : "") +
+      (puede ? '<td style="white-space:nowrap">' + (esInt
+        ? (abierto ? '<button class="btn-icono" onclick="responderIntimacion(\'' + v.cli + "','" + v.id +
+                     '\')" title="Marcar como respondida">✓</button>' : "") +
+          '<button class="btn-icono" onclick="editarIntimacion(\'' + v.cli + "','" + v.id + '\')" title="Editar">✏️</button>' +
+          (v.papel ? '<button class="btn-icono" onclick="verArchivo(\'' + v.cli + "','" + v.id + '\')" title="Ver el papel">📄</button>' : "") +
+          '<button class="btn-icono" onclick="borrarIntimacion(\'' + v.cli + "','" + v.id + '\')" title="Borrar">🗑️</button>'
+        : (abierto ? '<button class="btn-icono" onclick="pagarVep(\'' + v.cli + "','" + v.periodo + "','" + v.impuesto +
+                     '\')" title="Marcar como pagado">✓</button>' : "") +
+          '<button class="btn-icono" onclick="editarLiquidacion(\'' + v.cli + "','" + v.periodo +
+          '\')" title="Abrir la liquidación del mes">✏️</button>') + "</td>" : "") +
       "</tr>";
   });
-  $("tablaIntimaciones").innerHTML = html + "</tbody></table></div>";
+
+  $("tablaVencimientos").innerHTML = html + "</tbody></table></div>" +
+    (sinDatoOcultos ? '<div class="ayuda" style="margin-top:10px">Hay <b>' + sinDatoOcultos +
+      "</b> VEP vencidos que se cargaron antes de que existiera el tilde <b>Ya está pagado</b>, " +
+      "así que no se sabe si se pagaron y no avisan. Se ven con el filtro «Todo», y cada uno se " +
+      "arregla solo la próxima vez que se guarde esa liquidación.</div>" : "");
 }
 
-/* El resumen de arriba y el número al lado de la pestaña. Los dos salen de lo
-   mismo, así que se pintan juntos. */
-function pintarAvisoIntimaciones(){
-  var abiertas = intimacionesAbiertas();
-  var vencidas = abiertas.filter(function(f){ return estadoIntimacion(f.a) === "vencida"; }).length;
-  var prontas  = abiertas.filter(function(f){
-    var d = diasHasta(f.a.vence);
+/* El resumen de arriba y el número al lado de la pestaña salen de lo mismo,
+   así que se pintan juntos. */
+function pintarAvisoVencimientos(){
+  var abiertos  = vencimientosAbiertos();
+  var vencidos  = abiertos.filter(function(v){ return v.estado === "vencida"; });
+  var estaSemana = abiertos.filter(function(v){
+    var d = diasHasta(v.vence);
     return d !== null && d >= 0 && d <= 7;
   }).length;
 
-  var el = $("avisoIntimaciones");
+  var el = $("avisoVencimientos");
   if (el){
-    if (vencidas){
-      el.innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>' + vencidas +
-        (vencidas === 1 ? " intimación vencida</b> sin responder." : " intimaciones vencidas</b> sin responder.") +
-        (prontas ? " Otras " + prontas + " vencen esta semana." : "") + "</div></div>";
-    } else if (prontas){
-      el.innerHTML = '<div class="aviso warn"><span>⏰</span><div><b>' + prontas +
-        (prontas === 1 ? " intimación vence</b> esta semana." : " intimaciones vencen</b> esta semana.") + "</div></div>";
+    /* Se nombra cuántas son intimaciones: no es lo mismo deber un VEP que
+       tener una intimación sin contestar. */
+    var intVencidas = vencidos.filter(function(v){ return v.clase === "intimacion"; }).length;
+    if (vencidos.length){
+      el.innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>' + vencidos.length +
+        (vencidos.length === 1 ? " vencimiento pasado</b>" : " vencimientos pasados</b>") +
+        (intVencidas ? " (" + intVencidas + (intVencidas === 1 ? " es una intimación sin responder)" : " son intimaciones sin responder)") : "") +
+        "." + (estaSemana ? " Otros " + estaSemana + " vencen esta semana." : "") + "</div></div>";
+    } else if (estaSemana){
+      el.innerHTML = '<div class="aviso warn"><span>⏰</span><div><b>' + estaSemana +
+        (estaSemana === 1 ? " vencimiento</b> esta semana." : " vencimientos</b> esta semana.") + "</div></div>";
     } else {
-      el.innerHTML = abiertas.length
-        ? '<div class="aviso ok"><span>✓</span><div>Ninguna vence en los próximos siete días.</div></div>'
+      el.innerHTML = abiertos.length
+        ? '<div class="aviso ok"><span>✓</span><div>Nada vence en los próximos siete días.</div></div>'
         : "";
     }
   }
-  pintarNavIntimaciones();
+  pintarNavVencimientos();
 }
 
-/* El número rojo al lado del nombre de la pestaña. Sin esto hay que entrar a
-   la pantalla para enterarse, y a una intimación vencida se llega tarde
-   justamente por no entrar a mirar. */
-function pintarNavIntimaciones(){
-  var el = $("navIntimaciones");
+/* El número al lado del nombre de la pestaña. Sin esto hay que entrar a la
+   pantalla para enterarse, y a un vencimiento se llega tarde justamente por no
+   entrar a mirar. */
+function pintarNavVencimientos(){
+  var el = $("navVencimientos");
   if (!el) return;
-  var abiertas = intimacionesAbiertas();
-  var vencidas = abiertas.filter(function(f){ return estadoIntimacion(f.a) === "vencida"; }).length;
-  if (vencidas)      el.innerHTML = '<span class="badge b-rojo">' + vencidas + "</span>";
-  else if (abiertas.length) el.innerHTML = '<span class="badge b-amar">' + abiertas.length + "</span>";
-  else el.innerHTML = "";
+  var abiertos = vencimientosAbiertos();
+  var vencidos = abiertos.filter(function(v){ return v.estado === "vencida"; }).length;
+  if (vencidos)             el.innerHTML = '<span class="badge b-rojo">' + vencidos + "</span>";
+  else if (abiertos.length) el.innerHTML = '<span class="badge b-amar">' + abiertos.length + "</span>";
+  else                      el.innerHTML = "";
 }
 
+/* Marcar un VEP como pagado. Es un tilde adentro de la liquidación, pero
+   obligar a abrirla para eso sería pedirle a alguien que cruce tres pantallas
+   para tildar una casilla. */
+function pagarVep(cli, periodo, impuesto){
+  var d = ((ESTADO.liquidaciones[cli] || {})[periodo] || {})[impuesto];
+  if (!d) return;
+  ref("liquidaciones/" + cli + "/" + periodo + "/" + impuesto + "/pagado").set(true).then(function(){
+    d.pagado = true;
+    toast("VEP marcado como pagado", "ok");
+    pintarVencimientos();
+    renderHome();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
 /* ---------- CARGA Y EDICIÓN ---------- */
 
 var _intimacionPapel = null;   /* el papel que ya estaba guardado, para no perderlo al editar */
@@ -7644,7 +7745,7 @@ function guardarIntimacion(cliViejo, id){
     toast(id ? "Intimación actualizada" : "Intimación cargada", "ok");
     return refrescarArchivos();
   }).then(function(){
-    pintarIntimaciones();
+    pintarVencimientos();
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
@@ -7656,7 +7757,7 @@ function responderIntimacion(cli, id){
   ref("archivos/" + cli + "/" + id + "/estado").set("respondida").then(function(){
     toast("Marcada como respondida", "ok");
     return refrescarArchivos();
-  }).then(pintarIntimaciones)
+  }).then(pintarVencimientos)
     .catch(function(e){ toast(explicarError(e), "error"); });
 }
 
@@ -7675,16 +7776,17 @@ function borrarIntimacion(cli, id){
           ref("").update(updates).then(function(){
             cerrarModal(); toast("Intimación borrada", "ok");
             return refrescarArchivos();
-          }).then(pintarIntimaciones)
+          }).then(pintarVencimientos)
             .catch(function(e){ toast(explicarError(e), "error"); });
         } }
     ], "angosto");
 }
 
 $("btnNuevaIntimacion").onclick = function(){ abrirFormIntimacion(null, null); };
-$("intCliente").onchange   = pintarIntimaciones;
-$("intOrganismo").onchange = pintarIntimaciones;
-$("intEstado").onchange    = pintarIntimaciones;
+$("intCliente").onchange   = pintarVencimientos;
+$("intOrganismo").onchange = pintarVencimientos;
+$("intEstado").onchange    = pintarVencimientos;
+$("intTipo").onchange      = pintarVencimientos;
 
 function renderArchivos(){
   llenarSelectClientes($("arcCliente"), true);
@@ -7709,7 +7811,7 @@ function nombreTipoArchivo(clave){
 function refrescarArchivos(){
   return ref("archivos").once("value").then(function(s){
     ESTADO.archivos = s.val() || {};
-    pintarNavIntimaciones();
+    pintarNavVencimientos();
     return ESTADO.archivos;
   });
 }
