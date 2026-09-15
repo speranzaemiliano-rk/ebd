@@ -158,6 +158,25 @@ Borra las dos cosas juntas —la ficha del papel y su contenido—, para no deja
 archivos huérfanos ocupando lugar. Un VEP guardado dentro de una liquidación se
 borra de ahí, que es donde vive, y el contador de VEP del mes se actualiza solo.
 
+### Se abre Gmail, no el programa del equipo
+
+`mailto:` abre el programa de correo de la máquina —Outlook, el Mail de
+Windows, o nada— y si el estudio trabaja con Gmail en el navegador, eso es una
+puerta a otro lado.
+
+Por defecto el sistema abre **Gmail** en una pestaña, en la casilla del estudio
+(`ebdconsultores@gmail.com`). El `authuser` de la URL es lo que evita que, con
+varias cuentas de Google abiertas en el navegador, el correo salga de la
+personal.
+
+Se cambia en **Configuración → Datos del estudio**: *Cómo se abre el correo*
+(Gmail o el programa del equipo) y *Casilla de Gmail del estudio*.
+
+Un detalle que no se ve: la pestaña se **reserva en el mismo clic**, en blanco
+y con un cartel de «Preparando el correo…», y recién se la manda a Gmail cuando
+los papeles terminaron de bajar. Abrirla después sería un pop-up para el
+navegador, y la bloquearía.
+
 ### Cómo funciona «Enviar al cliente»
 
 Descarga los papeles del mes y abre tu programa de correo con el destinatario,
