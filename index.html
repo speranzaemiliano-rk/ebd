@@ -728,6 +728,20 @@ tbody tr:hover{background:#FAFAFC}
 .dropzone:hover,.dropzone.encima{border-color:var(--azul);background:var(--azul-bg);color:var(--azul-link)}
 .dropzone .ico{font-size:40px;margin-bottom:10px;opacity:.45}
 
+/* La carpeta de un mes: el encabezado con el mes y los botones, y abajo la
+   lista de papeles. Separadas por aire y no por una caja más: la ficha ya está
+   adentro de un modal y una caja adentro de otra caja se vuelve una cebolla. */
+.mes-papeles{margin-bottom:20px}
+.mes-head{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding-bottom:8px;border-bottom:1px solid var(--pelo);
+}
+.mes-head .crece{flex:1;min-width:150px}
+.mes-head .btn{height:32px;padding-top:0;padding-bottom:0;display:inline-flex;align-items:center}
+@media(max-width:640px){
+  .mes-head .btn{flex:1 1 auto;justify-content:center}
+}
+
 .lista-simple{list-style:none}
 .lista-simple li{
   display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.055);
@@ -4107,40 +4121,254 @@ function fichaPdfCliente(id){
   toast("Ficha descargada", "ok");
 }
 
-/* Los papeles del cliente se leen recién al abrir la ficha, no al arrancar el
+/* ---------- LOS PAPELES DEL CLIENTE, MES POR MES ----------
+
+   Un cliente junta dos clases de papel por mes: las declaraciones juradas y
+   los comprobantes que se suben desde Archivos, y los VEP que se adjuntan al
+   cargar la liquidación. Vivían en dos lugares distintos, así que para
+   mandarle a alguien "lo de septiembre" había que ir a buscarlos por separado.
+
+   Acá se juntan en una carpeta por mes, con un botón para mandárselos.
+
+   Los papeles del cliente se leen recién al abrir la ficha, no al arrancar el
    sistema: los adjuntos pesan y cargarlos todos de entrada haría lento el
-   arranque para algo que casi nunca se mira. */
+   arranque para algo que casi nunca se mira. Los VEP son la excepción y no
+   hace falta pedirlos: viajan adentro de la liquidación, que ya está en
+   memoria. */
+
+function vepsDeLaLiquidacion(clienteId, periodo){
+  var liq = (ESTADO.liquidaciones[clienteId] || {})[periodo] || {};
+  var out = [];
+  IMPUESTOS.forEach(function(i){
+    var a = (liq[i.clave] || {}).vepArchivo;
+    if (!a || !a.contenido) return;
+    out.push({
+      origen: "liq", impuesto: i.clave, periodo: periodo,
+      nombre: a.nombre || ("VEP " + i.corto + ".pdf"),
+      etiqueta: "VEP de " + i.corto,
+      contenido: a.contenido
+    });
+  });
+  return out;
+}
+
+/* Devuelve [{ periodo, items }] del mes más nuevo al más viejo. Los papeles
+   sin mes asignado van al final, juntos: no se pierden, pero tampoco se
+   mezclan con los meses de verdad. */
+function papelesPorMes(clienteId, arch){
+  var meses = {};
+  function meter(per, item){ (meses[per || ""] = meses[per || ""] || []).push(item); }
+
+  Object.keys(arch || {}).forEach(function(k){
+    var a = arch[k];
+    meter(a.periodo, {
+      origen: "archivo", id: k, tipo: a.tipo, periodo: a.periodo || "",
+      nombre: a.nombre || "", nota: a.nota || "",
+      etiqueta: nombreTipoArchivo(a.tipo) +
+        (a.organismo ? " · " + (NOMBRE_ORGANISMO[a.organismo] || a.organismo) : ""),
+      subido: a.subido || ""
+    });
+  });
+
+  Object.keys(ESTADO.liquidaciones[clienteId] || {}).forEach(function(per){
+    vepsDeLaLiquidacion(clienteId, per).forEach(function(v){ meter(per, v); });
+  });
+
+  return Object.keys(meses).sort(function(a, b){
+    if (!a) return 1;
+    if (!b) return -1;
+    return b.localeCompare(a);
+  }).map(function(per){
+    var items = meses[per].sort(function(x, y){ return (x.etiqueta || "").localeCompare(y.etiqueta || ""); });
+    return { periodo: per, items: items };
+  });
+}
+
 function pintarArchivosDeLaFicha(id){
   var cont = $("fcArchivos");
   if (!cont) return;
   ref("archivos/" + id).once("value").then(function(s){
     if (!$("fcArchivos")) return;   /* cerró el modal mientras tanto */
-    var arch = s.val() || {};
-    var ids = Object.keys(arch).sort(function(a, b){
-      return String(arch[b].subido || "").localeCompare(String(arch[a].subido || ""));
-    });
+    var grupos = papelesPorMes(id, s.val() || {});
+    var puede = puedeEscribir();
+    /* Lo pintado queda acá para que los botones llamen por posición. Meter el
+       nombre del archivo adentro del onclick parece más directo, pero basta
+       una comilla en «Resumen "Santander".pdf» para romper el atributo entero
+       y que el botón deje de funcionar sin decir por qué. */
+    _papelesFicha = { clienteId: id, grupos: grupos };
 
-    if (!ids.length){
-      cont.innerHTML = '<div class="ayuda">Todavía no hay papeles guardados de este cliente. ' +
-        "Se suben desde la solapa <b>Archivos</b>, o leyendo su constancia desde <b>Clientes</b>.</div>";
+    var cabecera = '<div class="ayuda" style="margin-bottom:12px">' +
+      "<b>Enviar al cliente</b> descarga los papeles del mes y abre tu programa de correo con el texto listo. " +
+      "Los adjuntos hay que arrastrarlos a mano: el navegador no puede adjuntar archivos por su cuenta." +
+      (puede ? ' <a href="#" onclick="agregarPapelAlMes(\'' + id + '\',\'\');return false;">Subir papeles</a>.' : "") +
+      "</div>";
+
+    if (!grupos.length){
+      cont.innerHTML = cabecera + '<div class="ayuda">Todavía no hay papeles guardados de este cliente. ' +
+        "Se suben desde acá mismo, desde la solapa <b>Archivos</b>, o leyendo su constancia desde <b>Clientes</b>.</div>";
       return;
     }
-
-    cont.innerHTML = '<div class="tabla-wrap"><table><thead><tr><th>Tipo</th><th>Archivo</th>' +
-      "<th>Período</th><th></th></tr></thead><tbody>" +
-      ids.map(function(k){
-        var a = arch[k];
-        return "<tr><td>" + esc(nombreTipoArchivo(a.tipo)) +
-            (a.organismo ? ' <span class="badge b-azul">' + esc(NOMBRE_ORGANISMO[a.organismo] || a.organismo) + "</span>" : "") + "</td>" +
-          '<td class="mono">' + esc(a.nombre || "") +
-            (a.nota ? '<div style="color:var(--gris);font-size:11.5px" class="">' + esc(a.nota) + "</div>" : "") + "</td>" +
-          "<td>" + (a.periodo ? periodoLargo(a.periodo) : "—") + "</td>" +
-          '<td><button class="btn sec chico" onclick="verArchivo(\'' + id + "','" + k + '\')">Ver</button></td></tr>';
-      }).join("") + "</tbody></table></div>";
+    cont.innerHTML = cabecera + grupos.map(function(g, gi){ return bloqueMesPapeles(id, g, gi); }).join("");
   }).catch(function(e){
     if ($("fcArchivos")) $("fcArchivos").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' +
       esc(explicarError(e)) + "</div></div>";
   });
+}
+
+var _papelesFicha = { clienteId:"", grupos:[] };
+
+function _papelDeLaFicha(gi, ii){
+  var g = (_papelesFicha.grupos || [])[gi];
+  return g ? g.items[ii] : null;
+}
+function verPapelDeLaFicha(gi, ii){
+  var it = _papelDeLaFicha(gi, ii);
+  if (!it) return;
+  if (it.origen === "liq") verVepGuardado(_papelesFicha.clienteId, it.periodo, it.impuesto);
+  else verArchivo(_papelesFicha.clienteId, it.id);
+}
+function bajarPapelDeLaFicha(gi, ii){
+  var it = _papelDeLaFicha(gi, ii);
+  if (!it) return;
+  if (it.contenido){ bajarDatos(it.nombre || "papel.pdf", it.contenido); return; }
+  ref("archivosContenido/" + it.id).once("value").then(function(s){
+    var datos = s.val();
+    if (!datos){ toast("No encontré el contenido de ese papel", "error"); return; }
+    bajarDatos(it.nombre || "papel.pdf", datos);
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
+
+function bloqueMesPapeles(clienteId, g, gi){
+  var puede = puedeEscribir();
+  var titulo = g.periodo ? periodoLargo(g.periodo) : "Sin mes asignado";
+
+  return '<div class="mes-papeles">' +
+    '<div class="mes-head">' +
+      '<div class="crece"><b>' + esc(titulo) + "</b>" +
+        '<span class="ayuda" style="margin-left:8px">' + g.items.length +
+        (g.items.length === 1 ? " papel" : " papeles") + "</span></div>" +
+      (puede && g.periodo
+        ? '<button class="btn sec chico" onclick="agregarPapelAlMes(\'' + clienteId + "','" + g.periodo + '\')">+ Agregar</button>'
+        : "") +
+      (g.periodo
+        ? '<button class="btn sec chico" onclick="enviarPapelesDelMes(\'' + clienteId + "','" + g.periodo + '\')">📧 Enviar al cliente</button>'
+        : "") +
+    "</div>" +
+    '<ul class="lista-simple">' + g.items.map(function(it, ii){
+      return "<li>" +
+        '<span class="badge ' + (it.origen === "liq" ? "b-verde" : "b-azul") + '">' + esc(it.etiqueta) + "</span>" +
+        '<div class="crece"><div class="tit mono" style="overflow:hidden;text-overflow:ellipsis">' + esc(it.nombre) + "</div>" +
+          (it.nota ? '<div class="sub">' + esc(it.nota) + "</div>" : "") + "</div>" +
+        '<button class="btn-icono" title="Ver" onclick="verPapelDeLaFicha(' + gi + "," + ii + ')">📄</button>' +
+        '<button class="btn-icono" title="Descargar" onclick="bajarPapelDeLaFicha(' + gi + "," + ii + ')">⬇️</button>' +
+      "</li>";
+    }).join("") + "</ul></div>";
+}
+
+/* ---------- VER Y DESCARGAR ---------- */
+function _vepDe(clienteId, periodo, impuesto){
+  var liq = (ESTADO.liquidaciones[clienteId] || {})[periodo] || {};
+  return (liq[impuesto] || {}).vepArchivo || null;
+}
+function verVepGuardado(clienteId, periodo, impuesto){
+  var a = _vepDe(clienteId, periodo, impuesto);
+  if (!a || !a.contenido){ toast("No encontré ese VEP", "error"); return; }
+  var w = window.open("");
+  if (!w){ toast("El navegador bloqueó la ventana nueva", "error"); return; }
+  w.document.write("<title>" + esc(a.nombre || "VEP") + "</title>" +
+    '<iframe src="' + a.contenido + '" style="border:0;width:100%;height:100%;position:fixed;inset:0"></iframe>');
+}
+/* El archivo ya está en el navegador como data: URL, así que bajarlo es
+   pedirle al propio navegador que lo guarde. */
+function bajarDatos(nombre, datos){
+  var a = document.createElement("a");
+  a.href = datos;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ if (a.parentNode) a.parentNode.removeChild(a); }, 300);
+}
+
+/* ---------- MANDARLE EL MES AL CLIENTE ----------
+
+   Un `mailto:` NO puede llevar adjuntos: eso lo prohíbe el navegador, no es
+   algo que falte programar. Entonces se hacen las dos mitades: se bajan los
+   papeles del mes y se abre el correo con el destinatario, el asunto y el
+   texto ya escritos, diciendo qué se está mandando. Sólo queda arrastrar los
+   archivos, que es lo único que el navegador no puede hacer por uno. */
+function enviarPapelesDelMes(clienteId, periodo){
+  var c = ESTADO.clientes[clienteId] || {};
+  toast("Buscando los papeles de " + periodoLargo(periodo) + "…", "ok");
+
+  ref("archivos/" + clienteId).once("value").then(function(s){
+    var g = papelesPorMes(clienteId, s.val() || {}).filter(function(x){ return x.periodo === periodo; })[0];
+    if (!g || !g.items.length){ toast("No hay papeles guardados de ese mes", "error"); return; }
+    return bajarPapelesDelMes(clienteId, g.items).then(function(bajados){
+      abrirMailDelMes(c, periodo, g.items, bajados);
+    });
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
+
+/* De a uno y con una pausa en el medio: varias descargas disparadas todas
+   juntas hacen que el navegador cancele todas menos la primera. */
+function bajarPapelesDelMes(clienteId, items){
+  var i = 0, bajados = 0;
+  function uno(){
+    if (i >= items.length) return Promise.resolve(bajados);
+    var it = items[i++];
+    var traer = it.contenido
+      ? Promise.resolve(it.contenido)
+      : ref("archivosContenido/" + it.id).once("value").then(function(s){ return s.val(); });
+    return traer.then(function(datos){
+      if (datos){ bajarDatos(it.nombre || "papel.pdf", datos); bajados++; }
+    }).catch(function(){
+      /* que falle uno no puede frenar a los demás */
+    }).then(function(){
+      return new Promise(function(listo){ setTimeout(listo, 350); });
+    }).then(uno);
+  }
+  return uno();
+}
+
+function abrirMailDelMes(c, periodo, items, bajados){
+  var est = ESTADO.config.estudio || {};
+  var nombreEst = est.nombre || "EBD Consultores";
+  var lista = items.map(function(i){
+    return "• " + (i.etiqueta || "Papel") + (i.nombre ? " — " + i.nombre : "");
+  }).join("\n");
+
+  var cuerpo =
+    "Estimado/a " + (c.razonSocial || "") + ":\n\n" +
+    "Le enviamos la documentación correspondiente a " + periodoLargo(periodo) + ":\n\n" +
+    lista + "\n\n" +
+    "Quedamos a disposición por cualquier consulta.\n\n" +
+    "Saludos cordiales,\n" + nombreEst +
+    (est.cuit ? "\nCUIT " + formatCuit(est.cuit) : "") +
+    (est.mail ? (est.cuit ? " · " : "\n") + est.mail : "") +
+    (est.tel ? " · " + est.tel : "");
+
+  var url = "mailto:" + encodeURIComponent(c.email || "") +
+    "?subject=" + encodeURIComponent(nombreEst + " — " + periodoLargo(periodo)) +
+    "&body=" + encodeURIComponent(cuerpo);
+
+  var a = document.createElement("a");
+  a.href = url;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ if (a.parentNode) a.parentNode.removeChild(a); }, 300);
+
+  toast(!c.email
+    ? "Este cliente no tiene mail cargado: escribilo en el correo que se abrió"
+    : bajados + (bajados === 1 ? " papel descargado" : " papeles descargados") + ": adjuntalos al correo",
+    c.email ? "ok" : "error");
+}
+
+/* Subir un papel directo al mes que se está mirando. Hay un solo modal, así
+   que la ficha se cierra; al guardar se vuelve a abrir sola, que es donde la
+   persona estaba. */
+function agregarPapelAlMes(clienteId, periodo){
+  cerrarModal();
+  setTimeout(function(){ abrirSubirArchivo(clienteId, periodo); }, 180);
 }
 
 function verFichaCliente(id){
@@ -4164,6 +4392,11 @@ function verFichaCliente(id){
   });
   html += "</div>";
 
+  /* Los papeles van antes que la facturación: es lo que la persona viene a
+     buscar cuando abre una ficha, y la tabla de 24 meses los empujaba tan
+     abajo que había que scrollear a ciegas. */
+  html += '<div class="seccion-tit">Papeles por mes</div><div id="fcArchivos"><div class="ayuda">Buscando…</div></div>';
+
   html += '<div class="seccion-tit">Facturación mes a mes</div><div class="tabla-wrap"><table><thead><tr>' +
     "<th>Período</th><th class=num>Emitido</th><th class=num>Recibido</th><th class=num>Comprobantes</th></tr></thead><tbody>";
   var pers = Object.keys(t).sort().reverse().slice(0,24);
@@ -4180,7 +4413,6 @@ function verFichaCliente(id){
   }
   html += "</tbody></table></div>";
 
-  html += '<div class="seccion-tit">Papeles del cliente</div><div id="fcArchivos"><div class="ayuda">Buscando…</div></div>';
 
   abrirModal(c.razonSocial + " · " + formatCuit(c.cuit), html, [
     { texto:"Cerrar", clase:"gris", accion:cerrarModalPedido },
@@ -7391,9 +7623,16 @@ function borrarArchivo(cli, id){
 var _papeles = [];        /* [{ file, tipo, clienteId, periodo, nota, estado }] */
 var MAX_PAPEL_MB = 5;
 
-function abrirSubirArchivo(){
+/* `cliFijo` y `perFijo` llegan cuando se sube desde la ficha de un cliente:
+   ahí ya sabemos de quién y de qué mes es, no tiene sentido volver a pedirlo.
+   `_volverAFicha` es para reabrir la ficha después de guardar: hay un solo
+   modal, así que subir un papel la cierra, y volver sola a donde uno estaba es
+   lo que uno espera. */
+var _volverAFicha = "";
+
+function abrirSubirArchivo(cliFijo, perFijo){
   _papeles = [];
-  var hoy = periodoHoy();
+  _volverAFicha = cliFijo || "";
 
   abrirModal("Subir papeles",
     '<div class="aviso info"><span>📎</span><div>Podés soltar <b>varios archivos de una vez</b>: constancias, VEP, ' +
@@ -7424,7 +7663,8 @@ function abrirSubirArchivo(){
     llenarSelectClientes($("sbCliente"), false);
     var sel = $("sbCliente");
     sel.insertBefore(new Option("✨ Detectar con IA", ""), sel.firstChild);
-    sel.value = "";
+    sel.value = cliFijo || "";
+    if (perFijo) $("sbPeriodo").value = periodoAMonthInput(perFijo);
     /* Elegir los archivos ya prepara: un botón menos que apretar. */
     $("sbArchivo").onchange = prepararPapeles;
   }, 50);
@@ -7607,13 +7847,18 @@ function guardarPapeles(){
     cerrarModal();
     toast(elegidos.length === 1 ? "Papel guardado" : elegidos.length + " papeles guardados", "ok");
     pintarArchivos();
+    if (_volverAFicha){
+      var vuelta = _volverAFicha;
+      _volverAFicha = "";
+      setTimeout(function(){ verFichaCliente(vuelta); }, 220);
+    }
   }).catch(function(e){
     toast(explicarError(e), "error");
     if (btn){ btn.disabled = false; btn.textContent = "Guardar"; }
   });
 }
 
-$("btnSubirArchivo").onclick = abrirSubirArchivo;
+$("btnSubirArchivo").onclick = function(){ abrirSubirArchivo(); };
 $("arcCliente").onchange = pintarArchivos;
 $("arcTipo").onchange    = pintarArchivos;
 
@@ -7624,7 +7869,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v45";
+var VERSION_APP = "v46";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

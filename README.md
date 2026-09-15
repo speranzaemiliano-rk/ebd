@@ -6,6 +6,29 @@ recategorización semestral.
 
 **En línea:** <https://speranzaemiliano-rk.github.io/ebd/>
 
+## Los papeles de cada cliente, mes por mes
+
+Al hacer clic en un cliente, la ficha abre con **Papeles por mes**: una carpeta
+por cada mes con todo lo de ese período junto.
+
+Junta las dos cosas que antes vivían separadas:
+
+- lo que se sube desde **Archivos** o desde la propia ficha (declaraciones
+  juradas, resúmenes, constancias);
+- los **VEP** que se adjuntan al cargar la liquidación del mes — esos no hay que
+  volver a subirlos, aparecen solos.
+
+De cada mes se puede **agregar** un papel (ya viene con el cliente y el mes
+puestos) y **enviárselo al cliente**.
+
+### Cómo funciona «Enviar al cliente»
+
+Descarga los papeles del mes y abre tu programa de correo con el destinatario,
+el asunto y el texto ya escritos, diciendo qué se está mandando. **Los adjuntos
+hay que arrastrarlos a mano**: un `mailto:` no puede llevar archivos, y eso lo
+prohíbe el navegador — no es algo que falte programar. Por eso el sistema hace
+las dos mitades que sí puede: bajar los papeles y dejar el correo escrito.
+
 ## Cerrar una ficha
 
 Las ventanas del sistema **no se cierran tocando afuera**. Para salir están la
