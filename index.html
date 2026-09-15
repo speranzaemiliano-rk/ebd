@@ -1266,7 +1266,7 @@ tbody tr:hover{background:#FAFAFC}
       <div class="card">
         <div class="card-head">
           <h2>Declaraciones juradas y resúmenes</h2>
-          <button class="btn" id="btnSubirArchivo">+ Subir archivo</button>
+          <button class="btn" id="btnSubirArchivo">📎 Subir papeles</button>
         </div>
         <p class="desc">Los papeles de cada cliente, guardados en un solo lugar: declaraciones juradas, resúmenes bancarios, constancias y lo que haga falta.</p>
         <div class="filtros">
@@ -5874,60 +5874,242 @@ function borrarArchivo(cli, id){
     ], "angosto");
 }
 
+/* ==========================================================================
+   SUBIR PAPELES — varios de una vez, y que la IA los ubique
+
+   Subir de a uno y elegir cliente, tipo y período a mano es lo que hace que
+   los papeles terminen en una carpeta del escritorio y no en el sistema. Acá
+   se sueltan todos juntos y la IA lee cada uno: qué es, de quién y de cuándo.
+
+   La IA propone, no decide: cada fila queda editable y hay que confirmar. Se
+   equivoca distinto que una persona, pero se equivoca.
+
+   Si no hay clave de Gemini cargada, el modal sigue sirviendo: se eligen
+   cliente y tipo a mano y valen para todos los archivos.
+   ========================================================================== */
+
+var _papeles = [];        /* [{ file, tipo, clienteId, periodo, nota, estado }] */
+var MAX_PAPEL_MB = 5;
+
 function abrirSubirArchivo(){
+  _papeles = [];
   var hoy = periodoHoy();
-  abrirModal("Subir archivo",
-    '<div class="grid g2">' +
-      '<div class="campo"><label>Cliente *</label><select id="sbCliente"></select></div>' +
+
+  abrirModal("Subir papeles",
+    '<div class="aviso info"><span>📎</span><div>Podés soltar <b>varios archivos de una vez</b>: constancias, VEP, ' +
+      "declaraciones juradas, resúmenes. Si tenés la IA configurada, lee cada uno y propone de qué cliente " +
+      "y de qué mes es; vos revisás antes de guardar.</div></div>" +
+    '<div class="campo"><label>Archivos</label>' +
+      '<input type="file" id="sbArchivo" accept="application/pdf,image/*" multiple>' +
+      '<div class="ayuda">PDF o fotos, hasta ' + MAX_PAPEL_MB + " MB cada uno.</div></div>" +
+    '<div class="grid g3">' +
+      '<div class="campo"><label>Cliente</label><select id="sbCliente"></select>' +
+        '<div class="ayuda">Dejalo en «detectar» y lo saca del archivo.</div></div>' +
       '<div class="campo"><label>Tipo</label><select id="sbTipo">' +
+        '<option value="">✨ Detectar con IA</option>' +
         TIPOS_ARCHIVO.map(function(t){ return '<option value="' + t.clave + '">' + t.nombre + "</option>"; }).join("") +
       "</select></div>" +
-      '<div class="campo"><label>Período (opcional)</label><input type="month" id="sbPeriodo" value="' + periodoAMonthInput(hoy) + '"></div>' +
-      '<div class="campo"><label>Nota (opcional)</label><input type="text" id="sbNota" placeholder="DDJJ IVA, resumen Galicia…"></div>' +
+      '<div class="campo"><label>Período</label><input type="month" id="sbPeriodo" value="">' +
+        '<div class="ayuda">Vacío: lo detecta o queda sin período.</div></div>' +
     "</div>" +
-    '<div class="campo"><label>Archivo *</label><input type="file" id="sbArchivo" accept="application/pdf,image/*">' +
-      '<div class="ayuda">Hasta 5 MB. Sirve PDF o foto.</div></div>' +
-    '<div id="sbEstado"></div>',
+    '<div id="sbEstado"></div>' +
+    '<div id="sbLista"></div>',
     [
       { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
-      { texto:"Subir", id:"btnSbGuardar", accion:guardarArchivo }
-    ]);
+      { texto:"Preparar", id:"btnSbPreparar", clase:"sec", accion:prepararPapeles },
+      { texto:"Guardar", id:"btnSbGuardar", accion:guardarPapeles }
+    ], "ancho");
 
-  setTimeout(function(){ llenarSelectClientes($("sbCliente"), false); }, 50);
+  setTimeout(function(){
+    llenarSelectClientes($("sbCliente"), false);
+    var sel = $("sbCliente");
+    sel.insertBefore(new Option("✨ Detectar con IA", ""), sel.firstChild);
+    sel.value = "";
+    /* Elegir los archivos ya prepara: un botón menos que apretar. */
+    $("sbArchivo").onchange = prepararPapeles;
+  }, 50);
 }
 
-function guardarArchivo(){
-  var cli = $("sbCliente").value;
-  if (!cli){ toast("Elegí el cliente", "error"); return; }
+/* Lee los archivos elegidos y arma la lista, consultando a la IA cuando hace
+   falta. Las consultas van de a una y no todas juntas: la cuenta gratuita de
+   Gemini tiene un límite por minuto y en paralelo se lo lleva puesto. */
+function prepararPapeles(){
+  var files = Array.prototype.slice.call(($("sbArchivo").files || []));
+  if (!files.length){ toast("Elegí al menos un archivo", "error"); return; }
+
+  var tipoFijo = $("sbTipo").value;
+  var cliFijo  = $("sbCliente").value;
+  /* Acá NO se usa monthInputAPeriodo: ese helper devuelve el mes actual
+     cuando el campo está vacío, y vacío tiene que significar "que lo detecte
+     la IA" o "sin período", no "septiembre". */
+  var perFijo  = ($("sbPeriodo").value || "").replace("-", "");
+  var hayQueDetectar = !tipoFijo || !cliFijo;
+
+  _papeles = files.map(function(f){
+    return { file:f, tipo:tipoFijo || "otro", clienteId:cliFijo || "", periodo:perFijo,
+             nota:"", organismo:"", estado: f.size > MAX_PAPEL_MB * 1024 * 1024 ? "pesado" : "" };
+  });
+  pintarPapeles();
+
+  if (!hayQueDetectar){ $("sbEstado").innerHTML = ""; return; }
+
+  var pendientes = _papeles.filter(function(p){ return p.estado !== "pesado"; });
+  var i = 0;
+  function siguiente(){
+    if (i >= pendientes.length){
+      $("sbEstado").innerHTML = '<div class="aviso ok"><span>✓</span><div>Listo. Revisá y guardá.</div></div>';
+      return;
+    }
+    var p = pendientes[i];
+    $("sbEstado").innerHTML = '<div class="aviso info"><span>⏳</span><div>Leyendo ' + (i + 1) +
+      " de " + pendientes.length + ": " + esc(p.file.name) + "…</div></div>";
+    clasificarPapel(p, tipoFijo, cliFijo, perFijo).then(function(){
+      i++; pintarPapeles(); siguiente();
+    });
+  }
+  siguiente();
+}
+
+function clasificarPapel(p, tipoFijo, cliFijo, perFijo){
+  var consigna =
+    "Sos el asistente de un estudio contable argentino. Te paso un documento. " +
+    "Devolvé SOLO un objeto JSON, sin texto alrededor, con estas claves:\n" +
+    '{"tipo":"constancia|vep|ddjj|resumen|otro","organismo":"arca|arba|agip|","cuit":"11 dígitos sin guiones",' +
+    '"razonSocial":"","periodo":"AAAAMM","resumen":"una línea de qué es"}\n' +
+    "Reglas: constancia = constancia de inscripción; vep = volante electrónico de pago o comprobante de pago; " +
+    "ddjj = declaración jurada; resumen = resumen bancario o de tarjeta. " +
+    "El período es el mes al que corresponde el documento, no la fecha de emisión. " +
+    "Si un dato no está, poné cadena vacía. No inventes.";
+
+  return preguntarAGemini(consigna, p.file, 0).then(function(txt){
+    var d = jsonDeGemini(txt);
+    if (!tipoFijo && d.tipo && TIPOS_ARCHIVO.some(function(t){ return t.clave === d.tipo; })) p.tipo = d.tipo;
+    p.organismo = String(d.organismo || "").toLowerCase();
+    p.nota = String(d.resumen || "").slice(0, 120);
+    if (!perFijo && /^\d{6}$/.test(String(d.periodo || ""))) p.periodo = d.periodo;
+
+    if (!cliFijo){
+      var cuit = String(d.cuit || "").replace(/\D/g, "");
+      Object.keys(ESTADO.clientes).forEach(function(id){
+        if (String(ESTADO.clientes[id].cuit || "").replace(/\D/g, "") === cuit) p.clienteId = id;
+      });
+      /* Sin CUIT que matchee, se intenta por nombre: la IA a veces lee bien la
+         razón social y mal el CUIT, sobre todo en un escaneo. */
+      if (!p.clienteId && d.razonSocial){
+        var buscado = _sinTildes(d.razonSocial).toUpperCase();
+        Object.keys(ESTADO.clientes).forEach(function(id){
+          var n = _sinTildes(ESTADO.clientes[id].razonSocial || "").toUpperCase();
+          if (n && (n === buscado || n.indexOf(buscado) === 0 || buscado.indexOf(n) === 0)) p.clienteId = id;
+        });
+      }
+      if (!p.clienteId) p.estado = "sincliente";
+    }
+  }).catch(function(e){
+    p.estado = "error";
+    p.nota = e.message.slice(0, 120);
+  });
+}
+
+function pintarPapeles(){
+  var cont = $("sbLista");
+  if (!_papeles.length){ cont.innerHTML = ""; return; }
+
+  var opcCli = '<option value="">— elegir —</option>' +
+    Object.keys(ESTADO.clientes)
+      .filter(function(id){ return ESTADO.clientes[id].activo !== false; })
+      .sort(function(a, b){ return nombreCliente(a).localeCompare(nombreCliente(b)); })
+      .map(function(id){ return '<option value="' + id + '">' + esc(nombreCliente(id)) + "</option>"; }).join("");
+
+  cont.innerHTML = '<div class="seccion-tit">Qué se va a guardar</div>' +
+    '<div class="tabla-wrap"><table><thead><tr><th style="width:38px"></th><th>Archivo</th>' +
+      "<th>Qué es</th><th>Cliente</th><th>Período</th></tr></thead><tbody>" +
+    _papeles.map(function(p, i){
+      if (p.estado === "pesado"){
+        return '<tr style="opacity:.55"><td></td><td class="mono">' + esc(p.file.name) + "</td>" +
+          '<td colspan="3"><span class="badge b-rojo">pesa más de ' + MAX_PAPEL_MB + " MB</span></td></tr>";
+      }
+      return "<tr><td><input type=\"checkbox\" class=\"pp-chk\" data-i=\"" + i + "\" checked" +
+          ' style="width:17px;height:17px;accent-color:var(--azul);cursor:pointer"></td>' +
+        '<td class="mono">' + esc(p.file.name) +
+          (p.nota ? '<div style="color:var(--gris);font-size:11.5px">' + esc(p.nota) + "</div>" : "") + "</td>" +
+        '<td><select class="pp-tipo" data-i="' + i + '">' +
+          TIPOS_ARCHIVO.map(function(t){
+            return '<option value="' + t.clave + '"' + (p.tipo === t.clave ? " selected" : "") + ">" + t.nombre + "</option>";
+          }).join("") + "</select></td>" +
+        '<td><select class="pp-cli" data-i="' + i + '" style="min-width:150px">' + opcCli + "</select>" +
+          (p.estado === "sincliente" ? '<div style="color:var(--amar);font-size:11.5px">no lo reconocí</div>' : "") +
+          (p.estado === "error" ? '<div style="color:var(--rojo);font-size:11.5px">no pude leerlo</div>' : "") + "</td>" +
+        '<td><input type="month" class="pp-per" data-i="' + i + '" value="' +
+          (p.periodo ? periodoAMonthInput(p.periodo) : "") + '" style="width:150px"></td></tr>';
+    }).join("") + "</tbody></table></div>";
+
+  /* El valor del select de cliente se pone por JS y no en el HTML: así no hay
+     que escapar el id dentro del atributo ni preocuparse por comillas. */
+  Array.prototype.forEach.call(cont.querySelectorAll(".pp-cli"), function(sel){
+    sel.value = _papeles[sel.dataset.i].clienteId || "";
+    sel.onchange = function(){ _papeles[this.dataset.i].clienteId = this.value; };
+  });
+  Array.prototype.forEach.call(cont.querySelectorAll(".pp-tipo"), function(sel){
+    sel.onchange = function(){ _papeles[this.dataset.i].tipo = this.value; };
+  });
+  Array.prototype.forEach.call(cont.querySelectorAll(".pp-per"), function(inp){
+    /* Vaciar el campo tiene que dejar el papel sin período, no ponerle el mes
+       de hoy: por eso se lee el valor crudo. */
+    inp.onchange = function(){ _papeles[this.dataset.i].periodo = (this.value || "").replace("-", ""); };
+  });
+}
+
+function guardarPapeles(){
+  if (!_papeles.length){ toast("Elegí los archivos y apretá Preparar", "error"); return; }
+
+  var elegidos = [];
+  Array.prototype.forEach.call(document.querySelectorAll(".pp-chk"), function(chk){
+    if (chk.checked) elegidos.push(_papeles[chk.dataset.i]);
+  });
+  if (!elegidos.length){ toast("No marcaste ningún archivo", "error"); return; }
+
+  var sinCliente = elegidos.filter(function(p){ return !p.clienteId; });
+  if (sinCliente.length){
+    toast(sinCliente.length === 1 ? "Falta elegir el cliente de un archivo"
+                                  : "Faltan los clientes de " + sinCliente.length + " archivos", "error");
+    return;
+  }
 
   var btn = $("btnSbGuardar");
-  if (btn){ btn.disabled = true; btn.textContent = "Subiendo…"; }
+  if (btn){ btn.disabled = true; btn.textContent = "Guardando…"; }
 
-  leerArchivo($("sbArchivo"), 5).then(function(arch){
-    if (!arch) throw new Error("Elegí un archivo");
-
-    var id = ref("archivos/" + cli).push().key;
-    var entrada = $("sbArchivo").files[0];
-    var ficha = {
-      tipo:    $("sbTipo").value,
-      periodo: monthInputAPeriodo($("sbPeriodo").value) || "",
-      nombre:  arch.nombre,
-      nota:    $("sbNota").value.trim(),
-      peso:    entrada ? entrada.size : 0,
-      subido:  arch.subido
-    };
-
+  /* Se leen todos y recién ahí se escribe: una sola escritura deja el listado
+     consistente aunque se corte la conexión en el medio. */
+  Promise.all(elegidos.map(function(p){
+    return new Promise(function(resolve, reject){
+      var fr = new FileReader();
+      fr.onload = function(e){ resolve({ p: p, contenido: e.target.result }); };
+      fr.onerror = function(){ reject(new Error("No pude leer «" + p.file.name + "»")); };
+      fr.readAsDataURL(p.file);
+    });
+  })).then(function(leidos){
     var updates = {};
-    updates["archivos/" + cli + "/" + id] = ficha;
-    updates["archivosContenido/" + id] = arch.contenido;
+    leidos.forEach(function(x){
+      var id = ref("archivos/" + x.p.clienteId).push().key;
+      updates["archivos/" + x.p.clienteId + "/" + id] = {
+        tipo: x.p.tipo || "otro",
+        organismo: x.p.organismo || "",
+        periodo: x.p.periodo || "",
+        nombre: x.p.file.name,
+        nota: x.p.nota || "",
+        peso: x.p.file.size || 0,
+        subido: new Date().toISOString()
+      };
+      updates["archivosContenido/" + id] = x.contenido;
+    });
     return ref("").update(updates);
   }).then(function(){
     cerrarModal();
-    toast("Archivo guardado", "ok");
+    toast(elegidos.length === 1 ? "Papel guardado" : elegidos.length + " papeles guardados", "ok");
     pintarArchivos();
   }).catch(function(e){
-    $("sbEstado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(e.message || explicarError(e)) + "</div></div>";
-    if (btn){ btn.disabled = false; btn.textContent = "Subir"; }
+    toast(explicarError(e), "error");
+    if (btn){ btn.disabled = false; btn.textContent = "Guardar"; }
   });
 }
 
@@ -5942,7 +6124,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v39";
+var VERSION_APP = "v40";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
