@@ -1674,6 +1674,15 @@ tbody tr:hover{background:#FAFAFC}
           <div class="campo"><label>CUIT del estudio</label><input type="text" id="cfgCuit"></div>
           <div class="campo"><label>Correo de contacto</label><input type="email" id="cfgMail"></div>
           <div class="campo"><label>Teléfono</label><input type="text" id="cfgTel"></div>
+          <div class="campo"><label>Cómo se abre el correo</label>
+            <select id="cfgCorreoModo">
+              <option value="gmail">Gmail en el navegador</option>
+              <option value="programa">El programa de correo del equipo</option>
+            </select>
+            <div class="ayuda">«Enviar al cliente» descarga los papeles y abre el correo con el texto listo. Elegí con qué.</div></div>
+          <div class="campo" id="campoCorreoCuenta"><label>Casilla de Gmail del estudio</label>
+            <input type="email" id="cfgCorreoCuenta" placeholder="ebdconsultores@gmail.com">
+            <div class="ayuda">Si en el navegador hay varias cuentas de Google abiertas, Gmail abre ésta. Si no está abierta, la pide.</div></div>
           <button class="btn" id="btnGuardarEstudio">Guardar</button>
         </div>
 
@@ -2096,6 +2105,7 @@ var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio"
 /* Campos que solo un admin puede guardar: sin el botón al lado, dejarlos
    editables invita a escribir algo que después se pierde. */
 var CAMPOS_ADMIN = ["cfgNombre","cfgCuit","cfgMail","cfgTel",
+                    "cfgCorreoModo","cfgCorreoCuenta",
                     "cfgEjsService","cfgEjsTemplate","cfgEjsKey",
                     "escalaVigencia","escalaAlquileres",
                     "plantillaAsunto","plantillaCuerpo",
@@ -4995,6 +5005,81 @@ function bajarDatos(nombre, datos){
   setTimeout(function(){ if (a.parentNode) a.parentNode.removeChild(a); }, 300);
 }
 
+/* ---------- CON QUÉ SE ABRE EL CORREO ----------
+   `mailto:` abre el programa de correo del equipo, que en una computadora del
+   estudio puede ser Outlook, el Mail de Windows o directamente nada. Si el
+   estudio trabaja con Gmail en el navegador, eso es una puerta a otro lado.
+
+   Por eso hay dos modos. En `gmail` se arma la URL de redacción de Gmail, con
+   `authuser` para que abra la casilla del estudio y no la personal que quedó
+   logueada en esa máquina. En `programa` vuelve el mailto de siempre. */
+var CORREO_CUENTA_DEFECTO = "ebdconsultores@gmail.com";
+
+function configCorreo(){
+  var est = ESTADO.config.estudio || {};
+  return {
+    modo:   est.correoModo === "programa" ? "programa" : "gmail",
+    cuenta: est.correoCuenta || est.mail || CORREO_CUENTA_DEFECTO
+  };
+}
+
+function urlDeCorreo(para, asunto, cuerpo){
+  var cfg = configCorreo();
+  if (cfg.modo === "programa"){
+    return "mailto:" + encodeURIComponent(para || "") +
+      "?subject=" + encodeURIComponent(asunto || "") +
+      "&body=" + encodeURIComponent(cuerpo || "");
+  }
+  /* view=cm es «componer»; fs=1 la abre a pantalla completa y no en la
+     ventanita de abajo a la derecha. */
+  return "https://mail.google.com/mail/?view=cm&fs=1&tf=1" +
+    "&authuser=" + encodeURIComponent(cfg.cuenta) +
+    "&to=" + encodeURIComponent(para || "") +
+    "&su=" + encodeURIComponent(asunto || "") +
+    "&body=" + encodeURIComponent(cuerpo || "");
+}
+
+/* Gmail se abre en una pestaña nueva, y una pestaña abierta por código
+   después de un rato es un pop-up para el navegador. Los papeles tardan lo
+   suyo en bajar, así que la pestaña se reserva EN EL MISMO CLIC —en blanco, con
+   un cartel— y recién cuando el correo está armado se la manda a Gmail.
+   Devuelve null en modo `programa`, que no necesita pestaña. */
+function reservarPestanaCorreo(){
+  if (configCorreo().modo === "programa") return null;
+  var v = window.open("", "_blank");
+  if (v && v.document){
+    v.document.write('<title>Preparando el correo…</title>' +
+      '<body style="font:16px -apple-system,system-ui,sans-serif;color:#1d1d1f;' +
+      'display:flex;align-items:center;justify-content:center;height:100vh;margin:0">' +
+      "Preparando el correo…</body>");
+  }
+  return v;
+}
+
+function abrirCorreo(para, asunto, cuerpo, pestana){
+  var url = urlDeCorreo(para, asunto, cuerpo);
+
+  if (configCorreo().modo === "programa"){
+    if (pestana) pestana.close();
+    _clickEnlace(url, false);
+    return true;
+  }
+  if (pestana && !pestana.closed){ pestana.location.href = url; return true; }
+
+  /* Sin pestaña reservada —o la cerraron— se intenta igual: a veces pasa. */
+  _clickEnlace(url, true);
+  return false;
+}
+
+function _clickEnlace(url, nuevaPestana){
+  var a = document.createElement("a");
+  a.href = url;
+  if (nuevaPestana){ a.target = "_blank"; a.rel = "noopener"; }
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ if (a.parentNode) a.parentNode.removeChild(a); }, 300);
+}
+
 /* ---------- MANDARLE EL MES AL CLIENTE ----------
 
    Un `mailto:` NO puede llevar adjuntos: eso lo prohíbe el navegador, no es
@@ -5004,15 +5089,22 @@ function bajarDatos(nombre, datos){
    archivos, que es lo único que el navegador no puede hacer por uno. */
 function enviarPapelesDelMes(clienteId, periodo){
   var c = ESTADO.clientes[clienteId] || {};
+  var pestana = reservarPestanaCorreo();      /* tiene que ser ya, en el clic */
   toast("Buscando los papeles de " + periodoLargo(periodo) + "…", "ok");
+
+  function soltarPestana(){ if (pestana && !pestana.closed) pestana.close(); }
 
   ref("archivos/" + clienteId).once("value").then(function(s){
     var g = papelesPorMes(clienteId, s.val() || {}).filter(function(x){ return x.periodo === periodo; })[0];
-    if (!g || !g.items.length){ toast("No hay papeles guardados de ese mes", "error"); return; }
+    if (!g || !g.items.length){
+      soltarPestana();
+      toast("No hay papeles guardados de ese mes", "error");
+      return;
+    }
     return bajarPapelesDelMes(clienteId, g.items).then(function(bajados){
-      abrirMailDelMes(c, periodo, g.items, bajados);
+      abrirMailDelMes(c, periodo, g.items, bajados, pestana);
     });
-  }).catch(function(e){ toast(explicarError(e), "error"); });
+  }).catch(function(e){ soltarPestana(); toast(explicarError(e), "error"); });
 }
 
 /* De a uno y con una pausa en el medio: varias descargas disparadas todas
@@ -5036,7 +5128,7 @@ function bajarPapelesDelMes(clienteId, items){
   return uno();
 }
 
-function abrirMailDelMes(c, periodo, items, bajados){
+function abrirMailDelMes(c, periodo, items, bajados, pestana){
   var est = ESTADO.config.estudio || {};
   var nombreEst = est.nombre || "EBD Consultores";
   var lista = items.map(function(i){
@@ -5053,20 +5145,14 @@ function abrirMailDelMes(c, periodo, items, bajados){
     (est.mail ? (est.cuit ? " · " : "\n") + est.mail : "") +
     (est.tel ? " · " + est.tel : "");
 
-  var url = "mailto:" + encodeURIComponent(c.email || "") +
-    "?subject=" + encodeURIComponent(nombreEst + " — " + periodoLargo(periodo)) +
-    "&body=" + encodeURIComponent(cuerpo);
+  var abrio = abrirCorreo(c.email || "", nombreEst + " — " + periodoLargo(periodo), cuerpo, pestana);
 
-  var a = document.createElement("a");
-  a.href = url;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(function(){ if (a.parentNode) a.parentNode.removeChild(a); }, 300);
-
-  toast(!c.email
-    ? "Este cliente no tiene mail cargado: escribilo en el correo que se abrió"
-    : bajados + (bajados === 1 ? " papel descargado" : " papeles descargados") + ": adjuntalos al correo",
-    c.email ? "ok" : "error");
+  toast(!abrio
+    ? "El navegador bloqueó la pestaña de Gmail: permitile abrir ventanas a este sitio"
+    : (!c.email
+      ? "Este cliente no tiene mail cargado: escribilo en el correo que se abrió"
+      : bajados + (bajados === 1 ? " papel descargado" : " papeles descargados") + ": adjuntalos al correo"),
+    abrio && c.email ? "ok" : "error");
 }
 
 /* Subir un papel directo al mes que se está mirando. Hay un solo modal, así
@@ -8643,6 +8729,12 @@ function renderConfig(){
   $("cfgMail").value   = cfg.mail || "";
   $("cfgTel").value    = cfg.tel || "";
 
+  var corr = configCorreo();
+  $("cfgCorreoModo").value   = corr.modo;
+  $("cfgCorreoCuenta").value = corr.cuenta;
+  _mostrarCampoCuentaGmail();
+  $("cfgCorreoModo").onchange = _mostrarCampoCuentaGmail;
+
   var ejs = ESTADO.config.emailjs || {};
   $("cfgEjsService").value  = ejs.serviceId || "";
   $("cfgEjsTemplate").value = ejs.templateId || "";
@@ -8675,9 +8767,18 @@ function renderConfig(){
   });
 }
 
+/* La casilla sólo tiene sentido con Gmail: con el programa del equipo, el
+   correo lo elige el sistema operativo. */
+function _mostrarCampoCuentaGmail(){
+  var campo = $("campoCorreoCuenta");
+  if (campo) campo.classList.toggle("oculto", $("cfgCorreoModo").value === "programa");
+}
+
 $("btnGuardarEstudio").onclick = function(){
   var cfg = { nombre:$("cfgNombre").value.trim(), cuit:$("cfgCuit").value.trim(),
-              mail:$("cfgMail").value.trim(), tel:$("cfgTel").value.trim() };
+              mail:$("cfgMail").value.trim(), tel:$("cfgTel").value.trim(),
+              correoModo:$("cfgCorreoModo").value,
+              correoCuenta:$("cfgCorreoCuenta").value.trim() };
   ref("config/estudio").set(cfg).then(function(){
     ESTADO.config.estudio = cfg; toast("Datos guardados", "ok");
   });
@@ -9485,7 +9586,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v56";
+var VERSION_APP = "v57";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
