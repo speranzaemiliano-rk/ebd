@@ -66,6 +66,29 @@ Los enlaces viejos siguen andando: los accesos directos del ícono de la app
 (`?tab=tabLiquidacion`) y el buscador general abren esas pantallas igual, sólo
 que ahora encienden **Clientes** arriba.
 
+## Declaración jurada y acuse, con su botón
+
+En **ARCA** y en **ARBA**, los dos papeles que se piden siempre tienen su propio
+botón adentro del bloque del impuesto:
+
+> 📎 Subir declaración jurada &nbsp;&nbsp; 📎 Subir acuse de presentación
+
+Abren el selector de archivos con el tipo ya puesto, así no hay que ir a
+elegirlo en una lista —que es donde se elige mal—. En ARBA la declaración
+jurada que carga es la de **Ingresos Brutos**, que es la suya.
+
+El **acuse de presentación** es un tipo de papel más, disponible también en la
+lista de los cuatro impuestos. Es el que prueba que la declaración se presentó,
+y es lo primero que piden en una fiscalización.
+
+Un detalle que importa: el número que trae un acuse o una declaración jurada es
+el de **transacción**, no el de un VEP, así que **no se copia al casillero del
+Nº de VEP**. Si se copiara, la liquidación diría «2/2» con el volante todavía
+sin emitir. El importe sí se aprovecha.
+
+Para todo lo demás sigue estando la lista, que arranca en **VEP**: es lo que se
+sube sin pensar, y lo que el bloque es.
+
 ## El VEP se lee solo
 
 En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la
