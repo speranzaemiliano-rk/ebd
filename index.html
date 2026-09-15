@@ -647,6 +647,19 @@ tbody tr:hover{background:#FAFAFC}
 .aviso.ok{background:var(--verde-bg);color:var(--verde)}
 .aviso b{font-weight:600}
 
+/* Resultados del buscador de actividades de la ley de ingresos brutos. */
+.lista-ley{max-height:232px;overflow-y:auto;border:1px solid var(--pelo);border-radius:var(--r2);margin-top:8px}
+.lista-ley .item{
+  display:flex;gap:10px;align-items:center;justify-content:space-between;
+  padding:9px 12px;font-size:13px;line-height:1.4;cursor:pointer;
+  border-bottom:1px solid var(--pelo);
+}
+.lista-ley .item:last-child{border-bottom:none}
+.lista-ley .item:hover{background:rgba(0,0,0,.04)}
+.lista-ley .cod{flex:0 0 auto;color:var(--gris);font-variant-numeric:tabular-nums}
+.lista-ley .desc{flex:1 1 auto;min-width:0}
+.lista-ley .item .badge{flex:0 0 auto}
+
 #toast{
   position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(120px);
   background:rgba(29,29,31,.88);color:#fff;padding:14px 22px;border-radius:14px;
@@ -1930,6 +1943,10 @@ var _modalFoto    = "";
 function _fotoModal(){
   var out = [];
   Array.prototype.forEach.call($("modalBody").querySelectorAll("input,select,textarea"), function(el){
+    /* Los campos marcados data-busqueda no son datos del cliente: sirven para
+       filtrar una lista y no se guardan. Si entraran en la foto, escribir en
+       uno alcanzaría para que el sistema pregunte si querés salir sin guardar. */
+    if (el.getAttribute("data-busqueda")) return;
     out.push(el.type === "checkbox" || el.type === "radio" ? (el.checked ? "1" : "0") : el.value);
   });
   return out.join("\u0001");
@@ -1967,8 +1984,12 @@ function abrirModal(titulo, html, botones, ancho){
 
 /* input y change burbujean, así que alcanza con escucharlos en el contenedor:
    sirve para lo que ya está y para lo que se agregue después. */
-$("modalBody").addEventListener("input",  function(){ _modalSucio = true; });
-$("modalBody").addEventListener("change", function(){ _modalSucio = true; });
+function _ensucia(e){
+  if (e.target && e.target.getAttribute && e.target.getAttribute("data-busqueda")) return;
+  _modalSucio = true;
+}
+$("modalBody").addEventListener("input",  _ensucia);
+$("modalBody").addEventListener("change", _ensucia);
 
 /* Vuelve a tomar la foto: para cuando el propio sistema llena campos después
    de abrir el modal y eso no tiene que contar como cambio del usuario. */
@@ -2460,6 +2481,226 @@ function renderClientes(){
   $("tablaClientes").innerHTML = html + "</tbody></table></div>";
 }
 
+/* ==========================================================================
+   LAS ALÍCUOTAS DE ARBA, SACADAS DE LA LEY
+
+   La alícuota de ingresos brutos no es un número que uno elija: la fija la
+   Ley Impositiva de la Provincia, actividad por actividad, y cambia todos los
+   años. Antes se cargaba a mano en la ficha de cada cliente; ahora sale de
+   la ley y el campo queda igual, para poder corregirlo si hace falta.
+
+   La tabla completa —el artículo 20, con las 523 actividades del nomenclador
+   NAIIB-18— está en "alicuotas-arba-2026.json", al lado de este archivo. Se
+   pide una sola vez, la primera vez que se abre una ficha, y queda en memoria.
+
+   Dos cosas que conviene entender de cómo la ley arma esa tabla:
+
+   1) Hay dos niveles. Casi todas las actividades tienen una alícuota por
+      "clase", que son los cuatro primeros dígitos del código. Pero cuando la
+      Provincia quiso tratar distinto a una actividad puntual de esa clase, la
+      listó aparte con el código completo de seis dígitos. Por eso hay que
+      buscar primero el de seis y recién después el de cuatro: el especial le
+      gana al general.
+
+   2) Hay alícuotas más bajas para los contribuyentes chicos. Además de la
+      alícuota general, la ley prevé siete tramos según lo que se facturó el
+      año anterior sumando todas las actividades, dentro y fuera de la
+      Provincia. El tramo 1 es el de los más grandes y el 7 el de los más
+      chicos. Sin ese dato no se puede dar el número fino, así que el sistema
+      muestra la general, que es la más alta.
+
+   Para pasar al año que viene: se suma el JSON nuevo y se cambia el nombre en
+   ARCHIVO_LEY_IIBB. Al viejo conviene dejarlo donde está, así las
+   liquidaciones de períodos anteriores se pueden revisar contra la ley que
+   regía en ese momento.
+   ========================================================================== */
+
+var ARCHIVO_LEY_IIBB = "./alicuotas-arba-2026.json";
+var LEY_IIBB         = null;   /* la ley ya cargada; null mientras no llegó */
+var _pedidoLeyIIBB   = null;   /* la promesa en curso, para no pedirla dos veces */
+
+function cargarLeyIIBB(){
+  if (_pedidoLeyIIBB) return _pedidoLeyIIBB;
+  _pedidoLeyIIBB = fetch(ARCHIVO_LEY_IIBB)
+    .then(function(r){
+      if (!r.ok) throw new Error("no se pudo leer " + ARCHIVO_LEY_IIBB + " (HTTP " + r.status + ")");
+      return r.json();
+    })
+    .then(function(j){ LEY_IIBB = j; return j; })
+    .catch(function(e){
+      _pedidoLeyIIBB = null;   /* que se pueda reintentar en la próxima ficha */
+      throw e;
+    });
+  return _pedidoLeyIIBB;
+}
+
+/* Busca un código en la ley: primero el de seis dígitos (tratamiento
+   especial) y después la clase de cuatro (tratamiento general). */
+function actividadDeLaLey(codigo){
+  if (!LEY_IIBB) return null;
+  var c = String(codigo || "").replace(/\D/g, "");
+  if (c.length < 4) return null;
+  var lista = LEY_IIBB.actividades, i;
+  for (i = 0; i < lista.length; i++) if (lista[i].codigo === c) return lista[i];
+  var clase = c.slice(0, 4);
+  for (i = 0; i < lista.length; i++) if (lista[i].codigo === clase) return lista[i];
+  return null;
+}
+
+/* En qué tramo cae alguien que el año pasado facturó "ingresos". Devuelve 1 a
+   7, o 0 si se pasa de todos los topes y entonces paga la alícuota general.
+   Los topes van de mayor a menor, así que se recorre de atrás para adelante:
+   buscamos el tramo más chico en el que entra, que es el que menos paga. */
+function tramoIIBB(ingresos){
+  if (!LEY_IIBB || !ingresos || ingresos <= 0) return 0;
+  var t = LEY_IIBB.tramos;
+  for (var i = t.length - 1; i >= 0; i--) if (ingresos <= t[i].tope) return t[i].tramo;
+  return 0;
+}
+
+/* La alícuota que corresponde: la del tramo si entra en alguno, si no la
+   general. Devuelve null si el código no figura en la ley. */
+function alicuotaDeLaLey(codigo, ingresos){
+  var a = actividadDeLaLey(codigo);
+  if (!a) return null;
+  var tr = tramoIIBB(ingresos);
+  return { actividad: a, tramo: tr, alicuota: tr ? a.tramos[tr - 1] : a.general };
+}
+
+/* Para buscar sin pelearse con los acentos: "juridicos" tiene que encontrar
+   "jurídicos". */
+function sinTildes(s){
+  return String(s === null || s === undefined ? "" : s).toLowerCase()
+    .replace(/[áàä]/g, "a").replace(/[éèë]/g, "e").replace(/[íìï]/g, "i")
+    .replace(/[óòö]/g, "o").replace(/[úùü]/g, "u").replace(/ñ/g, "n");
+}
+
+/* 4.5 se escribe 4,5, como en la ley. */
+function porcentaje(n){ return String(n).replace(".", ","); }
+
+function ingresosAnioAnteriorFicha(){
+  var campo = $("fcIngAnt");
+  return campo ? (parseFloat(campo.value) || 0) : 0;
+}
+
+/* ---------- EL BUSCADOR, ADENTRO DE LA FICHA ----------
+   El sistema tiene un solo modal y la ficha ya lo está ocupando, así que los
+   resultados se dibujan abajo del campo en vez de abrir otra ventana. */
+function buscarActividadIIBB(){
+  var caja = $("fcResultAct");
+  if (!caja) return;
+
+  var q = $("fcBuscarAct").value.trim();
+  if (q.length < 3){
+    caja.innerHTML = q ? '<div class="ayuda">Escribí al menos tres letras, o el código.</div>' : "";
+    return;
+  }
+
+  if (!LEY_IIBB){
+    caja.innerHTML = '<div class="ayuda">Buscando en la ley…</div>';
+    cargarLeyIIBB().then(buscarActividadIIBB).catch(function(e){
+      caja.innerHTML = '<div class="aviso warn"><span>⚠️</span><div>No se pudo abrir la tabla de la ley: ' +
+        esc(e.message) + ". La alícuota se puede cargar a mano igual.</div></div>";
+    });
+    return;
+  }
+
+  var n   = sinTildes(q);
+  var ing = ingresosAnioAnteriorFicha();
+  var hits = LEY_IIBB.actividades.filter(function(a){
+    return a.codigo.indexOf(n) === 0 || sinTildes(a.descripcion).indexOf(n) !== -1;
+  });
+
+  if (!hits.length){
+    caja.innerHTML = '<div class="ayuda">Ninguna actividad de la ley coincide con “' + esc(q) + '”.</div>';
+    return;
+  }
+
+  var TOPE = 40;
+  var sobran = hits.length - TOPE;
+  caja.innerHTML = '<div class="lista-ley">' +
+    hits.slice(0, TOPE).map(function(a){
+      var r = alicuotaDeLaLey(a.codigo, ing);
+      return '<div class="item" onclick="elegirActividadIIBB(\'' + a.codigo + '\')">' +
+        '<span class="cod">' + a.codigo + "</span>" +
+        '<span class="desc">' + esc(a.descripcion) + "</span>" +
+        '<span class="badge b-verde">' + porcentaje(r.alicuota) + "%</span></div>";
+    }).join("") + "</div>" +
+    (sobran > 0 ? '<div class="ayuda">Hay ' + sobran + " más. Escribí algo más preciso para acortar la lista.</div>" : "");
+}
+
+function elegirActividadIIBB(codigo){
+  var a = actividadDeLaLey(codigo);
+  if (!a) return;
+  $("fcNaes").value = codigo;
+  /* La actividad escrita a mano puede ser más clara que la de la ley para
+     quien atiende al cliente, así que sólo se completa si está vacía. */
+  if (!$("fcActIIBB").value.trim()) $("fcActIIBB").value = a.descripcion;
+  $("fcBuscarAct").value  = "";
+  $("fcResultAct").innerHTML = "";
+  usarAlicuotaLey();
+}
+
+/* Lo que dice la ley para el código cargado. No pisa nada por su cuenta:
+   muestra el número y deja el link para usarlo, igual que hace el cálculo de
+   la liquidación. La alícuota cargada a mano puede ser otra y tener su razón
+   —un convenio, una resolución, un régimen especial—, así que la decisión
+   queda en la persona. */
+function pintarNotaLeyArba(){
+  var nota = $("notaLeyArba");
+  if (!nota) return;
+  if (!LEY_IIBB){ nota.innerHTML = ""; return; }
+
+  var cod = $("fcNaes") ? $("fcNaes").value.trim() : "";
+  if (!cod){
+    nota.innerHTML = '<div class="ayuda" style="margin:10px 0 2px">Cargá el código de actividad y acá aparece la alícuota que le fija la ley.</div>';
+    return;
+  }
+
+  var r = alicuotaDeLaLey(cod, ingresosAnioAnteriorFicha());
+  if (!r){
+    nota.innerHTML = '<div class="ayuda" style="margin:10px 0 2px">El código ' + esc(cod) +
+      " no figura en el artículo 20 de la ley. Fijate que sea un código del nomenclador " +
+      esc(LEY_IIBB.nomenclador) + ".</div>";
+    return;
+  }
+
+  var porQue = r.actividad.tipo === "especial"
+    ? "por el tratamiento especial del código " + r.actividad.codigo
+    : "por el tratamiento general de la clase " + r.actividad.codigo;
+
+  var porTramo;
+  if (r.tramo){
+    porTramo = "con la alícuota reducida del tramo " + r.tramo +
+      " (hasta " + pesos(LEY_IIBB.tramos[r.tramo - 1].tope) + " de ingresos el año anterior)";
+  } else if (ingresosAnioAnteriorFicha()){
+    porTramo = "con la alícuota general, porque los ingresos del año anterior pasan el tope del tramo 1";
+  } else {
+    porTramo = "con la alícuota general, porque no están cargados los ingresos del año anterior";
+  }
+
+  var actual = parseFloat($("fcAlic_arba").value);
+  var igual  = !isNaN(actual) && Math.abs(actual - r.alicuota) < 0.0005;
+
+  nota.innerHTML = '<div class="aviso info" style="margin:12px 0 4px;grid-column:1/-1"><span>📜</span><div>' +
+    "La ley le fija <b>" + porcentaje(r.alicuota) + "%</b>: " + esc(r.actividad.descripcion) +
+    ", " + porQue + ", " + porTramo + ". " +
+    (igual
+      ? "Es la que está cargada."
+      : '<a href="#" onclick="usarAlicuotaLey();return false;">Usar esta alícuota</a>.') +
+    '<br><span style="opacity:.75">' + esc(LEY_IIBB.norma) + ", ejercicio " + LEY_IIBB.ejercicioFiscal +
+    ". El mínimo mensual del impuesto es " + pesos(LEY_IIBB.minimoMensual) + " (" + esc(LEY_IIBB.minimoNorma) +
+    "), pero no se carga solo porque los regímenes simplificados tienen los suyos.</span></div></div>";
+}
+
+function usarAlicuotaLey(){
+  var r = alicuotaDeLaLey($("fcNaes").value, ingresosAnioAnteriorFicha());
+  if (!r) return;
+  $("fcAlic_arba").value = r.alicuota;
+  pintarNotaLeyArba();
+  toast("Alícuota de ARBA tomada de la ley");
+}
+
 function formCliente(c, idCliente){
   c = c || {};
   var imp = c.impuestos || {};
@@ -2524,10 +2765,23 @@ function formCliente(c, idCliente){
     '<div class="campo"><label>Actividad que desarrolla</label>' +
       '<input type="text" id="fcActIIBB" value="' + esc(c.actividadIIBB || "") + '" placeholder="Servicios jurídicos">' +
       '<div class="ayuda">Es la que define el tratamiento en cada jurisdicción. Por ejemplo, en CABA el ejercicio de una profesión universitaria no organizado en forma de empresa está exento de ingresos brutos.</div></div>' +
-    '<div class="campo"><label>Código de actividad (NAES)</label>' +
-      '<input type="text" id="fcNaes" value="' + esc(c.codigoNAES || "") + '" placeholder="691001">' +
+    '<div class="campo"><label>Código de actividad (NAIIB-18)</label>' +
+      '<input type="text" id="fcNaes" value="' + esc(c.codigoNAES || "") + '" placeholder="691001" oninput="pintarNotaLeyArba()">' +
       '<div class="ayuda">El mismo código se usa en ARBA y en AGIP.</div></div>' +
   '</div>' +
+
+  /* El buscador de la ley: se escribe el nombre de la actividad o el código y
+     el sistema trae lo que dice el artículo 20 de la Ley Impositiva. */
+  '<div class="campo"><label>Buscar la actividad en la ley de la Provincia</label>' +
+    '<input type="text" id="fcBuscarAct" data-busqueda="1" placeholder="servicios jurídicos, 6910, peluquería…" oninput="buscarActividadIIBB()" autocomplete="off">' +
+    '<div class="ayuda">Al elegir una se completan el código y la alícuota de ARBA. Son las 523 actividades del nomenclador, tal como las lista la ley.</div>' +
+    '<div id="fcResultAct"></div></div>' +
+
+  /* La ley cobra menos a los contribuyentes más chicos, en siete tramos. Sin
+     este dato no se puede saber en cuál cae, así que se muestra la general. */
+  '<div class="campo"><label>Ingresos del año anterior, de todas las actividades y jurisdicciones</label>' +
+    '<input type="number" step="0.01" id="fcIngAnt" value="' + (c.ingresosAnioAnteriorIIBB || "") + '" placeholder="sin cargar" oninput="pintarNotaLeyArba()">' +
+    '<div class="ayuda">Es lo que mira ARBA para las alícuotas reducidas: el total del año pasado, dentro y fuera de la Provincia. Si queda vacío se muestra la alícuota general, que es la más alta.</div></div>' +
   /* Sugerencias para el motivo, sin encerrarlo: es un campo libre. */
   '<datalist id="motivosExencion">' +
     '<option value="Profesión universitaria no organizada en forma de empresa"></option>' +
@@ -2552,6 +2806,9 @@ function formCliente(c, idCliente){
           '<input type="number" step="0.001" id="fcAlic_' + k + '" value="' + (conf.alicuota || "") + '" placeholder="3,5"></div>' +
         '<div class="campo" style="margin-top:12px"><label>Mínimo mensual</label>' +
           '<input type="number" step="0.01" id="fcMin_' + k + '" value="' + (conf.minimo || "") + '" placeholder="sin mínimo"></div>' +
+        /* La nota va adentro del bloque de la alícuota para que se esconda
+           sola cuando se marca exento: si no paga, no importa qué dice la ley. */
+        (k === "arba" ? '<div id="notaLeyArba"></div>' : "") +
       "</div></div>";
   }).join("") +
 
@@ -2694,6 +2951,11 @@ function abrirFormCliente(id, precarga){
     var v = this.value.replace(/\D/g,"");
     if (v.length === 11) this.value = formatCuit(v);
   };
+  /* La tabla de alícuotas está en un archivo aparte: se pide una sola vez y,
+     cuando llega, se pinta lo que dice la ley para el código del cliente. Si
+     no llega no se rompe nada: la alícuota se sigue cargando a mano. */
+  cargarLeyIIBB().then(pintarNotaLeyArba).catch(function(){});
+
   /* Con datos precargados el formulario arranca "sucio" a propósito: son
      cambios que el usuario no quiere perder de un clic afuera. */
   cargarClavesEnFicha(id, !!precarga);
@@ -2740,6 +3002,7 @@ function guardarFormCliente(id){
     municipio: $("fcMunicipio") ? $("fcMunicipio").value.trim() : "",
     actividadIIBB: $("fcActIIBB").value.trim(),
     codigoNAES: $("fcNaes").value.trim(),
+    ingresosAnioAnteriorIIBB: parseFloat($("fcIngAnt").value) || null,
     iibb: ["arba", "agip", "municipal"].reduce(function(acc, k){
       /* La alícuota se guarda aunque esté exento: si mañana deja de estarlo,
          el número sigue ahí y no hay que volver a buscarlo. */

@@ -12,9 +12,11 @@
 
    IMPORTANTE: cada vez que se cambie index.html hay que subir el número de
    VERSION de acá abajo. Si no, algunos navegadores siguen mostrando la vieja.
+   Lo mismo vale si se corrige el archivo de alícuotas sin cambiarle el nombre:
+   queda guardado igual que los íconos y sin VERSION nueva no se vuelve a bajar.
    ========================================================================== */
 
-var VERSION = "v40";
+var VERSION = "v41";
 var CACHE   = "ebd-" + VERSION;
 
 /* Archivos propios que se guardan para que la app abra sin conexión. */
@@ -22,6 +24,7 @@ var SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./alicuotas-arba-2026.json",
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-512.png",

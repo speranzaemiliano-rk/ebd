@@ -27,6 +27,10 @@ saltás directo a Recategorización, Liquidación o Clientes.
 
 - **`index.html`** — todo el sistema en un solo archivo: HTML, CSS y JavaScript.
   No usa frameworks ni build. Se edita y se sube tal cual.
+- **`alicuotas-arba-2026.json`** — la tabla de alícuotas de ingresos brutos de la
+  Provincia, copiada de la Ley Impositiva. Es lo único que vive fuera de
+  `index.html`, porque cambia todos los años y conviene poder cambiarlo sin
+  tocar el sistema.
 - **`database.rules.json`** — reglas de seguridad de la base. Se pegan en Firebase.
 - **Firebase Realtime Database** — la base de datos. Path raíz: `estudioContable`.
 - **Firebase Authentication** — login por correo y contraseña, con roles.
@@ -177,7 +181,56 @@ No entra solo, y no es un tema de programación: ARCA, ARBA y AGIP piden segundo
 factor o captcha, y la única forma de saltearlos sería mandarle las claves de
 todos los clientes a un servicio de terceros.
 
+## De dónde sale la alícuota de ARBA
+
+La alícuota de ingresos brutos no es un número que uno elija: la fija la Ley
+Impositiva de la Provincia, actividad por actividad. La que rige en 2026 es la
+**Ley 15.558**, y las alícuotas están en su **artículo 20**, con las 523
+actividades del nomenclador NAIIB-18.
+
+Esa tabla está copiada tal cual en `alicuotas-arba-2026.json`. En la ficha del
+cliente, el campo **Buscar la actividad en la ley de la Provincia** busca por
+nombre o por código; al elegir una se completan el código y la alícuota, y queda
+abajo una nota que dice de qué parte de la ley salió el número.
+
+Dos cosas que conviene entender de cómo está armada la ley:
+
+- **Hay dos niveles de código.** Casi todas las actividades tienen una alícuota
+  por *clase*, que son los cuatro primeros dígitos. Pero cuando la Provincia
+  quiso tratar distinto a una actividad puntual de esa clase, la listó aparte con
+  el código completo de seis dígitos. El sistema busca primero el de seis y
+  recién después el de cuatro, porque el especial le gana al general. Se nota,
+  por ejemplo, en la venta de autos: vender uno nuevo por cuenta propia paga
+  2,3% (código 451111) y venderlo en comisión paga 8% (código 451112), aunque
+  los dos estén en la misma clase.
+
+- **Hay alícuotas más bajas para los contribuyentes chicos.** La ley arma siete
+  tramos según lo que se facturó el año anterior, sumando todas las actividades,
+  dentro y fuera de la Provincia. El tramo 1 es el de los más grandes (hasta
+  $1.834.326.000) y el 7 el de los más chicos (hasta $15.286.053). Por eso en la
+  ficha hay un campo **Ingresos del año anterior**: sin ese dato el sistema
+  muestra la alícuota general, que es la más alta. Un estudio jurídico, por
+  ejemplo, paga 4,5% general y 3,5% si entra en el tramo 7.
+
+El mínimo mensual del impuesto lo fija el artículo 25 de la misma ley y hoy es
+de $10.967. El sistema lo muestra pero no lo carga solo, porque los regímenes
+simplificados tienen sus propios importes fijos.
+
+### Cuando salga la ley del año que viene
+
+1. Bajar el texto de la ley nueva (la Provincia lo publica en
+   <https://normas.gba.gob.ar>) y armar el JSON con el mismo formato.
+2. Guardarlo al lado de `index.html` como `alicuotas-arba-2027.json`.
+3. En `index.html`, cambiar el nombre en `ARCHIVO_LEY_IIBB`.
+4. En `sw.js`, subir la `VERSION` y cambiar el archivo en la lista `SHELL`.
+
+Al archivo viejo conviene dejarlo donde está: así las liquidaciones de períodos
+anteriores se pueden revisar contra la ley que regía en ese momento. Es la misma
+idea que las vigencias de las escalas de ARCA.
+
 ## Qué falta (próximos pasos)
 
-- **Cálculo de IIBB**: hoy los importes de ARBA, AGIP y municipio se cargan a mano.
+- **Cálculo de IIBB en AGIP y en el municipio**: la alícuota de ARBA ya sale de la
+  ley (más abajo está explicado), pero las de Capital y las tasas municipales se
+  siguen cargando a mano.
 - **Adjuntar el PDF del VEP** al mail (hoy va como link).
