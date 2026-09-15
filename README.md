@@ -39,6 +39,33 @@ Es la misma información de siempre, pero ordenada alrededor de la persona en
 vez de alrededor de la tarea: antes estaba repartida en cinco solapas, cada una
 con su propio filtro «elegí el cliente».
 
+## Todo lo del cliente cuelga de Clientes
+
+**Comprobantes**, **Liquidación** y **Honorarios** dejaron de ser solapas
+sueltas de la barra de arriba. Ahora son las vistas «de todos los clientes» y
+cuelgan de **Clientes**, en una sub-barra:
+
+> Clientes · Comprobantes · Liquidación · Honorarios
+
+No se perdió ninguna pantalla: la grilla mensual de liquidación y el cuadro de
+honorarios del año siguen enteros, porque ver a todos los clientes juntos es
+justamente lo que la pantalla de uno no reemplaza. Lo que cambió es que ahora
+hay **una sola puerta**, y desde cualquiera de esas vistas el nombre del
+cliente entra a su pantalla, en la sección que corresponde: desde la grilla de
+liquidación cae en sus Liquidaciones, desde el cuadro de honorarios en sus
+Honorarios.
+
+Al revés también: adentro del cliente, **📥 Importar comprobantes** lleva a la
+pantalla de importar con ese cliente ya elegido, para no tener que buscarlo de
+nuevo en el desplegable.
+
+La barra de arriba quedó en diez solapas en vez de trece, que en el teléfono es
+la diferencia entre arrastrarla y no.
+
+Los enlaces viejos siguen andando: los accesos directos del ícono de la app
+(`?tab=tabLiquidacion`) y el buscador general abren esas pantallas igual, sólo
+que ahora encienden **Clientes** arriba.
+
 ## El VEP se lee solo
 
 En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la
