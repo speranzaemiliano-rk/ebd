@@ -160,6 +160,39 @@ cargado. Ahora entra igual: el botón dice **Ver** en vez de *Cargar*, los
 campos van bloqueados, no aparece *Guardar* —que le rebotaría— y los papeles se
 abren y se bajan normalmente.
 
+## El papel equivocado no entra
+
+Pegar el VEP de ARBA en el casillero de ARCA es un error que después no se ve
+por ningún lado: queda archivado en el impuesto equivocado y sale en el mail
+del cliente como si fuera suyo.
+
+Ahora el papel se **lee antes de guardarse**, y entra sólo si:
+
+- **es de ese impuesto** — uno de ARBA en el bloque de ARCA se rechaza, diciendo
+  de cuál es y dónde va;
+- **es de ese período o de uno anterior** — un VEP de un mes viejo que recién se
+  paga es normal y entra (avisando que es de otro mes); uno de un mes que
+  todavía no pasó, no.
+
+Dos escapes, a propósito:
+
+- **Cargarlo igual** — la IA propone, no decide. Si sabés que el papel está
+  bien, entra.
+- **Si la IA no contesta**, el papel entra igual y el aviso dice que *no se pudo
+  revisar*. Perder el papel sería peor que archivarlo sin verificar.
+
+## La boleta del municipio, aparte del acuse
+
+El bloque de la tasa municipal tiene sus dos botones:
+
+> 📎 Subir boleta &nbsp;&nbsp; 📎 Subir acuse de presentación
+
+Son **dos documentos distintos** y quedan los dos, uno no pisa al otro. La
+**boleta** es la que trae los datos: de ella salen el importe, el número y el
+vencimiento. El **acuse** trae su número de transacción, que no se copia al
+casillero del número — si se copiara, la liquidación contaría un pago que no
+existe.
+
 ## El VEP se lee solo
 
 En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la
