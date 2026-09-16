@@ -3691,6 +3691,13 @@ function formCliente(c, idCliente){
           '<input type="text" id="fcMotivo_' + k + '" list="motivosExencion" value="' + esc(conf.motivoExencion || "") + '" placeholder="Profesión universitaria no organizada en forma de empresa">' +
           '<div class="ayuda">Aparece en la liquidación de cada mes, para saber por qué no se paga.</div></div>' +
       "</div>" +
+      /* El régimen simplificado de AGIP no se calcula sobre lo facturado: es un
+         importe fijo por categoría, y hay meses sin boleta. Marcarlo evita que
+         el sistema pida una alícuota que no aplica. */
+      (k === "agip"
+        ? '<label class="check"><input type="checkbox" id="fcSimpl_agip"' + (conf.simplificado ? " checked" : "") +
+          "> <b>Régimen simplificado</b> — el importe es fijo por categoría, no sale de lo facturado</label>"
+        : "") +
       '<div class="grid g2" id="wrapAlic_' + k + '"' + (conf.exento ? ' style="display:none"' : "") + '>' +
         '<div class="campo" style="margin-top:12px"><label>Alícuota %</label>' +
           '<input type="number" step="0.001" id="fcAlic_' + k + '" value="' + (conf.alicuota || "") + '" placeholder="3,5"></div>' +
@@ -3978,6 +3985,7 @@ function guardarFormCliente(id){
         alicuota: parseFloat($("fcAlic_" + k).value) || null,
         minimo:   parseFloat($("fcMin_" + k).value)  || null,
         exento:   $("fcExento_" + k).checked,
+        simplificado: k === "agip" ? !!($("fcSimpl_agip") || {}).checked : false,
         motivoExencion: $("fcMotivo_" + k).value.trim()
       };
       return acc;
@@ -5785,6 +5793,17 @@ function _resumenComprobantesDelMes(clienteId, periodo){
     linea("Recibidos", t.recibido, t.cantRecibidos) + "\n";
 }
 
+/* Sólo se dice lo que se tildó. No tildar no significa «debe»: significa que
+   no se miró, y afirmar lo que no se miró en un mail al cliente es peor que
+   no decir nada. */
+function _situacionDeDeuda(clienteId, periodo){
+  var liq = (ESTADO.liquidaciones[clienteId] || {})[periodo] || {};
+  var dice = [];
+  if (liq.sinDeudaArca) dice.push("No registra deuda de monotributo.");
+  if (liq.sinDeudaIibb) dice.push("No registra deuda de ingresos brutos.");
+  return dice.length ? dice.join("\n") + "\n\n" : "";
+}
+
 function textoDelMailDelMes(clienteId, c, periodo, items){
   var est = ESTADO.config.estudio || {};
   var nombreEst = est.nombre || "EBD Consultores";
@@ -5805,6 +5824,7 @@ function textoDelMailDelMes(clienteId, c, periodo, items){
       "Estimado/a " + (c.razonSocial || "") + ":\n\n" +
       apertura +
       _resumenComprobantesDelMes(clienteId, periodo) +
+      _situacionDeDeuda(clienteId, periodo) +
       "Quedamos a disposición por cualquier consulta.\n\n" +
       "Saludos cordiales,\n" + nombreEst +
       (est.cuit ? "\nCUIT " + formatCuit(est.cuit) : "") +
@@ -6098,8 +6118,7 @@ function vistaLiquidacionesCliente(id, c){
     var pedidos = cols.filter(function(i){ return !exentoDe(c, i.clave); }).length;
     html += '<td class="num"><b>' + pesos(tot) + "</b></td>" +
       '<td><span class="badge ' + (veps ? "b-verde" : "b-gris") + '">' + veps + "/" + pedidos + "</span></td>" +
-      "<td>" + (liq.enviado ? '<span class="badge b-verde">Enviado</span>'
-                : (tot ? '<span class="badge b-azul">Listo</span>' : '<span class="badge b-amar">Pendiente</span>')) + "</td>" +
+      "<td>" + badgeEstadoLiq(liq.enviado ? "enviado" : (liq.completada ? "completa" : (tot ? "listo" : "pendiente"))) + "</td>" +
       '<td><button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + p + '\')">' +
         (puedeEscribir() ? "Cargar" : "Ver") + "</button></td></tr>";
   });
@@ -7530,6 +7549,19 @@ function limpiarFiltrosLiquidacion(){
 
 /* Cuántos impuestos le faltan cargar y cuántos VEP tiene: se usa para filtrar,
    para ordenar y para pintar, así que se calcula una sola vez por cliente. */
+/* Un solo lugar para la etiqueta de estado: se pinta en la grilla de todos y
+   en la del cliente, y antes había dos copias que ya divergían. */
+var ETIQ_ESTADO_LIQ = {
+  enviado:   ["b-verde", "Enviado"],
+  completa:  ["b-verde", "Completa"],
+  listo:     ["b-azul",  "Listo"],
+  pendiente: ["b-amar",  "Pendiente"]
+};
+function badgeEstadoLiq(estado){
+  var e = ETIQ_ESTADO_LIQ[estado] || ETIQ_ESTADO_LIQ.pendiente;
+  return '<span class="badge ' + e[0] + '">' + e[1] + "</span>";
+}
+
 function _estadoLiqDe(id, periodo){
   var c = ESTADO.clientes[id], liq = liqDe(id, periodo);
   var pedidos = 0, sinCargar = [], veps = 0;
@@ -7537,13 +7569,13 @@ function _estadoLiqDe(id, periodo){
     if (!(c.impuestos && c.impuestos[i.clave])) return;
     if (exentoDe(c, i.clave)) return;
     pedidos++;
-    if (!((liq[i.clave] || {}).monto)) sinCargar.push(i.clave);
+    if (!((liq[i.clave] || {}).monto) && !((c.iibb || {})[i.clave] || {}).simplificado) sinCargar.push(i.clave);
     if ((liq[i.clave] || {}).vep || (liq[i.clave] || {}).vepArchivo) veps++;
   });
   var tot = totalLiq(c, liq);
   return {
     c: c, liq: liq, total: tot, veps: veps, pedidos: pedidos, sinCargar: sinCargar,
-    estado: liq.enviado ? "enviado" : (tot ? "listo" : "pendiente")
+    estado: liq.enviado ? "enviado" : (liq.completada ? "completa" : (tot ? "listo" : "pendiente"))
   };
 }
 
@@ -7589,6 +7621,7 @@ function renderLiquidacion(){
         '<option value="">Todos</option>' +
         '<option value="pendiente"' + (FILTROS_LIQ.estado === "pendiente" ? " selected" : "") + ">Pendiente</option>" +
         '<option value="listo"' + (FILTROS_LIQ.estado === "listo" ? " selected" : "") + ">Listo</option>" +
+        '<option value="completa"' + (FILTROS_LIQ.estado === "completa" ? " selected" : "") + ">Completa</option>" +
         '<option value="enviado"' + (FILTROS_LIQ.estado === "enviado" ? " selected" : "") + ">Enviado</option>" +
       "</select></th>" +
       '<th><button class="btn-icono" onclick="limpiarFiltrosLiquidacion()" title="Limpiar los filtros">✕</button></th>' +
@@ -7625,7 +7658,7 @@ function pintarFilasLiquidacion(){
     return true;
   });
 
-  var ORDEN_EST = { pendiente:0, listo:1, enviado:2 };
+  var ORDEN_EST = { pendiente:0, listo:1, completa:2, enviado:3 };
   ids.sort(compararPor(function(id){
     var d = datos[id], campo = ORDEN_LIQ.campo;
     if (campo === "cliente") return d.c.razonSocial || "";
@@ -7665,15 +7698,18 @@ function pintarFilasLiquidacion(){
       } else {
         var m = (liq[i.clave] || {}).monto || 0;
         totales[i.clave] += m;
-        fila += '<td class="num"' + (m ? "" : ' style="color:var(--amar)"') + ">" + (m ? pesos(m) : "falta") + "</td>";
+        /* Un simplificado sin importe puede ser un mes sin boleta, no un
+           olvido: se muestra con un guion, no con «falta» en amarillo. */
+        var simpl = ((c.iibb || {})[i.clave] || {}).simplificado;
+        fila += '<td class="num"' + (m || simpl ? "" : ' style="color:var(--amar)"') + ">" +
+          (m ? pesos(m) : (simpl ? "—" : "falta")) + "</td>";
       }
     });
 
     return fila + '<td class="num"><b>' + pesos(d.total) + "</b></td>" +
       '<td><span class="badge ' + (d.veps && d.veps >= d.pedidos ? "b-verde" : (d.veps ? "b-amar" : "b-gris")) + '">' +
         d.veps + "/" + d.pedidos + "</span></td>" +
-      "<td>" + (d.estado === "enviado" ? '<span class="badge b-verde">Enviado</span>'
-                : (d.estado === "listo" ? '<span class="badge b-azul">Listo</span>' : '<span class="badge b-amar">Pendiente</span>')) + "</td>" +
+      "<td>" + badgeEstadoLiq(d.estado) + "</td>" +
       '<td><button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + periodo + '\')">' +
         (puedeEscribir() ? "Cargar" : "Ver") + "</button></td></tr>";
   }).join("");
@@ -7710,6 +7746,15 @@ function pintarCalculoIIBB(clave){
 
 function textoCalculoIIBB(c, clienteId, periodo, clave, d){
   var conf = (c.iibb || {})[clave] || {};
+
+  /* En el simplificado no hay nada que calcular: el importe es fijo por
+     categoría y hay meses sin boleta. Pedir una alícuota acá sería pedir un
+     dato que no existe. */
+  if (conf.simplificado){
+    return '<div class="aviso info"><span>📋</span><div><b>Régimen simplificado.</b> ' +
+      "El importe es fijo por categoría, no sale de lo facturado: cargalo de la boleta. " +
+      "Si este mes no hay boleta, dejalo vacío y tildá <b>Mes completado</b> abajo.</div></div>";
+  }
 
   if (conf.exento){
     var mot = motivoExencion(c, clave);
@@ -8360,6 +8405,27 @@ function editarLiquidacion(clienteId, periodo){
           clienteId + "','" + periodo + '\')">📧 Enviar los papeles del mes</button></div></div></div>';
   }
 
+  /* Lo primero que pregunta un cliente cuando recibe la liquidación es si debe
+     algo. Tildarlo es un segundo y ahorra el ida y vuelta: sale escrito en el
+     mail, con la fecha en que se miró. */
+  /* Un mes puede estar terminado sin que haya nada que pagar: el régimen
+     simplificado de AGIP no emite boleta todos los meses, y un cliente sin
+     actividad tampoco. Sin esto, esos meses quedaban «Pendiente» para siempre
+     y el que mira la grilla no sabe si falta cargarlos o si no hay nada. */
+  html += '<div class="seccion-tit">Estado del mes</div>' +
+    '<label class="check"><input type="checkbox" id="lqCompletada"' + (liq.completada ? " checked" : "") +
+      "> Mes <b>completado</b>: no queda nada por cargar ni por pagar</label>" +
+    '<div class="ayuda" style="margin-top:6px">Tildalo cuando el mes esté cerrado aunque no haya importes ' +
+      "—sin actividad, régimen simplificado sin boleta—. En la grilla deja de figurar como pendiente.</div>";
+
+  html += '<div class="seccion-tit">Situación de deuda</div>' +
+    '<label class="check"><input type="checkbox" id="lqSinDeudaArca"' + (liq.sinDeudaArca ? " checked" : "") +
+      "> No hay deuda de <b>Monotributo</b></label>" +
+    '<label class="check"><input type="checkbox" id="lqSinDeudaIibb"' + (liq.sinDeudaIibb ? " checked" : "") +
+      "> No hay deuda de <b>Ingresos Brutos</b></label>" +
+    '<div class="ayuda" style="margin-top:6px">Lo que tildes se le informa al cliente en el mail. ' +
+      "Lo que no, no se menciona: es distinto de decir que sí debe.</div>";
+
   html += '<div class="seccion-tit">Observaciones para el mail</div>' +
     '<div class="campo"><textarea id="lqObs" style="min-height:80px" placeholder="Texto opcional que se agrega al mail de este cliente…">' + esc(liq.observaciones || "") + "</textarea></div>";
 
@@ -8568,7 +8634,13 @@ function sumarImpuestoAlCliente(clienteId, clave, periodo){
 
 function guardarLiquidacion(clienteId, periodo){
   var c = ESTADO.clientes[clienteId];
-  var datos = { observaciones: $("lqObs").value.trim(), actualizado: new Date().toISOString() };
+  var datos = {
+    observaciones: $("lqObs").value.trim(),
+    completada: !!($("lqCompletada") || {}).checked,
+    sinDeudaArca: !!($("lqSinDeudaArca") || {}).checked,
+    sinDeudaIibb: !!($("lqSinDeudaIibb") || {}).checked,
+    actualizado: new Date().toISOString()
+  };
 
   var lecturas = IMPUESTOS.filter(function(i){
     return c.impuestos && c.impuestos[i.clave] && $("lq_" + i.clave + "_monto");
@@ -11134,7 +11206,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v68";
+var VERSION_APP = "v69";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
