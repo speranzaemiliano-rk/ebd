@@ -137,6 +137,29 @@ uno se queda sin link.
 Un link pegado sin `https://` se completa solo; uno que no sea `http`/`https`
 se rechaza, porque termina adentro de un enlace de verdad.
 
+## Corregir el mes de una liquidación
+
+Una liquidación cargada en el mes equivocado —septiembre cuando era agosto— no
+tenía arreglo: había que cargarla entera de nuevo en el mes bueno y borrar la
+vieja, con los adjuntos incluidos.
+
+Adentro de la liquidación, arriba de todo, ahora dice **Período liquidado:
+septiembre de 2026 · cambiar**. Mover lleva **todo lo del mes de ese cliente**:
+los importes, los VEP y los papeles que estaban archivados en ese período. Si
+los papeles no se mudaran, quedarían en un mes donde ya no hay nada.
+
+Dos frenos: **no pisa** un mes que ya tiene una liquidación cargada, y pide
+guardar antes si hay algo escrito sin guardar (mover rearma el cuadro desde la
+base y se perdería sin decir nada).
+
+## Ver y descargar no necesita permiso de escritura
+
+El botón para entrar a la liquidación existía **sólo con permiso de edición**,
+así que un rol *lector* no podía ni abrirla para descargar lo que ya estaba
+cargado. Ahora entra igual: el botón dice **Ver** en vez de *Cargar*, los
+campos van bloqueados, no aparece *Guardar* —que le rebotaría— y los papeles se
+abren y se bajan normalmente.
+
 ## El VEP se lee solo
 
 En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la
@@ -294,6 +317,52 @@ no queda ningún comprobante, el período desaparece en vez de quedar en cero.
 
 Todo esto necesita permiso de escritura: un rol *lector* ve el detalle sin
 botones.
+
+## Usuarios y roles
+
+En **Configuración → Usuarios del sistema** está quién puede entrar y con qué
+rol. Cada fila tiene **su selector de rol**: se cambia ahí, sin tener que
+escribir el UID de Firebase a mano (un dato que uno no tiene ni sabe dónde
+buscar). El 🗑️ le quita el acceso, preguntando antes en la propia fila.
+
+| Rol | Qué puede |
+|---|---|
+| **Admin** | Todo, incluida la configuración y repartir roles |
+| **Editor** | Carga y edita datos; no toca la configuración |
+| **Lector** | Sólo mira |
+
+Tres cosas que evitan quedarse afuera:
+
+- **Nadie se puede sacar el admin a sí mismo** desde la lista: si es el único,
+  el sistema se queda sin quien reparta roles.
+- Si **no hay ningún admin** guardado, la tarjeta lo avisa arriba.
+- **Dos cuentas con el mismo correo** se marcan. Pasa siempre que una se creó
+  con contraseña y otra entrando con Google: son UID distintos, y sin el aviso
+  se le termina dando el rol a la que no se usa.
+
+### El correo del dueño, con puntos o sin puntos
+
+En Gmail, `speranza.emiliano@gmail.com` y `speranzaemiliano@gmail.com` son **la
+misma casilla**: Gmail ignora los puntos y todo lo que vaya después de un `+`.
+Comparar los textos tal cual dejó al dueño del sistema con rol **lector**, sin
+un solo admin y sin forma de arreglarlo desde adentro.
+
+Ahora los correos se comparan **normalizados** (fuera de Gmail los puntos sí
+cuentan), y si el dueño figura en la base con otro rol, el sistema **lo corrige
+en la base**, no sólo en pantalla. Antes se ponía admin en memoria pero la base
+seguía diciendo lector, así que las reglas de Firebase le rechazaban todo lo
+que guardara.
+
+Las reglas (`database.rules.json`) aceptan las dos escrituras del correo. ⚠️ Hay
+que **publicarlas a mano** en Firebase → Realtime Database → Reglas: el archivo
+del repo no se aplica solo.
+
+### Si te quedaste sin admin
+
+Es la situación en la que nadie puede arreglar nada desde adentro. La salida no
+depende del sistema: en **Firebase Console → Realtime Database**, abrí
+`estudioContable / usuarios / <tu-uid> / rol` y escribí `admin`. La tarjeta de
+Usuarios muestra tu UID exacto para que no haya que adivinarlo.
 
 ## Cerrar una ficha
 
