@@ -1983,6 +1983,7 @@ var TIPOS_ARCHIVO = [
   { clave:"ddjj",       nombre:"Declaración jurada" },
   { clave:"ddjjiibb",   nombre:"DDJJ de Ingresos Brutos" },
   { clave:"acuse",      nombre:"Acuse de presentación" },
+  { clave:"boleta",     nombre:"Boleta municipal" },
   { clave:"vep",        nombre:"VEP" },
   { clave:"pago",       nombre:"Comprobante de pago" },
   { clave:"factura",    nombre:"Factura" },
@@ -2000,7 +2001,7 @@ var TIPOS_ARCHIVO = [
    subido de apuro se archivaba como declaración jurada sin que nadie lo note
    —y desde que la DDJJ y el acuse tienen su propio botón, la lista es para
    todo lo demás. */
-var TIPOS_LIQ = ["vep", "ddjjiibb", "ddjj", "acuse", "pago", "factura", "resumen", "constancia", "otro"];
+var TIPOS_LIQ = ["vep", "boleta", "ddjjiibb", "ddjj", "acuse", "pago", "factura", "resumen", "constancia", "otro"];
 
 /* Los dos papeles que en ARCA y en ARBA se piden siempre: la declaración
    jurada y el acuse de presentación —que es el que prueba que se presentó, y
@@ -2012,7 +2013,13 @@ var PAPELES_AL_TOQUE = {
   arca: [ { tipo:"ddjj",     texto:"Subir declaración jurada" },
           { tipo:"acuse",    texto:"Subir acuse de presentación" } ],
   arba: [ { tipo:"ddjjiibb", texto:"Subir declaración jurada" },
-          { tipo:"acuse",    texto:"Subir acuse de presentación" } ]
+          { tipo:"acuse",    texto:"Subir acuse de presentación" } ],
+  /* En el municipio los dos papeles son otros: la boleta —que es la que trae
+     el importe y el vencimiento— y el acuse de que se presentó. Van separados
+     a propósito: son dos documentos distintos y el cliente los pide por
+     separado. */
+  municipal: [ { tipo:"boleta", texto:"Subir boleta" },
+               { tipo:"acuse",  texto:"Subir acuse de presentación" } ]
 };
 
 /* Deja el tipo elegido y abre el selector de archivos: de ahí en adelante es
@@ -7756,13 +7763,16 @@ var _papelLeido  = {};   /* clave de impuesto -> lo que devolvió la IA */
 var _ultimoPapel = {};   /* el último archivo elegido, para poder reintentar */
 var _tipoPapel   = {};   /* y de qué tipo se dijo que era */
 
-/* El número de VEP sólo se completa desde un VEP o un comprobante de pago.
+/* Qué papeles traen el número que va en el casillero «Nº de VEP»: el VEP, el
+   comprobante de pago y —en el municipio— la boleta, que es el papel que trae
+   el importe, el número y el vencimiento de la tasa.
+
    Una declaración jurada y un acuse de presentación traen su propio número
    —el de transacción— y si se copiara ahí, el sistema contaría un VEP que no
    existe: la liquidación diría "2/2" con el volante todavía sin emitir. */
 function _traeNroDeVep(clave){
   var t = _tipoPapel[clave];
-  return t === undefined || t === "vep" || t === "pago";
+  return t === undefined || t === "vep" || t === "pago" || t === "boleta";
 }
 
 var CAMPOS_VEP = [
@@ -7781,22 +7791,35 @@ function leerPapelDeLiquidacion(clave, reintento){
   var corto = (IMPUESTOS.filter(function(i){ return i.clave === clave; })[0] || {}).corto || clave;
   est.innerHTML = '<div class="aviso info"><span>⏳</span><div>Leyendo <b>' + esc(f.name) + "</b>…</div></div>";
 
-  /* Guardar primero y leer después: si la IA está caída el papel igual queda
-     adjunto, que es lo que de verdad no se puede perder. Después se vacía el
-     campo para que el guardado de la liquidación no lo tome otra vez. */
-  if (!reintento){
-    var tipo = ($("lq_" + clave + "_tipo") || {}).value || "vep";
-    _tipoPapel[clave] = tipo;
-    guardarPapelDeImpuesto(clave, f, tipo).then(function(){
+  var tipo = reintento ? (_tipoPapel[clave] || "vep") : (($("lq_" + clave + "_tipo") || {}).value || "vep");
+  _tipoPapel[clave] = tipo;
+
+  /* Se lee ANTES de guardar. El VEP de ARBA pegado en el casillero de ARCA es
+     un error que después no se ve por ningún lado: queda archivado en el
+     impuesto equivocado y aparece en el mail del cliente como si fuera suyo.
+     Así que el papel entra sólo si es de este impuesto y de este mes o de uno
+     anterior —un VEP de un período viejo que recién se paga es normal; uno de
+     un mes que todavía no pasó, no—.
+
+     Si la IA no contesta, entra igual: no se puede verificar y perder el papel
+     sería peor que archivarlo sin revisar. */
+  /* En un reintento el papel YA se guardó: sólo se vuelve a leer. Y
+     `_ultimoPapel` no se borra nunca acá, porque es de donde sale el archivo
+     cuando alguien toca «Probar de nuevo». */
+  function guardarElPapel(){
+    if (reintento) return Promise.resolve();
+    return guardarPapelDeImpuesto(clave, f, tipo).then(function(){
       if (campo) campo.value = "";
-    }).catch(function(e){ toast(explicarError(e), "error"); });
+    }).catch(function(e){ toast(explicarError(e), "error"); throw e; });
   }
 
   var prompt = "Te paso un papel de impuestos argentino: puede ser un VEP (volante electrónico de pago), " +
-    "una declaración jurada, un acuse o constancia de presentación, o un comprobante de pago. " +
+    "una declaración jurada, un acuse o constancia de presentación, una boleta de tasa municipal, " +
+    "o un comprobante de pago. " +
     "Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
     '{"tipo":"vep","organismo":"arca","importe":123456.78,"nroVep":"1234567890","vencimiento":"2026-09-22","periodo":"202608"}. ' +
-    "tipo: vep, ddjj, acuse, pago u otro. organismo: arca, arba, agip o municipal. importe: el total a pagar, como número, " +
+    "tipo: vep, ddjj, acuse, boleta, pago u otro. organismo: arca, arba, agip o municipal. " +
+    "Si el papel es de un municipio o una municipalidad, organismo es municipal. importe: el total a pagar, como número, " +
     "con punto decimal y sin separador de miles. nroVep: el número del VEP o del comprobante, sin puntos. " +
     "vencimiento: la fecha de vencimiento o de pago en formato AAAA-MM-DD. periodo: el período fiscal en AAAAMM. " +
     "Lo que no figure en el papel va en null. No inventes ningún número.";
@@ -7807,34 +7830,90 @@ function leerPapelDeLiquidacion(clave, reintento){
   }).then(function(r){
     var d = jsonDeGemini(r);
     _papelLeido[clave] = d;
-    est.innerHTML = _avisoPapelLeido(clave, corto, d);
+
+    var no = papelNoVa(clave, corto, d);
+    if (no){
+      est.innerHTML = '<div class="aviso bad"><span>🚫</span><div><b>No lo cargué.</b> ' + no +
+        '<div style="margin-top:8px"><a href="#" onclick="cargarPapelIgual(\'' + clave +
+        '\');return false;">Cargarlo igual</a> · ' +
+        '<a href="#" onclick="descartarPapel(\'' + clave + '\');return false;">Elegir otro archivo</a></div>' +
+        '<div class="ayuda" style="margin-top:6px">La IA puede equivocarse: si sabés que el papel está bien, ' +
+        "cargalo igual.</div></div></div>";
+      return;
+    }
+
+    return guardarElPapel().then(function(){
+      est.innerHTML = _avisoPapelLeido(clave, corto, d);
+    });
   }).catch(function(e){
     var saturado = _geminiSaturado(e);
+    /* No se pudo verificar: entra igual, pero se dice que no se revisó. */
+    guardarElPapel().catch(function(){});
     est.innerHTML = '<div class="aviso warn"><span>⚠️</span><div>' +
       (saturado
         ? "<b>La IA está saturada.</b> No es tu archivo ni la clave: es Google, que por momentos no da abasto. " +
           "Lo intenté " + (ESPERAS_GEMINI.length + 1) + " veces."
         : "No pude leerlo: " + esc(e.message || String(e))) +
-      " El archivo igual queda adjunto; los datos van a mano. " +
+      " <b>No pude revisar que sea de " + esc(corto) + " y de este período</b>, así que lo dejé adjunto sin verificar. " +
       '<a href="#" onclick="leerPapelDeLiquidacion(\'' + clave + '\',true);return false;">Probar de nuevo</a>' +
       (saturado ? '<div class="ayuda" style="margin-top:6px">Si sigue pasando, en <b>Configuración → Asistente (IA)</b> ' +
         "podés poner otro modelo.</div>" : "") + "</div></div>";
   });
+
+}
+
+/* ---------- ¿ESTE PAPEL VA EN ESTE CASILLERO? ----------
+   Devuelve el motivo por el que NO va, o "" si está bien. */
+function papelNoVa(clave, corto, d){
+  if (d.organismo && d.organismo !== clave){
+    var otro = (IMPUESTOS.filter(function(i){ return i.clave === d.organismo; })[0] || {}).corto || d.organismo;
+    return "El papel es de <b>" + esc(otro) + "</b> y lo estás cargando en <b>" + esc(corto) + "</b>. " +
+      "Cargalo en el bloque de " + esc(otro) + ".";
+  }
+  /* Hacia atrás sí: un VEP de un período viejo que recién se paga es normal.
+     Hacia adelante no: un papel de un mes que todavía no pasó está mal puesto. */
+  if (d.periodo && _liqActual && String(d.periodo) > _liqActual.periodo){
+    return "El papel es del período <b>" + esc(periodoLargo(String(d.periodo))) +
+      "</b> y esta liquidación es de <b>" + periodoLargo(_liqActual.periodo) + "</b>. " +
+      "Se aceptan papeles de este período o de anteriores, no de uno que todavía no pasó.";
+  }
+  return "";
+}
+
+/* El que insiste manda: la IA propone, no decide. */
+function cargarPapelIgual(clave){
+  var campo = $("lq_" + clave + "_file");
+  var f = _ultimoPapel[clave] || (campo && campo.files && campo.files[0]);
+  var est = $("lqIA_" + clave);
+  if (!f || !est) return;
+  var corto = (IMPUESTOS.filter(function(i){ return i.clave === clave; })[0] || {}).corto || clave;
+
+  guardarPapelDeImpuesto(clave, f, _tipoPapel[clave] || "vep").then(function(){
+    if (campo) campo.value = "";
+    _ultimoPapel[clave] = null;
+    est.innerHTML = _avisoPapelLeido(clave, corto, _papelLeido[clave] || {});
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
+
+function descartarPapel(clave){
+  var campo = $("lq_" + clave + "_file");
+  if (campo) campo.value = "";
+  _ultimoPapel[clave] = null;
+  _papelLeido[clave] = null;
+  var est = $("lqIA_" + clave);
+  if (est) est.innerHTML = "";
 }
 
 function _avisoPapelLeido(clave, corto, d){
   var completados = [], distintos = [], avisos = [];
 
-  /* Primero los dos controles que valen la pena: que el papel sea de este
-     impuesto y de este mes. Pegar el VEP de ARBA en el casillero de ARCA es
-     un error que después no se ve por ningún lado. */
-  if (d.organismo && d.organismo !== clave){
-    var otro = (IMPUESTOS.filter(function(i){ return i.clave === d.organismo; })[0] || {}).corto || d.organismo;
-    avisos.push("El papel parece ser de <b>" + esc(otro) + "</b> y lo estás cargando en <b>" + esc(corto) + "</b>.");
-  }
-  if (d.periodo && _liqActual && String(d.periodo) !== _liqActual.periodo){
-    avisos.push("Dice ser del período <b>" + esc(periodoLargo(String(d.periodo))) +
-      "</b> y esta liquidación es de <b>" + periodoLargo(_liqActual.periodo) + "</b>.");
+  /* Los papeles del impuesto o del período equivocado ya no llegan acá: se
+     rechazan antes de guardarse (papelNoVa). Lo que sí se avisa es el caso
+     bueno pero digno de mirar: un papel de un período ANTERIOR, que es normal
+     —se paga tarde— pero conviene saber que no es de este mes. */
+  if (d.periodo && _liqActual && String(d.periodo) < _liqActual.periodo){
+    avisos.push("Ojo: el papel es de <b>" + esc(periodoLargo(String(d.periodo))) +
+      "</b>, un período anterior al de esta liquidación (<b>" + periodoLargo(_liqActual.periodo) + "</b>).");
   }
 
   CAMPOS_VEP.forEach(function(cv){
@@ -7857,8 +7936,7 @@ function _avisoPapelLeido(clave, corto, d){
 
   var html = "";
   if (avisos.length){
-    html += '<div class="aviso bad"><span>⚠️</span><div>' + avisos.join("<br>") +
-      " Revisalo antes de guardar.</div></div>";
+    html += '<div class="aviso warn"><span>📅</span><div>' + avisos.join("<br>") + "</div></div>";
   }
   html += '<div class="aviso ' + (completados.length ? "ok" : "info") + '"><span>' +
     (completados.length ? "✓" : "ℹ️") + "</span><div>" +
@@ -10672,7 +10750,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v63";
+var VERSION_APP = "v64";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
