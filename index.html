@@ -7841,11 +7841,18 @@ function nombreDelOrganismo(clave, cli){
   return (IMPUESTOS.filter(function(i){ return i.clave === clave; })[0] || {}).corto || clave;
 }
 
+/* Los formularios de ARCA, ARBA y los municipios piden el CUIT pelado: si se
+   pega con guiones lo rechazan —muchas veces sin decir por qué— y hay que
+   borrarlos a mano. Así que al portapapeles van siempre los once dígitos. */
+function cuitPelado(c){
+  return String(c || "").replace(/\D/g, "");
+}
+
 function copiarCuitDe(clienteId){
   var c = ESTADO.clientes[clienteId] || {};
   if (!c.cuit) return;
-  copiarAlPortapapeles(formatCuit(c.cuit))
-    .then(function(){ toast("CUIT copiado: pegalo en el sitio", "ok"); })
+  copiarAlPortapapeles(cuitPelado(c.cuit))
+    .then(function(){ toast("CUIT copiado sin guiones: pegalo en el sitio", "ok"); })
     .catch(function(){ /* sin portapapeles no se rompe nada */ });
 }
 
@@ -7869,8 +7876,8 @@ function bloqueEnteDeLaLiquidacion(clienteId, periodo, clave){
 
   return '<div class="aviso info" style="margin-bottom:12px"><span>🧾</span>' +
     '<div class="crece">' + facturado +
-      (c.cuit ? '<div class="ayuda" style="margin-top:4px">CUIT ' + esc(formatCuit(c.cuit)) +
-        (entrar ? " — el botón te lo deja copiado al abrir el sitio" : "") + "</div>" : "") +
+      (c.cuit ? '<div class="ayuda" style="margin-top:4px">CUIT ' + esc(cuitPelado(c.cuit)) +
+        (entrar ? " — el botón te lo deja copiado así, sin guiones, al abrir el sitio" : "") + "</div>" : "") +
     "</div>" + entrar + "</div>";
 }
 
@@ -10730,7 +10737,13 @@ function mostrarAccesoRapido(cli, org, usuario, pass){
 }
 
 function arCopiar(id, que){
-  copiarAlPortapapeles($(id).value)
+  /* Mismo problema que en la liquidación: si el usuario guardado es el CUIT y
+     quedó anotado con guiones, el sitio del organismo no lo toma. Se pelan
+     sólo cuando lo que queda son los once dígitos: un usuario de verdad —o
+     una clave— se copia tal cual, letra por letra. */
+  var texto = $(id).value;
+  if (id === "arUsuario" && cuitPelado(texto).length === 11) texto = cuitPelado(texto);
+  copiarAlPortapapeles(texto)
     .then(function(){ toast(que + " copiado al portapapeles", "ok"); })
     .catch(function(){ toast("No pude copiar solo: seleccionalo y copialo a mano.", "error"); });
 }
@@ -11206,7 +11219,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v69";
+var VERSION_APP = "v70";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
