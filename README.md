@@ -217,6 +217,24 @@ agosto es un error que después vuelve como consulta. El botón **Enviar al
 cliente** y el aviso de la liquidación dicen de qué mes va a hablar el mail,
 para que no sorprenda.
 
+### Sin adjuntos, los papeles bajan en un solo .zip
+
+Mientras Gmail no esté configurado —o si falla— sigue funcionando el camino de
+siempre, pero **en una sola descarga**: un `.zip` con todos los papeles del mes,
+llamado `Papeles agosto de 2026 - Cliente.zip`. Cae en Descargas y se arrastra
+entero al correo.
+
+Antes bajaba de a uno, con una pausa en el medio. Eso era cuatro veces la misma
+pregunta del navegador y, con los PDF, más de una vez el navegador los **abría**
+en su visor en lugar de bajarlos: quedaban cuatro pestañas y ningún archivo.
+
+El `.zip` se arma en el navegador, sin librería y sin comprimir (método
+*stored*): un PDF ya viene comprimido, así que comprimirlo de nuevo no achica
+nada y traer una librería por CDN costaría más que las cuarenta líneas que
+ocupa. Dos papeles con el mismo nombre no se pisan: al segundo se le agrega
+`(2)`. Si por lo que fuera el `.zip` no se pudiera armar, bajan de a uno como
+antes — mejor cuatro archivos que ninguno.
+
 ### Cómo funciona «Enviar al cliente»
 
 Descarga los papeles del mes y abre tu programa de correo con el destinatario,

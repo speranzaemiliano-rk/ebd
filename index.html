@@ -5260,10 +5260,20 @@ function enviarPapelesDelMes(clienteId, periodo){
     if (configCorreo().modo === "gmail" && gmailListo()){
       return mandarConAdjuntos(clienteId, periodo, c, g.items, pestana);
     }
-    return bajarPapelesDelMes(clienteId, g.items).then(function(bajados){
-      abrirMailDelMes(c, periodo, g.items, bajados, pestana);
-    });
+    return bajarYAbrirElMail(clienteId, periodo, c, g.items, pestana);
   }).catch(function(e){ soltarPestana(); toast(explicarError(e), "error"); });
+}
+
+/* Primero el ZIP, que es una sola descarga. Si por lo que sea no se pudiera
+   armar, se bajan de a uno como antes: mejor cuatro archivos que ninguno. */
+function bajarYAbrirElMail(clienteId, periodo, c, items, pestana){
+  return bajarZipDelMes(clienteId, periodo, items).then(function(n){
+    abrirMailDelMes(c, periodo, items, { n: n, zip: true }, pestana);
+  }).catch(function(){
+    return bajarPapelesDelMes(clienteId, items).then(function(n){
+      abrirMailDelMes(c, periodo, items, { n: n, zip: false }, pestana);
+    });
+  });
 }
 
 function _cartelPestana(v, texto){
@@ -5314,14 +5324,140 @@ function mandarConAdjuntos(clienteId, periodo, c, items, pestana){
       /* Que falle adjuntar no puede dejar sin mandar: se vuelve al camino de
          siempre, diciendo por qué. */
       toast("No pude adjuntar (" + (e && e.message ? e.message : e) + "). Bajo los papeles y abro el correo.", "error");
-      return bajarPapelesDelMes(clienteId, items).then(function(bajados){
-        abrirMailDelMes(c, periodo, items, bajados, pestana);
-      });
+      return bajarYAbrirElMail(clienteId, periodo, c, items, pestana);
     });
 }
 
+/* ==========================================================================
+   UN SOLO ARCHIVO CON TODO EL MES
+
+   Bajar cuatro PDF de a uno es cuatro veces la misma pregunta del navegador, y
+   con los PDF más de una vez el navegador los ABRE en su visor en vez de
+   bajarlos, así que quedan cuatro pestañas y ningún archivo en Descargas.
+
+   Un ZIP es UNA descarga, cae en Descargas y se arrastra entero al mail.
+
+   Se arma acá, sin librería y sin comprimir (método 0, «stored»): un PDF ya
+   viene comprimido, comprimirlo otra vez no achica nada, y traer una librería
+   por CDN costaría más que estas cuarenta líneas.
+   ========================================================================== */
+
+var _tablaCRC = null;
+function _crc32(bytes){
+  if (!_tablaCRC){
+    _tablaCRC = new Uint32Array(256);
+    for (var n = 0; n < 256; n++){
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      _tablaCRC[n] = c >>> 0;
+    }
+  }
+  var crc = 0xFFFFFFFF;
+  for (var i = 0; i < bytes.length; i++) crc = _tablaCRC[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function _bytesDeBase64(b64){
+  var bin = atob(String(b64 || "").replace(/\s+/g, ""));
+  var out = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/* La hora del ZIP va en el formato de DOS, que es de 1980 y sigue ahí. */
+function _fechaDos(d){
+  return {
+    hora: ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xFFFF,
+    dia:  (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xFFFF
+  };
+}
+
+/* archivos: [{ nombre, bytes }] → Uint8Array con el ZIP entero. */
+function armarZip(archivos){
+  var cod = new TextEncoder();
+  var ahora = _fechaDos(new Date());
+  var partes = [], central = [], offset = 0, total = 0;
+
+  function u16(v){ return [v & 0xFF, (v >>> 8) & 0xFF]; }
+  function u32(v){ return [v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF]; }
+
+  archivos.forEach(function(a){
+    var nombre = cod.encode(a.nombre);
+    var crc = _crc32(a.bytes), largo = a.bytes.length;
+
+    /* bit 11 = el nombre viene en UTF-8; sin eso los acentos salen rotos */
+    var cab = [].concat(u32(0x04034B50), u16(20), u16(0x0800), u16(0),
+      u16(ahora.hora), u16(ahora.dia), u32(crc), u32(largo), u32(largo),
+      u16(nombre.length), u16(0));
+    partes.push(new Uint8Array(cab), nombre, a.bytes);
+    total += cab.length + nombre.length + largo;
+
+    central.push({ nombre: nombre, crc: crc, largo: largo, offset: offset });
+    offset += cab.length + nombre.length + largo;
+  });
+
+  var dirBytes = [];
+  central.forEach(function(c){
+    dirBytes = dirBytes.concat(u32(0x02014B50), u16(20), u16(20), u16(0x0800), u16(0),
+      u16(ahora.hora), u16(ahora.dia), u32(c.crc), u32(c.largo), u32(c.largo),
+      u16(c.nombre.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(c.offset));
+    for (var i = 0; i < c.nombre.length; i++) dirBytes.push(c.nombre[i]);
+  });
+  var fin = [].concat(u32(0x06054B50), u16(0), u16(0),
+    u16(central.length), u16(central.length), u32(dirBytes.length), u32(offset), u16(0));
+
+  partes.push(new Uint8Array(dirBytes), new Uint8Array(fin));
+  total += dirBytes.length + fin.length;
+
+  var zip = new Uint8Array(total), pos = 0;
+  partes.forEach(function(p){ zip.set(p, pos); pos += p.length; });
+  return zip;
+}
+
+/* Dos papeles pueden llamarse igual —dos «F2051.pdf» de meses distintos—, y en
+   un ZIP el segundo pisaría al primero sin avisar. */
+function _nombresSinRepetir(nombres){
+  var vistos = {}, out = [];
+  nombres.forEach(function(n){
+    var base = n || "papel.pdf";
+    if (!vistos[base]){ vistos[base] = 1; out.push(base); return; }
+    var punto = base.lastIndexOf("."), ext = punto > 0 ? base.slice(punto) : "";
+    var sinExt = punto > 0 ? base.slice(0, punto) : base;
+    out.push(sinExt + " (" + (++vistos[base]) + ")" + ext);
+  });
+  return out;
+}
+
+function bajarZipDelMes(clienteId, periodo, items){
+  var c = ESTADO.clientes[clienteId] || {};
+  return contenidosDeLosPapeles(clienteId, items).then(function(adj){
+    if (!adj.length) throw new Error("No pude leer el contenido de los papeles");
+    var nombres = _nombresSinRepetir(adj.map(function(a){ return a.nombre; }));
+    var zip = armarZip(adj.map(function(a, i){
+      return { nombre: nombres[i], bytes: _bytesDeBase64(a.b64) };
+    }));
+
+    var nombreZip = "Papeles " + periodoLargo(mesLiquidado(periodo)) +
+      (c.razonSocial ? " - " + c.razonSocial : "") + ".zip";
+    var url = URL.createObjectURL(new Blob([zip], { type: "application/zip" }));
+    _clickDescarga(url, nombreZip.replace(/[\\/:*?"<>|]/g, "-"));
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 20000);
+    return adj.length;
+  });
+}
+
+function _clickDescarga(url, nombre){
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ if (a.parentNode) a.parentNode.removeChild(a); }, 300);
+}
+
 /* De a uno y con una pausa en el medio: varias descargas disparadas todas
-   juntas hacen que el navegador cancele todas menos la primera. */
+   juntas hacen que el navegador cancele todas menos la primera. Queda como
+   red de seguridad, por si el ZIP no se pudiera armar. */
 function bajarPapelesDelMes(clienteId, items){
   var i = 0, bajados = 0;
   function uno(){
@@ -5372,15 +5508,20 @@ function textoDelMailDelMes(c, periodo, items){
   };
 }
 
-function abrirMailDelMes(c, periodo, items, bajados, pestana){
+function abrirMailDelMes(c, periodo, items, bajado, pestana){
   var t = textoDelMailDelMes(c, periodo, items);
   var abrio = abrirCorreo(c.email || "", t.asunto, t.cuerpo, pestana);
+  var n = (bajado && bajado.n) || 0;
+
+  var queBajo = bajado && bajado.zip
+    ? "Se descargó <b>un</b> archivo .zip con los " + n + " papeles: arrastralo al correo"
+    : n + (n === 1 ? " papel descargado" : " papeles descargados") + ": adjuntalos al correo";
 
   toast(!abrio
     ? "El navegador bloqueó la pestaña de Gmail: permitile abrir ventanas a este sitio"
     : (!c.email
       ? "Este cliente no tiene mail cargado: escribilo en el correo que se abrió"
-      : bajados + (bajados === 1 ? " papel descargado" : " papeles descargados") + ": adjuntalos al correo"),
+      : queBajo.replace(/<\/?b>/g, "")),
     abrio && c.email ? "ok" : "error");
 }
 
@@ -9889,7 +10030,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v58";
+var VERSION_APP = "v59";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
