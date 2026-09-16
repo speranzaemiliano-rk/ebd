@@ -8122,8 +8122,60 @@ function bloquePeriodoLiquidacion(periodo){
   return '<div class="aviso info"><span>📅</span><div class="crece">Período liquidado: <b>' +
     esc(periodoLargo(periodo)) + "</b>" +
     (puedeEscribir()
-      ? ' · <a href="#" onclick="pedirCambiarPeriodo();return false;">cambiar</a>'
+      ? ' · <a href="#" onclick="pedirCambiarPeriodo();return false;">cambiar</a>' +
+        ' · <a href="#" onclick="pedirBorrarLiquidacion();return false;">borrar</a>'
       : "") + "</div></div>";
+}
+
+/* ---------- BORRAR LA LIQUIDACIÓN ----------
+   Una liquidación cargada al cliente equivocado, o duplicada, no tenía forma de
+   irse: se podían vaciar los importes a mano pero el mes seguía figurando.
+
+   Se lleva los importes y los VEP, que viven adentro de ella. Los papeles
+   subidos (DDJJ, acuses, boletas) NO: viven en los papeles del cliente y son
+   suyos, la liquidación es sólo el mes donde se los cargó. Se dice cuántos
+   quedan, para que nadie los dé por perdidos ni los busque de más. */
+function pedirBorrarLiquidacion(){
+  if (!_liqActual) return;
+  var id = _liqActual.clienteId, per = _liqActual.periodo;
+  var caja = $("lqPeriodoCaja");
+  if (!caja) return;
+
+  var liq = (ESTADO.liquidaciones[id] || {})[per] || {};
+  var conImporte = IMPUESTOS.filter(function(i){ return (liq[i.clave] || {}).monto; })
+    .map(function(i){ return i.corto; });
+  var veps = IMPUESTOS.filter(function(i){ return (liq[i.clave] || {}).vepArchivo; }).length;
+  var papeles = 0;
+  Object.keys(_papelesDelImpuesto || {}).forEach(function(k){
+    papeles += (_papelesDelImpuesto[k] || []).length;
+  });
+
+  caja.innerHTML = '<div class="aviso bad"><span>⚠️</span><div class="crece">' +
+    "Se borra la liquidación de <b>" + periodoLargo(per) + "</b> de <b>" +
+      esc((ESTADO.clientes[id] || {}).razonSocial || "") + "</b>." +
+    "<div style=\"margin-top:8px\">Se va con ella:" +
+      "<div>• Los importes cargados" + (conImporte.length ? " (" + esc(conImporte.join(", ")) + ")" : ": no hay ninguno") + "</div>" +
+      "<div>• " + (veps ? veps + (veps === 1 ? " VEP adjunto" : " VEP adjuntos") : "Ningún VEP adjunto") + "</div>" +
+    "</div>" +
+    (papeles
+      ? "<div style=\"margin-top:8px\"><b>No</b> se tocan los <b>" + papeles +
+        (papeles === 1 ? "</b> papel subido" : "</b> papeles subidos") +
+        " de este mes: quedan en los papeles del cliente.</div>"
+      : "") +
+    '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button type="button" class="btn peligro chico" id="btnSiBorrarLiq">Sí, borrar la liquidación</button>' +
+      '<button type="button" class="btn gris chico" onclick="_repintarPeriodoLiquidacion()">Cancelar</button>' +
+    "</div></div></div>";
+
+  $("btnSiBorrarLiq").onclick = function(){
+    ref("liquidaciones/" + id + "/" + per).remove().then(function(){
+      if (ESTADO.liquidaciones[id]) delete ESTADO.liquidaciones[id][per];
+      cerrarModal();
+      renderLiquidacion();
+      if (_clienteAbierto) renderCliente();
+      toast("Liquidación de " + periodoLargo(per) + " borrada", "ok");
+    }).catch(function(e){ toast(explicarError(e), "error"); _repintarPeriodoLiquidacion(); });
+  };
 }
 
 function pedirCambiarPeriodo(){
@@ -10750,7 +10802,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v64";
+var VERSION_APP = "v65";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
