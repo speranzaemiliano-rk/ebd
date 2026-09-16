@@ -3584,6 +3584,10 @@ function formCliente(c, idCliente){
   }).join("");
 
   return '' +
+  '<div class="aviso info"><span>📄</span><div class="crece">¿Tenés la <b>constancia de inscripción</b>? ' +
+    "Leela y completa sola casi todo: nombre, CUIT, actividad, categoría, Nº de IIBB y el domicilio." +
+    '<div style="margin-top:10px"><button type="button" class="btn sec chico" onclick="leerConstanciaDesdeElForm()">' +
+    "📄 Leer una constancia</button></div></div></div>" +
   '<div class="seccion-tit">Datos del contribuyente</div>' +
   '<div class="grid g2">' +
     '<div class="campo"><label>Razón social / Nombre *</label><input type="text" id="fcNombre" value="' + esc(c.razonSocial || "") + '"></div>' +
@@ -3653,14 +3657,14 @@ function formCliente(c, idCliente){
   /* Con la alícuota cargada, la liquidación mensual se calcula sola sobre lo
      facturado. El mínimo es opcional: vacío significa que no tiene. */
   '<div class="seccion-tit">Ingresos brutos y tasa municipal</div>' +
-  '<div class="grid g2">' +
-    '<div class="campo"><label>Actividad que desarrolla</label>' +
-      '<input type="text" id="fcActIIBB" value="' + esc(c.actividadIIBB || "") + '" placeholder="Servicios jurídicos">' +
-      '<div class="ayuda">Es la que define el tratamiento en cada jurisdicción. Por ejemplo, en CABA el ejercicio de una profesión universitaria no organizado en forma de empresa está exento de ingresos brutos.</div></div>' +
-    '<div class="campo"><label>Código de actividad (NAES)</label>' +
-      '<input type="text" id="fcNaes" value="' + esc(c.codigoNAES || "") + '" placeholder="691001">' +
-      '<div class="ayuda">El mismo código se usa en ARBA y en AGIP.</div></div>' +
-  '</div>' +
+  '<div class="campo"><label>Actividades que desarrolla</label>' +
+    '<div id="fcActividades"></div>' +
+    '<button type="button" class="btn sec chico" style="margin-top:8px" onclick="agregarFilaActividad()">+ Agregar actividad</button>' +
+    '<div class="ayuda" style="margin-top:8px">La <b>primera</b> es la principal: es la que usa el sistema para ' +
+      "calcular la alícuota de ingresos brutos. Las demás quedan anotadas con la alícuota que les tocaría, " +
+      "para tenerlas a la vista — el sistema no puede repartir solo lo facturado entre varias actividades. " +
+      "La actividad define el tratamiento en cada jurisdicción: en CABA, por ejemplo, una profesión universitaria " +
+      "no organizada como empresa está exenta.</div></div>" +
   /* Sugerencias para el motivo, sin encerrarlo: es un campo libre. */
   '<datalist id="motivosExencion">' +
     '<option value="Profesión universitaria no organizada en forma de empresa"></option>' +
@@ -3836,6 +3840,56 @@ function _domicilioDelForm(){
    un cliente, así que se usa tal cual para armar el formulario. */
 var _formClienteId = null;   /* para poder ubicar el tramo de facturación */
 
+/* ---------- LAS FILAS DE ACTIVIDADES EN EL FORMULARIO ---------- */
+function pintarFilasActividades(lista){
+  var cont = $("fcActividades");
+  if (!cont) return;
+  var filas = (lista && lista.length) ? lista : [{ codigo:"", descripcion:"" }];
+
+  cont.innerHTML = filas.map(function(a, i){
+    return '<div class="fila-actividad" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">' +
+      '<span class="badge ' + (i === 0 ? "b-azul" : "b-gris") + '" style="margin-top:11px;white-space:nowrap">' +
+        (i === 0 ? "principal" : (i + 1) + "ª") + "</span>" +
+      '<input type="text" class="act-desc" value="' + esc(a.descripcion || "") +
+        '" placeholder="Servicios jurídicos" style="flex:2">' +
+      '<input type="text" class="act-cod" value="' + esc(a.codigo || "") +
+        '" placeholder="691001" style="flex:1;max-width:130px">' +
+      '<button type="button" class="btn-icono" style="margin-top:6px" title="Quitar" ' +
+        'onclick="quitarFilaActividad(' + i + ')">🗑️</button>' +
+    "</div>";
+  }).join("");
+}
+
+/* `todas` incluye las filas vacías. Para guardar no sirven —una actividad sin
+   nada no es una actividad— pero para repintar sí: sin esto, agregar una
+   segunda fila con la primera todavía en blanco se llevaba puesta la primera. */
+function leerFilasActividades(todas){
+  var out = [];
+  Array.prototype.forEach.call(document.querySelectorAll("#fcActividades .fila-actividad"), function(f){
+    var d = (f.querySelector(".act-desc").value || "").trim();
+    var cod = (f.querySelector(".act-cod").value || "").trim();
+    if (todas || d || cod) out.push({ descripcion: d, codigo: cod });
+  });
+  return out;
+}
+
+function agregarFilaActividad(){
+  var lista = leerFilasActividades(true);
+  lista.push({ codigo:"", descripcion:"" });
+  pintarFilasActividades(lista);
+  var campos = document.querySelectorAll("#fcActividades .act-desc");
+  if (campos.length) campos[campos.length - 1].focus();
+}
+
+/* Quitar la principal asciende a la siguiente: siempre tiene que haber una
+   primera, que es la que manda para el cálculo. */
+function quitarFilaActividad(i){
+  var lista = leerFilasActividades(true);
+  lista.splice(i, 1);
+  pintarFilasActividades(lista);
+  pintarSugAlic();
+}
+
 function abrirFormCliente(id, precarga){
   _formClienteId = id || null;
   var c = id ? ESTADO.clientes[id] : (precarga || null);
@@ -3850,9 +3904,12 @@ function abrirFormCliente(id, precarga){
     var v = this.value.replace(/\D/g,"");
     if (v.length === 11) this.value = formatCuit(v);
   };
-  /* La alícuota de IIBB depende del código de actividad, así que la sugerencia
-     se repinta a medida que lo escriben. */
-  $("fcNaes").oninput = pintarSugAlic;
+  pintarFilasActividades(actividadesDe(c));
+  /* La alícuota de IIBB depende del código de la actividad principal, así que
+     la sugerencia se repinta a medida que lo escriben. Se escucha en el
+     contenedor: las filas se agregan y se sacan, y así vale para las que
+     todavía no existen. */
+  $("fcActividades").addEventListener("input", pintarSugAlic);
   pintarSugAlic();
   asegurarTodasLasAlicuotas().then(function(){ if ($("sugAlic_arba")) pintarSugAlic(); });
   /* Con datos precargados el formulario arranca "sucio" a propósito: son
@@ -3871,6 +3928,8 @@ function guardarFormCliente(id){
     return k !== id && String(ESTADO.clientes[k].cuit).replace(/\D/g,"") === cuit;
   });
   if (dup.length){ toast("Ya existe un cliente con ese CUIT", "error"); return; }
+
+  var acts = leerFilasActividades();
 
   var datos = {
     razonSocial: nombre,
@@ -3900,8 +3959,11 @@ function guardarFormCliente(id){
       municipal: $("fcMuni").checked
     },
     municipio: $("fcMunicipio") ? $("fcMunicipio").value.trim() : "",
-    actividadIIBB: $("fcActIIBB").value.trim(),
-    codigoNAES: $("fcNaes").value.trim(),
+    /* La principal se copia también a los campos de siempre: de ahí los leen
+       la constancia, el PDF de la ficha, el buscador y el cálculo. */
+    actividades: acts,
+    actividadIIBB: (acts[0] || {}).descripcion || "",
+    codigoNAES: (acts[0] || {}).codigo || "",
     iibb: ["arba", "agip", "municipal"].reduce(function(acc, k){
       /* La alícuota se guarda aunque esté exento: si mañana deja de estarlo,
          el número sigue ahí y no hay que volver a buscarlo. */
@@ -4537,9 +4599,105 @@ function mostrarConstanciaLeida(d, origen){
   }
 }
 
+/* ---------- LEER LA CONSTANCIA SIN PERDER LO ESCRITO ----------
+   Hay un solo modal, así que el lector de constancias no puede abrirse encima
+   de la ficha: la borraría. Entonces se guarda lo que haya escrito, se abre el
+   lector, y al terminar la ficha vuelve con lo suyo MÁS lo que trajo la
+   constancia. Lo escrito a mano gana: la constancia rellena huecos, no pisa. */
+var _volverAlForm = null;
+
+/* Editando un cliente el formulario se abre con lo que está GUARDADO, así que
+   lo fundido hay que escribirlo campo por campo encima. */
+function _volcarEnElForm(d){
+  function p(id, val){ var e = $(id); if (e && val) e.value = val; }
+  p("fcNombre", d.razonSocial); p("fcFantasia", d.nombreFantasia);
+  p("fcCuit", d.cuit ? formatCuit(d.cuit) : ""); p("fcIIBB", d.nroIIBB);
+  p("fcMail", d.email); p("fcTel", d.telefono);
+  p("fcCategoria", d.categoriaActual); p("fcMunicipio", d.municipio);
+  var dom = d.domicilio || {};
+  p("fcDomCalle", dom.calle); p("fcDomPiso", dom.piso); p("fcDomLocalidad", dom.localidad);
+  p("fcDomProvincia", dom.provincia); p("fcDomCp", dom.cp);
+  if (d.actividades && d.actividades.length){
+    pintarFilasActividades(d.actividades);
+    pintarSugAlic();
+  }
+  _modalSucio = true;   /* lo que trajo la constancia no se pierde de un clic afuera */
+}
+
+function leerConstanciaDesdeElForm(){
+  _volverAlForm = { id: _formClienteId, datos: _datosDelFormCliente() };
+  abrirLeerConstancia();
+}
+
+/* Una foto de lo que hay escrito, con la misma forma que una precarga. */
+function _datosDelFormCliente(){
+  var acts = leerFilasActividades();
+  function v(id){ var e = $(id); return e ? e.value.trim() : ""; }
+  return {
+    razonSocial: v("fcNombre"), nombreFantasia: v("fcFantasia"),
+    cuit: v("fcCuit").replace(/\D/g, ""), nroIIBB: v("fcIIBB"),
+    email: v("fcMail"), telefono: v("fcTel"),
+    categoriaActual: v("fcCategoria"),
+    actividades: acts,
+    actividadIIBB: (acts[0] || {}).descripcion || "",
+    codigoNAES: (acts[0] || {}).codigo || "",
+    municipio: v("fcMunicipio"),
+    domicilio: { calle: v("fcDomCalle"), piso: v("fcDomPiso"), localidad: v("fcDomLocalidad"),
+                 provincia: v("fcDomProvincia"), cp: v("fcDomCp") }
+  };
+}
+
+/* Lo de la constancia sólo entra donde no había nada. */
+function _fundirConstancia(base, d){
+  var out = JSON.parse(JSON.stringify(base || {}));
+  function poner(k, val){ if (val && !String(out[k] || "").trim()) out[k] = val; }
+  poner("razonSocial", d.razonSocial);
+  poner("cuit", d.cuit);
+  poner("nroIIBB", d.nroIIBB);
+  poner("categoriaActual", d.categoria);
+
+  if (d.actividad || d.codigoActividad){
+    var acts = (out.actividades || []).filter(function(a){ return a.descripcion || a.codigo; });
+    var yaEsta = acts.some(function(a){
+      return (d.codigoActividad && a.codigo === d.codigoActividad) ||
+             (d.actividad && a.descripcion === d.actividad);
+    });
+    /* Si ya había actividades, la de la constancia se SUMA: puede ser otra de
+       las que desarrolla, y borrar lo cargado sería peor que tener una de más. */
+    if (!yaEsta) acts.push({ descripcion: d.actividad || "", codigo: d.codigoActividad || "" });
+    out.actividades = acts;
+    out.actividadIIBB = (acts[0] || {}).descripcion || "";
+    out.codigoNAES = (acts[0] || {}).codigo || "";
+  }
+
+  out.domicilio = out.domicilio || {};
+  Object.keys(d.domicilio || {}).forEach(function(k){
+    if ((d.domicilio[k] || "") && !String(out.domicilio[k] || "").trim()) out.domicilio[k] = d.domicilio[k];
+  });
+  return out;
+}
+
 function abrirFichaDesdeConstancia(){
   var d = _constanciaLeida;
   if (!d) return;
+
+  /* Se venía de una ficha abierta: vuelve a ella, no se crea otra. */
+  if (_volverAlForm){
+    var v = _volverAlForm;
+    _volverAlForm = null;
+    var fundido = _fundirConstancia(v.datos, d);
+    _constanciaArchivo = (_guardarConstanciaTildado() && _archivoConstanciaElegido())
+      ? { file: _archivoConstanciaElegido(), organismo: d.organismo }
+      : null;
+    cerrarModal();
+    setTimeout(function(){
+      abrirFormCliente(v.id, v.id ? null : fundido);
+      if (v.id) _volcarEnElForm(fundido);
+      toast("Completé lo que faltaba con la constancia", "ok");
+    }, 240);
+    return;
+  }
+
   /* El cliente todavía no tiene id: el papel espera a que se grabe la ficha. */
   _constanciaArchivo = (_guardarConstanciaTildado() && _archivoConstanciaElegido())
     ? { file: _archivoConstanciaElegido(), organismo: d.organismo }
@@ -5782,6 +5940,27 @@ function vistaResumenCliente(id, c){
     _dato("Delegación al estudio", { pendiente:"Pendiente", ok:"Activa", vencida:"Vencida" }[c.estadoDelegacion] || "Pendiente") +
     _dato("Honorario mensual", c.honorarioMensual ? pesos(c.honorarioMensual) : "") +
   "</div>";
+
+  /* Las actividades secundarias, con la alícuota que le tocaría a cada una.
+     El sistema calcula con la principal, así que tenerlas a la vista es la
+     única forma de acordarse de que hay que mirarlas. */
+  var otras = actividadesSecundarias(c);
+  if (otras.length){
+    var factOtras = ingresosParaTribu(id);
+    html += '<div class="seccion-tit">Otras actividades</div>' +
+      '<div class="ayuda" style="margin-bottom:8px">El cálculo automático usa la <b>principal</b>. ' +
+        "Estas quedan anotadas con la alícuota que les correspondería.</div>" +
+      '<ul class="lista-simple">' + otras.map(function(a){
+        var partes = ["arba", "agip"].filter(function(k){ return (c.impuestos || {})[k]; })
+          .map(function(k){
+            var ef = a.codigo ? alicuotaDeCodigo(k, a.codigo, factOtras) : null;
+            return _cortoJuris(k) + ": " + (ef ? (ef.exento ? "exento" : pct(ef.alicuota)) : "—");
+          });
+        return '<li><span class="badge b-gris">' + esc(a.codigo || "sin código") + "</span>" +
+          '<div class="crece"><div class="tit">' + esc(a.descripcion || "(sin descripción)") + "</div>" +
+          (partes.length ? '<div class="sub">' + esc(partes.join(" · ")) + "</div>" : "") + "</div></li>";
+      }).join("") + "</ul>";
+  }
 
   /* La alícuota que se aplica en cada jurisdicción, con su procedencia: es lo
      que más se pregunta cuando se mira una ficha. */
@@ -8813,6 +8992,36 @@ function ingresosParaTramo(clienteId, periodo){
    Devuelve null si no hay ninguna: ahí el importe va a mano, como antes.
    `ingresos` es lo facturado que define el tramo; si no se sabe, va null y se
    usa la alícuota general de la actividad. */
+/* ---------- LAS ACTIVIDADES DEL CLIENTE ----------
+   Un contribuyente puede tener más de una actividad, y en ingresos brutos cada
+   una tiene su propia alícuota. El sistema no puede repartir solo lo facturado
+   entre ellas —tiene un total por mes, no una venta por actividad—, así que la
+   PRIMERA es la principal y es la que manda para el cálculo automático. Las
+   otras quedan anotadas y se muestran con su alícuota, para que se vea que
+   existen y cuánto tributaría cada una.
+
+   `codigoNAES` y `actividadIIBB` siguen existiendo y siempre valen lo mismo que
+   la principal: son los que usan la constancia, el PDF de la ficha, el buscador
+   y el cálculo. Así lo viejo sigue andando sin migrar nada. */
+function actividadesDe(cli){
+  var c = cli || {};
+  if (c.actividades && c.actividades.length){
+    return c.actividades.filter(function(a){ return a && (a.codigo || a.descripcion); });
+  }
+  if (c.codigoNAES || c.actividadIIBB){
+    return [{ codigo: c.codigoNAES || "", descripcion: c.actividadIIBB || "" }];
+  }
+  return [];
+}
+
+/* Las que no son la principal: son las que hay que mirar aparte. */
+function actividadesSecundarias(cli){ return actividadesDe(cli).slice(1); }
+
+function ingresosParaTribu(clienteId){
+  var f = ingresosParaTramo(clienteId, periodoHoy());
+  return f ? f.monto : null;
+}
+
 function alicuotaEfectiva(cli, clave, ingresos){
   var conf = ((cli || {}).iibb || {})[clave] || {};
   if (conf.alicuota) return { alicuota: conf.alicuota, minimo: conf.minimo || null, origen: "ficha" };
@@ -8831,6 +9040,20 @@ function alicuotaEfectiva(cli, clave, ingresos){
     };
   }
   if (t.general) return { alicuota: t.general, minimo: (conf.minimo || t.minimo || null), origen: "general" };
+  return null;
+}
+
+/* La alícuota que le tocaría a UN código, sin mirar la ficha: se usa para
+   mostrar qué tributaría cada actividad secundaria. */
+function alicuotaDeCodigo(clave, codigo, ingresos){
+  if (clave !== "arba" && clave !== "agip") return null;
+  var t = alicTabla(clave), f = buscarAlicuota(clave, codigo);
+  if (f && f.exento) return { alicuota: 0, origen:"tabla", fila:f, exento:true };
+  if (f && (f.alicuota || f.alicuota === 0)){
+    var tr = tramoDe(f, ingresos === undefined ? null : ingresos);
+    return { alicuota: tr ? tr.alicuota : f.alicuota, origen:"tabla", fila:f, tramo:tr };
+  }
+  if (t.general) return { alicuota: t.general, origen:"general" };
   return null;
 }
 
@@ -9637,7 +9860,9 @@ function pintarSugAlic(){
         '<b>Alícuotas IIBB</b> y después el código de actividad trae la alícuota solo.';
       return;
     }
-    var cod = $("fcNaes") ? _alicClave($("fcNaes").value) : "";
+    /* La sugerencia es la de la actividad PRINCIPAL, que es la que manda. */
+    var prim = document.querySelector("#fcActividades .act-cod");
+    var cod = prim ? _alicClave(prim.value) : "";
     if (!cod){
       el.innerHTML = "Cargá el código de actividad y busco la alícuota en la tabla de " + corto + ".";
       return;
@@ -10802,7 +11027,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v65";
+var VERSION_APP = "v66";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

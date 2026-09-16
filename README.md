@@ -113,6 +113,40 @@ sin emitir. El importe sí se aprovecha.
 Para todo lo demás sigue estando la lista, que arranca en **VEP**: es lo que se
 sube sin pensar, y lo que el bloque es.
 
+## Un cliente con varias actividades
+
+Un contribuyente puede tener más de una actividad, y en ingresos brutos **cada
+una tiene su alícuota**. En la ficha se cargan todas las que haga falta, con
+**+ Agregar actividad**.
+
+La **primera es la principal**, y es la que el sistema usa para calcular. No es
+una simplificación caprichosa: el sistema tiene un total facturado por mes, no
+una venta por actividad, así que no puede repartirlo solo — y repartirlo mal
+sería peor que no repartirlo. Las demás quedan anotadas y se muestran en el
+Resumen del cliente **con la alícuota que les correspondería**, para que se vea
+que existen y cuánto tributaría cada una.
+
+Quitar la principal asciende a la siguiente: siempre hay una primera.
+
+Los clientes cargados antes, que tienen una sola actividad en los campos
+viejos, siguen funcionando igual — no hay que migrar nada. `codigoNAES` y
+`actividadIIBB` siguen existiendo y valen siempre lo mismo que la principal.
+
+## Leer la constancia sin salir de la ficha
+
+El lector de constancias estaba sólo en el encabezado de Clientes: si ya se
+estaba con la ficha abierta, había que cerrarla —perdiendo lo escrito— para
+usarlo. Ahora la ficha tiene arriba su propio **📄 Leer una constancia**.
+
+Como en toda la app hay **un solo cuadro**, el lector no puede abrirse encima de
+la ficha. Así que se guarda lo que haya escrito, se abre el lector, y al
+terminar la ficha vuelve con lo suyo **más** lo que trajo la constancia.
+
+**Lo escrito a mano gana**: la constancia rellena huecos, no pisa. Y si ya había
+actividades cargadas, la de la constancia **se suma** en vez de reemplazarlas
+—puede ser otra de las que desarrolla, y borrar lo cargado sería peor que tener
+una de más—.
+
 ## El sitio de cada municipio
 
 ARCA, ARBA y AGIP se pagan siempre en la misma web y el sistema ya las sabe.
