@@ -234,6 +234,32 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## El sistema en el teléfono
+
+La app ya se adaptaba al celular —las tablas se leen como tarjetas, los
+modales ocupan la pantalla entera y el pie con Cancelar/Guardar queda siempre
+a la vista—. Ahora además:
+
+- **No hace zoom solo al tocar un campo.** Safari en iPhone agranda la página
+  apenas tocás un campo de menos de 16px, y no la vuelve a achicar: el
+  formulario queda corrido, el botón de guardar fuera de la pantalla, y hay que
+  pellizcar para volver. Todos los campos del teléfono pasaron a 16px, que es
+  el umbral exacto de iOS. En la computadora siguen como estaban.
+- **Blancos de 44px.** Los campos y los botones del encabezado medían 40: es lo
+  que hace falta para pegarle con el dedo sin apuntar.
+- **El encabezado ya no se come la pantalla.** Los botones secundarios
+  comparten renglón y el principal queda solo, a lo ancho y abajo de todo, que
+  es donde llega el pulgar. En Clientes eso son tres renglones menos antes de
+  ver el primer cliente.
+- **El buscador ocupa el renglón entero**, en vez de dejar media fila vacía al
+  lado.
+- **La solapa abierta siempre se ve.** La fila de solapas de adentro se
+  arrastra; ahora se corre sola hasta la que está abierta, igual que la barra de
+  arriba, y el degradé del final avisa que hay más a la derecha.
+- **El borde de la pantalla del iPhone.** La barra de abajo ya no tapa el final
+  del contenido ni el botón del asistente, y acostado la muesca no se come los
+  costados de la barra de arriba.
+
 ## Dos casillas de correo por cliente
 
 La ficha del cliente tiene dos campos de correo. No hay una principal y una de
