@@ -319,6 +319,7 @@ select.pill,.filtros select{
 /* ---------- GRILLAS ---------- */
 .grid{display:grid;gap:18px}
 .g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.campo-ancho{grid-column:1/-1}
 .g3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .g4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
 
@@ -2210,6 +2211,21 @@ function aplicarPermisos(){
 }
 
 /* CUIT: formato y validación por dígito verificador */
+/* Un cliente puede tener dos casillas: la del titular y la del contador, o la
+   personal y la de la empresa. Las dos reciben lo mismo — no hay una principal
+   y una de respaldo—, así que todo lo que manda o muestra un mail pasa por acá
+   y nunca lee `c.email` derecho. Se saca la repetida por si quedaron iguales. */
+function mailsDe(c){
+  return [(c || {}).email, (c || {}).email2]
+    .map(function(m){ return String(m || "").trim(); })
+    .filter(function(m, i, a){ return m && a.indexOf(m) === i; });
+}
+/* Para el campo «Para» de un correo: separadas por coma, como las espera
+   cualquier cliente de mail. */
+function paraDe(c){ return mailsDe(c).join(", "); }
+/* Para mostrar en pantalla. */
+function mailsEnLinea(c, sep){ return mailsDe(c).join(sep || " · "); }
+
 function formatCuit(c){
   var d = String(c || "").replace(/\D/g,"");
   if (d.length !== 11) return c || "";
@@ -3161,14 +3177,14 @@ function buscarEnTodo(q){
 
   Object.keys(ESTADO.clientes).forEach(function(id){
     var c = ESTADO.clientes[id];
-    var texto = _sinTildes([c.razonSocial, c.nombreFantasia, c.email, c.codigoNAES, c.actividadIIBB]
+    var texto = _sinTildes([c.razonSocial, c.nombreFantasia, c.email, c.email2, c.codigoNAES, c.actividadIIBB]
       .filter(Boolean).join(" ")).toLowerCase();
     var cuit = String(c.cuit || "").replace(/\D/g, "");
     if (texto.indexOf(t) === -1 && !(soloDigitos.length >= 2 && cuit.indexOf(soloDigitos) !== -1)) return;
     out.push({
       grupo:"Clientes", icono:"👤",
       titulo: c.razonSocial || "(sin nombre)",
-      sub: formatCuit(c.cuit) + (c.email ? " · " + c.email : "") + (c.activo === false ? " · inactivo" : ""),
+      sub: formatCuit(c.cuit) + (mailsDe(c).length ? " · " + mailsEnLinea(c) : "") + (c.activo === false ? " · inactivo" : ""),
       accion: function(){ abrirCliente(id); }
     });
   });
@@ -3492,7 +3508,7 @@ function clientesFiltrados(){
     if (!verInact && c.activo === false) return false;
 
     if (q){
-      var texto = (c.razonSocial || "") + " " + (c.nombreFantasia || "") + " " + (c.email || "");
+      var texto = (c.razonSocial || "") + " " + (c.nombreFantasia || "") + " " + mailsEnLinea(c, " ");
       var cuitLimpio = String(c.cuit || "").replace(/\D/g, "");
       var soloNums = q.replace(/\D/g, "");
       if (!empiezaCon(texto, q) && !(soloNums.length >= 2 && cuitLimpio.indexOf(soloNums) !== -1)) return false;
@@ -3558,7 +3574,8 @@ function pintarFilasClientes(){
     return "<tr" + (c.activo === false ? ' style="opacity:.5"' : "") + ">" +
       '<td><button class="lnk-cliente" onclick="abrirCliente(\'' + id + '\')" title="Entrar al cliente">' +
         esc(c.razonSocial) + "</button>" +
-        (c.email ? '<div class="sub" style="color:var(--gris);font-size:12px">' + esc(c.email) + "</div>" : "") + "</td>" +
+        (mailsDe(c).length ? '<div class="sub" style="color:var(--gris);font-size:12px">' +
+          mailsDe(c).map(esc).join('<br>') + "</div>" : "") + "</td>" +
       '<td class="mono">' + esc(formatCuit(c.cuit)) + "</td>" +
       "<td>" + actTxt + "</td>" +
       "<td>" + (c.categoriaActual ? '<span class="cat-chip">' + c.categoriaActual + "</span>" : '<span class="badge b-gris">—</span>') + "</td>" +
@@ -3605,6 +3622,9 @@ function formCliente(c, idCliente){
       '<div class="ayuda">El de Convenio Multilateral o el local, según cómo esté inscripto.</div></div>' +
     '<div class="campo"><label>Correo electrónico</label><input type="email" id="fcMail" value="' + esc(c.email || "") + '"></div>' +
     '<div class="campo"><label>Teléfono</label><input type="text" id="fcTel" value="' + esc(c.telefono || "") + '"></div>' +
+    '<div class="campo campo-ancho"><label>Segundo correo electrónico</label>' +
+      '<input type="email" id="fcMail2" value="' + esc(c.email2 || "") + '" placeholder="Opcional — el del contador, el de la empresa…">' +
+      '<div class="ayuda">Si lo cargás, <b>los dos reciben lo mismo</b>: los papeles del mes y la liquidación van a las dos casillas.</div></div>' +
   '</div>' +
 
   /* El domicilio es el fiscal: el que sale en la constancia y el que va en
@@ -3951,6 +3971,7 @@ function guardarFormCliente(id){
     cuit: cuit,
     nroIIBB: $("fcIIBB").value.trim(),
     email: $("fcMail").value.trim(),
+    email2: $("fcMail2").value.trim(),
     domicilio: _domicilioDelForm(),
     telefono: $("fcTel").value.trim(),
     honorarioMensual: parseFloat($("fcHonMonto").value) || 0,
@@ -4627,7 +4648,7 @@ function _volcarEnElForm(d){
   function p(id, val){ var e = $(id); if (e && val) e.value = val; }
   p("fcNombre", d.razonSocial); p("fcFantasia", d.nombreFantasia);
   p("fcCuit", d.cuit ? formatCuit(d.cuit) : ""); p("fcIIBB", d.nroIIBB);
-  p("fcMail", d.email); p("fcTel", d.telefono);
+  p("fcMail", d.email); p("fcMail2", d.email2); p("fcTel", d.telefono);
   p("fcCategoria", d.categoriaActual); p("fcMunicipio", d.municipio);
   var dom = d.domicilio || {};
   p("fcDomCalle", dom.calle); p("fcDomPiso", dom.piso); p("fcDomLocalidad", dom.localidad);
@@ -4651,7 +4672,7 @@ function _datosDelFormCliente(){
   return {
     razonSocial: v("fcNombre"), nombreFantasia: v("fcFantasia"),
     cuit: v("fcCuit").replace(/\D/g, ""), nroIIBB: v("fcIIBB"),
-    email: v("fcMail"), telefono: v("fcTel"),
+    email: v("fcMail"), email2: v("fcMail2"), telefono: v("fcTel"),
     categoriaActual: v("fcCategoria"),
     actividades: acts,
     actividadIIBB: (acts[0] || {}).descripcion || "",
@@ -5039,7 +5060,8 @@ function fichaPdfCliente(id){
   fila("Razón social / Nombre", c.razonSocial || "", "CUIT", formatCuit(c.cuit || ""));
   fila("Nº de Ingresos Brutos", c.nroIIBB || "", "Actividad (monotributo)",
        c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios"));
-  fila("Correo electrónico", c.email || "", "Teléfono", c.telefono || "");
+  fila(mailsDe(c).length > 1 ? "Correos electrónicos" : "Correo electrónico",
+       mailsEnLinea(c), "Teléfono", c.telefono || "");
   var _dom = c.domicilio || {};
   if (domicilioEnUnaLinea(_dom)){
     fila("Domicilio fiscal", [_dom.calle, _dom.piso].filter(Boolean).join("  "),
@@ -5600,7 +5622,7 @@ function mandarConAdjuntos(clienteId, periodo, c, items, pestana){
       var token = r[0], adj = r[1];
       if (!adj.length) throw new Error("No pude leer el contenido de los papeles");
       var t = textoDelMailDelMes(clienteId, c, periodo, items);
-      return crearBorradorGmail(token, armarMimeConAdjuntos(c.email || "", t.asunto, t.cuerpo, adj))
+      return crearBorradorGmail(token, armarMimeConAdjuntos(paraDe(c), t.asunto, t.cuerpo, adj))
         .then(function(d){
           var idMsg = d && d.message && d.message.id;
           if (!idMsg) throw new Error("Gmail no devolvió el borrador");
@@ -5835,7 +5857,7 @@ function textoDelMailDelMes(clienteId, c, periodo, items){
 
 function abrirMailDelMes(clienteId, c, periodo, items, bajado, pestana){
   var t = textoDelMailDelMes(clienteId, c, periodo, items);
-  var abrio = abrirCorreo(c.email || "", t.asunto, t.cuerpo, pestana);
+  var abrio = abrirCorreo(paraDe(c), t.asunto, t.cuerpo, pestana);
   var n = (bajado && bajado.n) || 0;
 
   var queBajo = !n
@@ -5846,10 +5868,10 @@ function abrirMailDelMes(clienteId, c, periodo, items, bajado, pestana){
 
   toast(!abrio
     ? "El navegador bloqueó la pestaña de Gmail: permitile abrir ventanas a este sitio"
-    : (!c.email
+    : (!mailsDe(c).length
       ? "Este cliente no tiene mail cargado: escribilo en el correo que se abrió"
       : queBajo.replace(/<\/?b>/g, "")),
-    abrio && c.email ? "ok" : "error");
+    abrio && mailsDe(c).length ? "ok" : "error");
 }
 
 /* Subir un papel directo al mes que se está mirando. Hay un solo modal, así
@@ -5992,7 +6014,7 @@ function vistaResumenCliente(id, c){
 
   var dom = c.domicilio || {};
   html += '<div class="seccion-tit">Datos</div><div class="grid g3 datos-cliente">' +
-    _dato("Correo electrónico", c.email) +
+    _dato(mailsDe(c).length > 1 ? "Correos electrónicos" : "Correo electrónico", mailsEnLinea(c)) +
     _dato("Teléfono", c.telefono) +
     _dato("Nº de Ingresos Brutos", c.nroIIBB) +
     _dato("Domicilio fiscal", domicilioEnUnaLinea(dom)) +
@@ -6151,10 +6173,10 @@ function vistaHonorariosCliente(id){
 
 $("btnNuevoCliente").onclick = function(){ abrirFormCliente(null); };
 $("btnExportClientes").onclick = function(){
-  var filas = [["Razon social","CUIT","Actividad","Categoria","Email","ARCA","ARBA","AGIP","Municipal","Municipio","Activo"]];
+  var filas = [["Razon social","CUIT","Actividad","Categoria","Email","Email 2","ARCA","ARBA","AGIP","Municipal","Municipio","Activo"]];
   Object.keys(ESTADO.clientes).forEach(function(id){
     var c = ESTADO.clientes[id], i = c.impuestos || {};
-    filas.push([c.razonSocial, formatCuit(c.cuit), c.actividad, c.categoriaActual || "", c.email || "",
+    filas.push([c.razonSocial, formatCuit(c.cuit), c.actividad, c.categoriaActual || "", c.email || "", c.email2 || "",
       i.arca?"SI":"NO", i.arba?"SI":"NO", i.agip?"SI":"NO", i.municipal?"SI":"NO", c.municipio || "", c.activo===false?"NO":"SI"]);
   });
   bajarCSV(filas, "clientes.csv");
@@ -8781,7 +8803,7 @@ function armarMail(clienteId, periodo){
   if (liq.observaciones && pl.cuerpo.indexOf("{observaciones}") === -1){
     cuerpo = cuerpo.replace("Ante cualquier duda", liq.observaciones + "\n\nAnte cualquier duda");
   }
-  return { asunto: reemplazar(pl.asunto), cuerpo: cuerpo, total: total, para: c.email || "" };
+  return { asunto: reemplazar(pl.asunto), cuerpo: cuerpo, total: total, para: paraDe(c) };
 }
 
 function renderMails(){
@@ -8818,11 +8840,13 @@ function renderMails(){
   ids.forEach(function(id){
     var c = ESTADO.clientes[id], liq = liqDe(id, periodo);
     var tot = totalLiq(c, liq);
-    var puede = !!c.email && tot > 0;
+    var puede = mailsDe(c).length > 0 && tot > 0;
     html += "<tr>" +
       '<td><input type="checkbox" class="chkMail" value="' + id + '"' + (puede ? "" : " disabled") + (puede && !liq.enviado ? " checked" : "") + "></td>" +
       "<td><b>" + esc(c.razonSocial) + "</b></td>" +
-      "<td>" + (c.email ? esc(c.email) : '<span class="badge b-rojo">sin correo</span>') + "</td>" +
+      "<td>" + (mailsDe(c).length
+        ? mailsDe(c).map(esc).join('<br>')
+        : '<span class="badge b-rojo">sin correo</span>') + "</td>" +
       '<td class="num">' + (tot ? pesos(tot) : '<span style="color:var(--amar)">sin liquidar</span>') + "</td>" +
       "<td>" + (liq.enviado
         ? '<span class="badge b-verde">Enviado ' + (liq.fechaEnvio || "").slice(0,10).split("-").reverse().join("/") + "</span>"
@@ -8884,7 +8908,7 @@ $("btnEnviarMails").onclick = function(){
     "con los importes cargados en " + periodoLargo(periodo) + ". Esta acción no se puede deshacer.</div></div>" +
     '<ul class="lista-simple">' + ids.map(function(id){
       var c = ESTADO.clientes[id], m = armarMail(id, periodo);
-      return '<li><div class="crece"><div class="tit">' + esc(c.razonSocial) + '</div><div class="sub">' + esc(c.email) + "</div></div>" +
+      return '<li><div class="crece"><div class="tit">' + esc(c.razonSocial) + '</div><div class="sub">' + esc(paraDe(c)) + "</div></div>" +
              "<b>" + pesos(m.total) + "</b></li>";
     }).join("") + "</ul>",
     [
@@ -11219,7 +11243,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v70";
+var VERSION_APP = "v71";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

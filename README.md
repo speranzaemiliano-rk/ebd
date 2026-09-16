@@ -234,6 +234,20 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## Dos casillas de correo por cliente
+
+La ficha del cliente tiene dos campos de correo. No hay una principal y una de
+respaldo: **las dos reciben lo mismo**. El correo del mes con los papeles, y el
+de la liquidación, salen dirigidos a las dos.
+
+Sirve para el caso de siempre: la casilla del titular y la del contador, o la
+personal y la de la empresa. Si sólo se carga una, todo funciona como antes —y
+si quedaron las dos iguales, el correo sale una sola vez, no dos—.
+
+Los dos correos entran en la búsqueda (la de la grilla y la general), se ven en
+el listado de clientes y en la ficha, y salen en el CSV exportado, que ahora
+tiene una columna **Email 2**.
+
 ## Los tres papeles de ARCA
 
 Un monotributista no presenta una declaración jurada todos los meses. Lo que se
