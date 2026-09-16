@@ -496,6 +496,16 @@ th.num .th-orden{justify-content:flex-end}
 .sub-tabs button:hover{background:rgba(0,0,0,.05);color:var(--texto)}
 .sub-tabs button.activo{background:var(--texto);color:#fff;font-weight:500}
 .sub-tabs button:active{transform:scale(.98)}
+/* Quién está elegido, al lado de las vistas que lo usan. */
+.chip-cliente{
+  display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:6px 8px 6px 13px;
+  border-radius:999px;background:var(--azul-bg);color:var(--azul-link);
+  font-size:13px;font-weight:500;white-space:nowrap;
+}
+.chip-cliente button{
+  padding:0 5px;border-radius:999px;color:var(--azul-link);font-size:13px;line-height:1.5;
+}
+.chip-cliente button:hover{background:rgba(0,113,227,.2)}
 
 /* Un recuadro suave adentro de una tarjeta, para los dos cortes del resumen.
    Otra tarjeta blanca adentro de la blanca no se vería. */
@@ -2739,6 +2749,44 @@ var TABS_CLIENTES = [
   { tab:"tabLiquidacion",  nombre:"Liquidación" },
   { tab:"tabHonorarios",   nombre:"Honorarios" }
 ];
+/* ---------- EL CLIENTE ELEGIDO NO SE PIERDE AL CAMBIAR DE VISTA ----------
+   Las cuatro vistas hablan del mismo cliente, pero cada una tenía su propia
+   forma de elegirlo: un desplegable en Comprobantes, un filtro de texto en
+   Liquidación, nada en Honorarios. Pasar de una a otra obligaba a volver a
+   buscarlo, y en un estudio con cien clientes eso es la mitad del trabajo.
+
+   Ahora hay UN cliente elegido para todas. Queda a la vista en la sub-barra,
+   con una ✕ para volver a verlos a todos. Se guarda en el navegador para que
+   tampoco se pierda al recargar. */
+var _clienteActivo = "";
+
+function fijarClienteActivo(id, repintar){
+  var antes = nombreClienteActivo();
+  _clienteActivo = (id && ESTADO.clientes[id]) ? id : "";
+  try { localStorage.setItem("ebd_cliente_activo", _clienteActivo); } catch (_) {}
+
+  /* Al soltarlo hay que sacar su nombre del filtro de Liquidación: es texto y
+     se quedaría ahí, filtrando por un cliente que ya nadie eligió. Sólo si el
+     filtro sigue siendo exactamente ese nombre — lo que uno haya escrito a
+     mano encima no se toca. */
+  if (!_clienteActivo && antes && FILTROS_LIQ.cliente === antes) FILTROS_LIQ.cliente = "";
+
+  var panel = document.querySelector(".panel.activo");
+  if (repintar !== false && panel) irA(panel.id);
+}
+
+function _recordarClienteActivo(){
+  try {
+    var g = localStorage.getItem("ebd_cliente_activo");
+    if (g && ESTADO.clientes[g]) _clienteActivo = g;
+  } catch (_) {}
+}
+
+/* El nombre es lo que usa el filtro de Liquidación, que filtra por texto. */
+function nombreClienteActivo(){
+  return _clienteActivo ? (ESTADO.clientes[_clienteActivo] || {}).razonSocial || "" : "";
+}
+
 function esDeClientes(tabId){
   if (tabId === "tabCliente") return true;
   for (var i = 0; i < TABS_CLIENTES.length; i++) if (TABS_CLIENTES[i].tab === tabId) return true;
@@ -2754,8 +2802,12 @@ function pintarSubnavClientes(tabId){
   barra.innerHTML = TABS_CLIENTES.map(function(v){
     return '<button data-tab="' + v.tab + '"' + (v.tab === tabId ? ' class="activo"' : "") +
       ">" + v.nombre + "</button>";
-  }).join("");
-  Array.prototype.forEach.call(barra.children, function(b){
+  }).join("") +
+    (_clienteActivo
+      ? '<span class="chip-cliente" id="chipClienteActivo">👤 ' + esc(nombreClienteActivo()) +
+        '<button type="button" title="Ver todos los clientes" onclick="fijarClienteActivo(\'\')">✕</button></span>'
+      : "");
+  Array.prototype.forEach.call(barra.querySelectorAll("button[data-tab]"), function(b){
     b.onclick = function(){ irA(b.dataset.tab); };
   });
 }
@@ -2852,11 +2904,18 @@ function inicializarUI(){
      saca el foco al campo donde se está escribiendo. */
   $("filtroCliente").oninput      = pintarFilasClientes;
   $("filtroInactivos").onchange   = pintarFilasClientes;
-  $("verCompCliente").onchange    = renderTablaComprobantes;
+  /* Elegirlo acá lo deja elegido para Liquidación y Honorarios: es el mismo
+     cliente del que se está hablando. */
+  $("verCompCliente").onchange    = function(){
+    fijarClienteActivo($("verCompCliente").value, false);
+    pintarSubnavClientes("tabComprobantes");
+    renderTablaComprobantes();
+  };
   $("verCompAnio").onchange       = renderTablaComprobantes;
   $("verCompMes").onchange        = renderTablaComprobantes;
   $("verCompTipo").onchange       = renderTablaComprobantes;
 
+  _recordarClienteActivo();
   renderHome();
   aplicarTabDeLaUrl();
   ofrecerInstalacion();
@@ -5560,6 +5619,9 @@ var _clienteVista   = "resumen";
 
 function abrirCliente(id, vista){
   if (!ESTADO.clientes[id]) return;
+  /* Entrar a un cliente también lo elige: al salir a Comprobantes o a
+     Liquidación sigue siendo el mismo. */
+  fijarClienteActivo(id, false);
   _clienteAbierto = id;
   _clienteVista   = vista || "resumen";
   irA("tabCliente");
@@ -6597,6 +6659,10 @@ $("btnProbarBackend").onclick = function(){
 function renderComprobantes(){
   llenarSelectClientes($("impCliente"), false);
   llenarSelectClientes($("verCompCliente"), false);
+  if (_clienteActivo){
+    $("impCliente").value = _clienteActivo;
+    $("verCompCliente").value = _clienteActivo;
+  }
   renderTablaComprobantes();
 }
 
@@ -7187,6 +7253,10 @@ function ordenarLiquidacionPor(campo){ alternarOrden(ORDEN_LIQ, campo, pintarFil
 function limpiarFiltrosLiquidacion(){
   Object.keys(FILTROS_LIQ).forEach(function(k){ FILTROS_LIQ[k] = ""; });
   ORDEN_LIQ.campo = "cliente"; ORDEN_LIQ.desc = false;
+  /* Limpiar los filtros es el gesto de «mostrámelos a todos», así que también
+     suelta al cliente elegido: si no, volvería solo en el repintado. */
+  fijarClienteActivo("", false);
+  pintarSubnavClientes("tabLiquidacion");
   renderLiquidacion();
 }
 
@@ -7211,6 +7281,9 @@ function _estadoLiqDe(id, periodo){
 
 function renderLiquidacion(){
   var periodo = monthInputAPeriodo($("liqPeriodo").value);
+  /* El filtro por cliente es de texto, así que el cliente elegido entra por
+     ahí: se ve escrito y se puede afinar a mano sin pelearse con nada. */
+  if (_clienteActivo) FILTROS_LIQ.cliente = nombreClienteActivo();
   if (!Object.keys(ESTADO.clientes).length){
     $("tablaLiquidacion").innerHTML = '<div class="vacio"><div class="ico">💰</div><div>No hay clientes cargados.</div></div>';
     return;
@@ -10274,7 +10347,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v60";
+var VERSION_APP = "v61";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
@@ -10639,6 +10712,7 @@ function renderHonorarios(){
 
   var ids = Object.keys(ESTADO.clientes).filter(function(id){
     var c = ESTADO.clientes[id];
+    if (_clienteActivo && id !== _clienteActivo) return false;
     return c.honorarioMensual > 0 || (ESTADO.honorarios[id] && Object.keys(ESTADO.honorarios[id]).length);
   });
   ids.sort(function(a,b){ return nombreCliente(a).localeCompare(nombreCliente(b)); });

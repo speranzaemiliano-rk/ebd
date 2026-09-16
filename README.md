@@ -66,6 +66,30 @@ Los enlaces viejos siguen andando: los accesos directos del ícono de la app
 (`?tab=tabLiquidacion`) y el buscador general abren esas pantallas igual, sólo
 que ahora encienden **Clientes** arriba.
 
+## El cliente elegido no se pierde al cambiar de vista
+
+Las cuatro vistas que cuelgan de Clientes hablan del mismo cliente, pero cada
+una tenía su forma de elegirlo: un desplegable en Comprobantes, un filtro de
+texto en Liquidación, nada en Honorarios. Pasar de una a otra obligaba a volver
+a buscarlo — y en un estudio con cien clientes, eso es la mitad del trabajo.
+
+Ahora hay **un cliente elegido para todas**, y se ve en la sub-barra:
+
+> Clientes · Comprobantes · Liquidación · Honorarios &nbsp;&nbsp; 👤 Estudio Jurídico Prueba ✕
+
+- Elegirlo en el desplegable de **Comprobantes** lo deja elegido para las otras.
+- **Entrar a un cliente** también lo elige: al salir a Liquidación sigue siendo
+  el mismo.
+- **Liquidación** abre con la grilla ya filtrada por él, y **Honorarios** con su
+  sola fila.
+- La **✕** del chip los vuelve a mostrar a todos. Limpiar los filtros de
+  Liquidación hace lo mismo — es el mismo gesto.
+- Se guarda en el navegador, así que tampoco se pierde al recargar.
+
+Un detalle: el filtro de Liquidación es de texto, así que el cliente elegido
+entra por ahí y se ve escrito. Si uno escribe otra cosa encima, soltar el
+cliente **no** se lleva puesto lo que escribió.
+
 ## Declaración jurada y acuse, con su botón
 
 En **ARCA** y en **ARBA**, los dos papeles que se piden siempre tienen su propio
