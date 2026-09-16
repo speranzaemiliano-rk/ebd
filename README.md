@@ -137,6 +137,29 @@ uno se queda sin link.
 Un link pegado sin `https://` se completa solo; uno que no sea `http`/`https`
 se rechaza, porque termina adentro de un enlace de verdad.
 
+## Corregir el mes de una liquidación
+
+Una liquidación cargada en el mes equivocado —septiembre cuando era agosto— no
+tenía arreglo: había que cargarla entera de nuevo en el mes bueno y borrar la
+vieja, con los adjuntos incluidos.
+
+Adentro de la liquidación, arriba de todo, ahora dice **Período liquidado:
+septiembre de 2026 · cambiar**. Mover lleva **todo lo del mes de ese cliente**:
+los importes, los VEP y los papeles que estaban archivados en ese período. Si
+los papeles no se mudaran, quedarían en un mes donde ya no hay nada.
+
+Dos frenos: **no pisa** un mes que ya tiene una liquidación cargada, y pide
+guardar antes si hay algo escrito sin guardar (mover rearma el cuadro desde la
+base y se perdería sin decir nada).
+
+## Ver y descargar no necesita permiso de escritura
+
+El botón para entrar a la liquidación existía **sólo con permiso de edición**,
+así que un rol *lector* no podía ni abrirla para descargar lo que ya estaba
+cargado. Ahora entra igual: el botón dice **Ver** en vez de *Cargar*, los
+campos van bloqueados, no aparece *Guardar* —que le rebotaría— y los papeles se
+abren y se bajan normalmente.
+
 ## El VEP se lee solo
 
 En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la

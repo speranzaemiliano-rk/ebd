@@ -5868,9 +5868,8 @@ function vistaLiquidacionesCliente(id, c){
       '<td><span class="badge ' + (veps ? "b-verde" : "b-gris") + '">' + veps + "/" + pedidos + "</span></td>" +
       "<td>" + (liq.enviado ? '<span class="badge b-verde">Enviado</span>'
                 : (tot ? '<span class="badge b-azul">Listo</span>' : '<span class="badge b-amar">Pendiente</span>')) + "</td>" +
-      "<td>" + (puedeEscribir()
-        ? '<button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + p + '\')">Cargar</button>'
-        : "") + "</td></tr>";
+      '<td><button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + p + '\')">' +
+        (puedeEscribir() ? "Cargar" : "Ver") + "</button></td></tr>";
   });
   return html + "</tbody></table></div>";
 }
@@ -7443,9 +7442,8 @@ function pintarFilasLiquidacion(){
         d.veps + "/" + d.pedidos + "</span></td>" +
       "<td>" + (d.estado === "enviado" ? '<span class="badge b-verde">Enviado</span>'
                 : (d.estado === "listo" ? '<span class="badge b-azul">Listo</span>' : '<span class="badge b-amar">Pendiente</span>')) + "</td>" +
-      "<td>" + (puedeEscribir()
-        ? '<button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + periodo + '\')">Cargar</button>'
-        : "") + "</td></tr>";
+      '<td><button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + periodo + '\')">' +
+        (puedeEscribir() ? "Cargar" : "Ver") + "</button></td></tr>";
   }).join("");
 
   html += '<tr style="background:var(--fondo)"><td><b>Totales</b></td>' +
@@ -8005,13 +8003,128 @@ function editarLiquidacion(clienteId, periodo){
       '<a href="#" onclick="document.getElementById(\'lq_arca_monto\').value=' + sug + ';return false;">Usar este importe</a></div></div>' + html;
   }
 
-  abrirModal(c.razonSocial + " · " + periodoLargo(periodo), html, [
-    { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
-    { texto:"Guardar", accion:function(){ guardarLiquidacion(clienteId, periodo); } }
-  ], "ancho");
+  /* Mirar y bajar los papeles NO necesita permiso de escritura. Antes el botón
+     para entrar sólo existía con permiso de edición, así que un lector no
+     podía ni abrir la liquidación para descargar lo que ya estaba cargado.
+     Ahora entra igual, con los campos bloqueados y sin Guardar. */
+  html = '<div id="lqPeriodoCaja">' + bloquePeriodoLiquidacion(periodo) + "</div>" + html;
+
+  var soloMirar = !puedeEscribir();
+  if (soloMirar){
+    html = '<div class="aviso info"><span>👀</span><div>Entraste con rol <b>' + esc(ESTADO.rol) +
+      "</b>: podés <b>ver y descargar</b> los papeles, pero no cambiar nada.</div></div>" + html;
+  }
+
+  abrirModal(c.razonSocial + " · " + periodoLargo(periodo), html,
+    soloMirar
+      ? [{ texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }]
+      : [{ texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+         { texto:"Guardar", accion:function(){ guardarLiquidacion(clienteId, periodo); } }],
+    "ancho");
+
+  if (soloMirar) _bloquearCamposDelModal();
 
   /* Los papeles que ya tenga cargados de este mes, para no volver a subirlos. */
   cargarPapelesDelMesEnLiquidacion();
+}
+
+/* ---------- CAMBIAR EL PERÍODO LIQUIDADO ----------
+   Una liquidación cargada en el mes equivocado —septiembre cuando era agosto—
+   no tenía arreglo: había que volver a cargarla entera en el mes bueno y
+   borrar la vieja, con los papeles adjuntos incluidos.
+
+   Cambiar el período mueve TODO lo del mes de ese cliente: la liquidación con
+   sus importes y sus VEP, y los papeles que estaban archivados en ese período.
+   Si no se movieran los papeles quedarían en un mes donde ya no hay nada. */
+function bloquePeriodoLiquidacion(periodo){
+  return '<div class="aviso info"><span>📅</span><div class="crece">Período liquidado: <b>' +
+    esc(periodoLargo(periodo)) + "</b>" +
+    (puedeEscribir()
+      ? ' · <a href="#" onclick="pedirCambiarPeriodo();return false;">cambiar</a>'
+      : "") + "</div></div>";
+}
+
+function pedirCambiarPeriodo(){
+  if (!_liqActual) return;
+  var caja = $("lqPeriodoCaja");
+  if (!caja) return;
+
+  /* Mover y volver a abrir rearma el cuadro desde la base: lo que esté escrito
+     y sin guardar se perdería sin decir nada. */
+  if (_modalSucio){
+    toast("Guardá los cambios antes de cambiar el período", "error");
+    return;
+  }
+
+  caja.innerHTML = '<div class="aviso warn"><span>📅</span><div class="crece">' +
+    "Mover esta liquidación —con sus importes, sus VEP y los papeles del mes— a:" +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">' +
+      '<input type="month" id="lqPeriodoNuevo" class="pill" value="' + periodoAMonthInput(_liqActual.periodo) + '">' +
+      '<button type="button" class="btn chico" onclick="moverLiquidacionDePeriodo()">Mover</button>' +
+      '<button type="button" class="btn gris chico" onclick="_repintarPeriodoLiquidacion()">Cancelar</button>' +
+    "</div></div></div>";
+}
+
+function _repintarPeriodoLiquidacion(){
+  var caja = $("lqPeriodoCaja");
+  if (caja && _liqActual) caja.innerHTML = bloquePeriodoLiquidacion(_liqActual.periodo);
+}
+
+function moverLiquidacionDePeriodo(){
+  if (!_liqActual) return;
+  var id = _liqActual.clienteId, per = _liqActual.periodo;
+  var nuevo = monthInputAPeriodo(($("lqPeriodoNuevo") || {}).value || "");
+  if (!nuevo || nuevo === per){ _repintarPeriodoLiquidacion(); return; }
+
+  var destino = (ESTADO.liquidaciones[id] || {})[nuevo];
+  if (destino && Object.keys(destino).length){
+    toast("Ya hay una liquidación cargada en " + periodoLargo(nuevo) + ": no la piso", "error");
+    return;
+  }
+
+  var liq = (ESTADO.liquidaciones[id] || {})[per];
+  if (!liq || !Object.keys(liq).length){
+    toast("Esta liquidación todavía no tiene nada guardado", "error");
+    _repintarPeriodoLiquidacion();
+    return;
+  }
+
+  toast("Moviendo a " + periodoLargo(nuevo) + "…", "ok");
+
+  /* Los papeles del mes van con ella: si no, quedarían archivados en un mes
+     donde ya no hay liquidación. */
+  ref("archivos/" + id).once("value").then(function(s){
+    var todo = s.val() || {}, updates = {};
+
+    updates["liquidaciones/" + id + "/" + nuevo] = liq;
+    updates["liquidaciones/" + id + "/" + per] = null;
+
+    var movidos = 0;
+    Object.keys(todo).forEach(function(k){
+      if ((todo[k].periodo || "") !== per) return;
+      updates["archivos/" + id + "/" + k + "/periodo"] = nuevo;
+      movidos++;
+    });
+
+    return ref("").update(updates).then(function(){
+      if (!ESTADO.liquidaciones[id]) ESTADO.liquidaciones[id] = {};
+      ESTADO.liquidaciones[id][nuevo] = liq;
+      delete ESTADO.liquidaciones[id][per];
+      cerrarModal();
+      renderLiquidacion();
+      if (_clienteAbierto) renderCliente();
+      toast("Movida a " + periodoLargo(nuevo) +
+        (movidos ? " · " + movidos + (movidos === 1 ? " papel" : " papeles") + " también" : ""), "ok");
+      setTimeout(function(){ editarLiquidacion(id, nuevo); }, 260);
+    });
+  }).catch(function(e){ toast(explicarError(e), "error"); _repintarPeriodoLiquidacion(); });
+}
+
+/* Deja el cuadro de sólo lectura: los campos no se tocan, pero los botones de
+   ver y de descargar siguen andando, que es a lo que se vino. */
+function _bloquearCamposDelModal(){
+  var campos = $("modalBody").querySelectorAll("input, select, textarea");
+  Array.prototype.forEach.call(campos, function(el){ el.disabled = true; });
 }
 
 /* Tilda el impuesto en la ficha del cliente y vuelve a abrir la liquidación,
@@ -9504,7 +9617,17 @@ function pintarUsuarios(){
     ks.forEach(function(uid){ var m = _mailNormalizado(us[uid].email); porMail[m] = (porMail[m] || 0) + 1; });
 
     var aviso = "";
-    if (!admin){
+    /* El dueño puede verse como admin en pantalla y seguir sin serlo en la
+       base, si las reglas todavía no aceptan su correo. Ahí los selectores
+       están pero cada cambio rebota, y sin este aviso no hay forma de saber
+       por qué. */
+    if (_avisoAdminTrabado){
+      aviso = '<div class="aviso bad"><span>⚠️</span><div><b>No pude guardarte como admin en la base.</b> ' +
+        "Las reglas publicadas todavía no aceptan tu correo, así que lo que cambies acá va a rebotar. Dos salidas:" +
+        "<div style=\"margin-top:8px\"><b>1)</b> " + _comoDesbloquear() + "</div>" +
+        "<div style=\"margin-top:6px\"><b>2)</b> Publicá las reglas nuevas en <b>Firebase → Realtime Database → Reglas</b> " +
+        "(están en <span class=\"mono\">database.rules.json</span> del repositorio) y volvé a entrar.</div></div></div>";
+    } else if (!admin){
       aviso = '<div class="aviso warn"><span>🔒</span><div>Entraste con rol <b>' + esc(ESTADO.rol) +
         "</b>, así que no podés repartir roles: eso lo hace un <b>admin</b>." +
         (esAdminInicial(ESTADO.usuario && ESTADO.usuario.email)
