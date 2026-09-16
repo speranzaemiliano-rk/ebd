@@ -376,6 +376,40 @@ ocupa. Dos papeles con el mismo nombre no se pisan: al segundo se le agrega
 `(2)`. Si por lo que fuera el `.zip` no se pudiera armar, bajan de a uno como
 antes — mejor cuatro archivos que ninguno.
 
+### Decirle al cliente que no tiene deuda
+
+Lo primero que pregunta un cliente cuando recibe la liquidación es si debe
+algo. En la liquidación hay dos casillas —**No hay deuda de Monotributo** y
+**No hay deuda de Ingresos Brutos**— y lo que se tilda sale escrito en el mail:
+
+```
+No registra deuda de monotributo.
+No registra deuda de ingresos brutos.
+```
+
+**Lo que no se tilda no se menciona.** No tildar no significa «debe»: significa
+que no se miró, y afirmar en un mail al cliente algo que no se miró es peor que
+no decir nada.
+
+## Un mes puede estar terminado sin importes
+
+El régimen simplificado de AGIP no emite boleta todos los meses, y un cliente
+sin actividad tampoco tiene nada que pagar. Esos meses quedaban **Pendiente**
+para siempre, y el que mira la grilla no sabía si faltaba cargarlos o si no
+había nada.
+
+La liquidación tiene ahora **Mes completado**: el mes pasa a estado **Completa**
+aunque no tenga un solo importe. Es una decisión que se toma a mano — un mes
+vacío sin tildar sigue pendiente, como debe ser.
+
+### Régimen simplificado (AGIP)
+
+En la ficha del cliente, AGIP tiene su propia casilla: **Régimen simplificado**.
+Con eso marcado, la liquidación deja de pedir una alícuota que no aplica —el
+importe es fijo por categoría, no sale de lo facturado— y en la grilla un mes
+sin importe se muestra con un guion en vez de «falta» en amarillo, porque puede
+ser un mes sin boleta y no un olvido. Tampoco cuenta para el filtro «le falta».
+
 ### Sin papeles, el mail sale igual
 
 Antes, si el mes no tenía ningún papel cargado, «Enviar al cliente» avisaba que
