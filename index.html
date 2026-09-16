@@ -1984,6 +1984,8 @@ var TIPOS_ARCHIVO = [
   { clave:"ddjjiibb",   nombre:"DDJJ de Ingresos Brutos" },
   { clave:"acuse",      nombre:"Acuse de presentación" },
   { clave:"boleta",     nombre:"Boleta municipal" },
+  { clave:"credencial", nombre:"Credencial de pago" },
+  { clave:"d960",       nombre:"Formulario D960" },
   { clave:"vep",        nombre:"VEP" },
   { clave:"pago",       nombre:"Comprobante de pago" },
   { clave:"factura",    nombre:"Factura" },
@@ -2001,7 +2003,8 @@ var TIPOS_ARCHIVO = [
    subido de apuro se archivaba como declaración jurada sin que nadie lo note
    —y desde que la DDJJ y el acuse tienen su propio botón, la lista es para
    todo lo demás. */
-var TIPOS_LIQ = ["vep", "boleta", "ddjjiibb", "ddjj", "acuse", "pago", "factura", "resumen", "constancia", "otro"];
+var TIPOS_LIQ = ["vep", "credencial", "d960", "boleta", "ddjjiibb", "ddjj", "acuse",
+                 "pago", "factura", "resumen", "constancia", "otro"];
 
 /* Los dos papeles que en ARCA y en ARBA se piden siempre: la declaración
    jurada y el acuse de presentación —que es el que prueba que se presentó, y
@@ -2010,8 +2013,12 @@ var TIPOS_LIQ = ["vep", "boleta", "ddjjiibb", "ddjj", "acuse", "pago", "factura"
    elige mal. Para ARBA la declaración jurada es la de Ingresos Brutos.
    El resto de los tipos sigue estando en la lista, para los cuatro impuestos. */
 var PAPELES_AL_TOQUE = {
-  arca: [ { tipo:"ddjj",     texto:"Subir declaración jurada" },
-          { tipo:"acuse",    texto:"Subir acuse de presentación" } ],
+  /* En ARCA un monotributista no presenta una declaración jurada todos los
+     meses: lo que se junta es el VEP de la cuota, la credencial de pago y el
+     D960. Los demás tipos siguen en la lista de abajo, para lo que aparezca. */
+  arca: [ { tipo:"vep",        texto:"Subir VEP de monotributo" },
+          { tipo:"credencial", texto:"Subir credencial de pago" },
+          { tipo:"d960",       texto:"Subir Formulario D960" } ],
   arba: [ { tipo:"ddjjiibb", texto:"Subir declaración jurada" },
           { tipo:"acuse",    texto:"Subir acuse de presentación" } ],
   /* En el municipio los dos papeles son otros: la boleta —que es la que trae
@@ -5255,8 +5262,7 @@ function bloqueMesPapeles(clienteId, g, gi){
         ? '<button class="btn sec chico" onclick="agregarPapelAlMes(\'' + clienteId + "','" + g.periodo + '\')">+ Agregar</button>'
         : "") +
       (g.periodo
-        ? '<button class="btn sec chico" title="El mail dice «' + esc(periodoLargo(mesLiquidado(g.periodo))) +
-          '»: se liquida a mes vencido" onclick="enviarPapelesDelMes(\'' + clienteId + "','" + g.periodo + '\')">📧 Enviar al cliente</button>'
+        ? '<button class="btn sec chico" onclick="enviarPapelesDelMes(\'' + clienteId + "','" + g.periodo + '\')">📧 Enviar al cliente</button>'
         : "") +
     "</div>" +
     '<ul class="lista-simple">' + g.items.map(function(it, ii){
@@ -5533,10 +5539,10 @@ function enviarPapelesDelMes(clienteId, periodo){
    armar, se bajan de a uno como antes: mejor cuatro archivos que ninguno. */
 function bajarYAbrirElMail(clienteId, periodo, c, items, pestana){
   return bajarZipDelMes(clienteId, periodo, items).then(function(n){
-    abrirMailDelMes(c, periodo, items, { n: n, zip: true }, pestana);
+    abrirMailDelMes(clienteId, c, periodo, items, { n: n, zip: true }, pestana);
   }).catch(function(){
     return bajarPapelesDelMes(clienteId, items).then(function(n){
-      abrirMailDelMes(c, periodo, items, { n: n, zip: false }, pestana);
+      abrirMailDelMes(clienteId, c, periodo, items, { n: n, zip: false }, pestana);
     });
   });
 }
@@ -5573,7 +5579,7 @@ function mandarConAdjuntos(clienteId, periodo, c, items, pestana){
     .then(function(r){
       var token = r[0], adj = r[1];
       if (!adj.length) throw new Error("No pude leer el contenido de los papeles");
-      var t = textoDelMailDelMes(c, periodo, items);
+      var t = textoDelMailDelMes(clienteId, c, periodo, items);
       return crearBorradorGmail(token, armarMimeConAdjuntos(c.email || "", t.asunto, t.cuerpo, adj))
         .then(function(d){
           var idMsg = d && d.message && d.message.id;
@@ -5743,15 +5749,31 @@ function bajarPapelesDelMes(clienteId, items){
 }
 
 /* ---------- DE QUÉ MES HABLA EL MAIL ----------
-   El estudio liquida a MES VENCIDO: los papeles que se juntan y se mandan en
-   septiembre son los de agosto. La carpeta del sistema sigue siendo la del mes
-   en que se cargaron —que es cuando uno los busca—, pero el mail tiene que
-   nombrar el mes que se liquida, que es el anterior. Decirle al cliente
-   «documentación de septiembre» cuando le estás mandando la DDJJ de agosto es
-   un error que después aparece en una consulta. */
-function mesLiquidado(periodo){ return periodoAnterior(periodo); }
+   El mes que se liquida es el MISMO de la liquidación: estando en agosto se
+   liquida agosto. Hubo una vuelta en la que el mail nombraba el mes anterior,
+   por mes vencido; se volvió atrás porque no es como trabaja el estudio.
+   Queda la función, y no el período pelado, para tener un solo lugar donde
+   mirarlo si alguna vez cambia. */
+function mesLiquidado(periodo){ return periodo; }
 
-function textoDelMailDelMes(c, periodo, items){
+/* Lo facturado y lo comprado del mes, para que el cliente vea de dónde salen
+   los números sin tener que preguntar. Va sólo si hay algo cargado: una línea
+   en cero no informa nada y hace dudar de si el sistema anda. */
+function _resumenComprobantesDelMes(clienteId, periodo){
+  var t = (ESTADO.totales[clienteId] || {})[periodo];
+  if (!t || (!t.emitido && !t.recibido)) return "";
+
+  function linea(rotulo, monto, cant){
+    if (!monto && !cant) return "";
+    return "  " + rotulo + ": " + pesos(monto || 0) +
+      (cant ? " (" + cant + (cant === 1 ? " comprobante" : " comprobantes") + ")" : "") + "\n";
+  }
+  return "Comprobantes del período:\n" +
+    linea("Emitidos", t.emitido, t.cantEmitidos) +
+    linea("Recibidos", t.recibido, t.cantRecibidos) + "\n";
+}
+
+function textoDelMailDelMes(clienteId, c, periodo, items){
   var est = ESTADO.config.estudio || {};
   var nombreEst = est.nombre || "EBD Consultores";
   var mes = mesLiquidado(periodo);
@@ -5765,6 +5787,7 @@ function textoDelMailDelMes(c, periodo, items){
       "Estimado/a " + (c.razonSocial || "") + ":\n\n" +
       "Le enviamos la documentación correspondiente al mes de " + periodoLargo(mes) + ":\n\n" +
       lista + "\n\n" +
+      _resumenComprobantesDelMes(clienteId, periodo) +
       "Quedamos a disposición por cualquier consulta.\n\n" +
       "Saludos cordiales,\n" + nombreEst +
       (est.cuit ? "\nCUIT " + formatCuit(est.cuit) : "") +
@@ -5773,8 +5796,8 @@ function textoDelMailDelMes(c, periodo, items){
   };
 }
 
-function abrirMailDelMes(c, periodo, items, bajado, pestana){
-  var t = textoDelMailDelMes(c, periodo, items);
+function abrirMailDelMes(clienteId, c, periodo, items, bajado, pestana){
+  var t = textoDelMailDelMes(clienteId, c, periodo, items);
   var abrio = abrirCorreo(c.email || "", t.asunto, t.cuerpo, pestana);
   var n = (bajado && bajado.n) || 0;
 
@@ -7728,6 +7751,65 @@ function textoCalculoIIBB(c, clienteId, periodo, clave, d){
 /* ---------- EL VEP EN PDF ----------
    Se guarda con la liquidación para tenerlo a mano cuando el cliente lo pide
    o cuando hay que adjuntarlo al mail. */
+/* ==========================================================================
+   LO FACTURADO Y LA PUERTA DE CADA ENTE, EN SU BLOQUE
+
+   Liquidar un mes es mirar cuánto facturó el cliente y entrar al sitio del
+   organismo a sacar el volante. Las dos cosas estaban en otro lado: la
+   facturación en Comprobantes y el acceso en la bóveda, que además abre su
+   propio cuadro —y acá adentro no puede, porque hay un solo modal—.
+
+   Así que cada bloque arranca con lo facturado y con el enlace para entrar.
+   El enlace copia el CUIT del cliente EN EL MISMO CLIC: los organismos abren
+   con el último CUIT usado en esa computadora y no hay forma de decirles cuál
+   queremos, así que al llegar ya está en el portapapeles y alcanza con pegar.
+   La contraseña sigue en la bóveda; acá no se muestra ninguna.
+   ========================================================================== */
+
+function urlDelOrganismo(clave, cli){
+  if (clave === "municipal") return urlDeMunicipio((cli || {}).municipio);
+  var o = organismoPorClave(clave);
+  return (o && o.url) || "";
+}
+
+function nombreDelOrganismo(clave, cli){
+  if (clave === "municipal") return (cli || {}).municipio || "el municipio";
+  return (IMPUESTOS.filter(function(i){ return i.clave === clave; })[0] || {}).corto || clave;
+}
+
+function copiarCuitDe(clienteId){
+  var c = ESTADO.clientes[clienteId] || {};
+  if (!c.cuit) return;
+  copiarAlPortapapeles(formatCuit(c.cuit))
+    .then(function(){ toast("CUIT copiado: pegalo en el sitio", "ok"); })
+    .catch(function(){ /* sin portapapeles no se rompe nada */ });
+}
+
+function bloqueEnteDeLaLiquidacion(clienteId, periodo, clave){
+  var c = ESTADO.clientes[clienteId] || {};
+  var t = (ESTADO.totales[clienteId] || {})[periodo] || {};
+  var doce = ingresosParaTramo(clienteId, periodo);
+
+  var facturado = t.emitido
+    ? "Facturado en " + periodoLargo(periodo) + ": <b>" + pesos(t.emitido) + "</b>"
+    : '<span style="color:var(--amar)">Sin comprobantes cargados en ' + periodoLargo(periodo) + "</span>";
+  if (doce.monto) facturado += " · " + esc(doce.base) + ": <b>" + pesos(doce.monto) + "</b>";
+  if (clave === "arca" && c.categoriaActual) facturado += ' · categoría <b>' + esc(c.categoriaActual) + "</b>";
+
+  var url = urlDelOrganismo(clave, c);
+  var entrar = url
+    ? '<a class="btn sec chico" href="' + esc(url) + '" target="_blank" rel="noopener"' +
+      (c.cuit ? ' onclick="copiarCuitDe(\'' + clienteId + '\')"' : "") +
+      ' style="white-space:nowrap">🔑 Entrar a ' + esc(nombreDelOrganismo(clave, c)) + " ↗</a>"
+    : "";
+
+  return '<div class="aviso info" style="margin-bottom:12px"><span>🧾</span>' +
+    '<div class="crece">' + facturado +
+      (c.cuit ? '<div class="ayuda" style="margin-top:4px">CUIT ' + esc(formatCuit(c.cuit)) +
+        (entrar ? " — el botón te lo deja copiado al abrir el sitio" : "") + "</div>" : "") +
+    "</div>" + entrar + "</div>";
+}
+
 /* ---------- EL SITIO DEL MUNICIPIO, A MANO ----------
    Los otros tres impuestos se pagan siempre en la misma web y el sistema la
    sabe. El municipio no: es el único donde hay que acordarse de a dónde
@@ -7743,11 +7825,13 @@ function bloqueSitioMunicipio(clienteId){
   var url  = urlDeMunicipio(muni);
   var puede = puedeEscribir();
 
+  /* El enlace para entrar ya está arriba, en el bloque del ente: acá sólo queda
+     la administración del link, para no tener dos veces la misma puerta. */
   if (url){
-    return '<div class="aviso info"><span>🏛️</span><div class="crece">Sitio de <b>' + esc(muni) + "</b>: " +
-      '<a class="link-url" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(url) + " ↗</a>" +
-      (puede ? ' · <a href="#" onclick="cambiarSitioMunicipio();return false;">cambiar</a>' : "") +
-      "</div></div>";
+    return puede
+      ? '<div class="ayuda">Sitio de <b>' + esc(muni) + "</b> cargado. " +
+        '<a href="#" onclick="cambiarSitioMunicipio();return false;">Cambiar el link</a></div>'
+      : "";
   }
 
   if (!puede){
@@ -7807,6 +7891,10 @@ function guardarSitioMunicipioDesdeLiq(){
   }).then(function(){
     pintarDatalistMunicipios();
     _repintarSitioMunicipio();
+    /* El botón para entrar vive en el bloque del ente, arriba: si no se
+       repinta, el link recién cargado no aparece hasta reabrir. */
+    var caja = $("lqEnteCaja_municipal");
+    if (caja) caja.innerHTML = bloqueEnteDeLaLiquidacion(id, _liqActual.periodo, "municipal");
     toast("Sitio del municipio guardado", "ok");
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
@@ -7994,10 +8082,11 @@ function leerPapelDeLiquidacion(clave, reintento){
 
   var prompt = "Te paso un papel de impuestos argentino: puede ser un VEP (volante electrónico de pago), " +
     "una declaración jurada, un acuse o constancia de presentación, una boleta de tasa municipal, " +
-    "o un comprobante de pago. " +
+    "una credencial de pago del monotributo, un formulario D960, o un comprobante de pago. " +
     "Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
     '{"tipo":"vep","organismo":"arca","importe":123456.78,"nroVep":"1234567890","vencimiento":"2026-09-22","periodo":"202608"}. ' +
-    "tipo: vep, ddjj, acuse, boleta, pago u otro. organismo: arca, arba, agip o municipal. " +
+    "tipo: vep, ddjj, acuse, boleta, credencial, d960, pago u otro. " +
+    "organismo: arca, arba, agip o municipal. " +
     "Si el papel es de un municipio o una municipalidad, organismo es municipal. importe: el total a pagar, como número, " +
     "con punto decimal y sin separador de miles. nroVep: el número del VEP o del comprobante, sin puntos. " +
     "vencimiento: la fecha de vencimiento o de pago en formato AAAA-MM-DD. periodo: el período fiscal en AAAAMM. " +
@@ -8201,6 +8290,7 @@ function editarLiquidacion(clienteId, periodo){
     var d = liq[i.clave] || {};
     var nombre = i.clave === "municipal" ? "Tasa municipal — " + (c.municipio || "sin municipio") : i.nombre;
     html += '<div class="seccion-tit">' + esc(nombre) + "</div>" +
+      '<div id="lqEnteCaja_' + i.clave + '">' + bloqueEnteDeLaLiquidacion(clienteId, periodo, i.clave) + "</div>" +
       calculoIIBB(c, clienteId, periodo, i.clave, d) +
       '<div class="grid g3">' +
         '<div class="campo"><label>Importe a pagar</label>' +
@@ -8244,9 +8334,7 @@ function editarLiquidacion(clienteId, periodo){
 
   if (html){
     html += '<div class="seccion-tit">Mandarle los papeles</div>' +
-      '<div class="aviso info"><span>📧</span><div>El mail habla del mes que se liquida, <b>' +
-        periodoLargo(mesLiquidado(periodo)) + "</b> (se liquida a mes vencido). " +
-        "Junta <b>todos</b> los papeles de " + periodoLargo(periodo) +
+      '<div class="aviso info"><span>📧</span><div>Junta <b>todos</b> los papeles de ' + periodoLargo(periodo) +
         " —los de acá y los que estén cargados en la ficha del cliente—, los descarga y abre el correo con el " +
         "texto listo. Los adjuntos se arrastran a mano: el navegador no puede adjuntarlos solo." +
         '<div style="margin-top:10px"><button type="button" class="btn sec chico" onclick="enviarPapelesDelMes(\'' +
@@ -11027,7 +11115,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v66";
+var VERSION_APP = "v67";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
