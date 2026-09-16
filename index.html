@@ -1720,6 +1720,7 @@ tbody tr:hover{background:#FAFAFC}
             <button class="btn" id="btnGuardarGoogle">Guardar</button>
             <button class="btn sec" id="btnConectarGmail">Conectar Gmail</button>
             <button class="btn gris" id="btnComoGmail">Cómo se saca</button>
+            <button class="btn gris" id="btnProbarGmail">🔧 Probar</button>
           </div>
         </div>
 
@@ -2157,6 +2158,9 @@ var BOTONES_ADMIN     = ["btnNuevaEscala","btnGuardarEscala","btnGuardarEstudio"
                          "btnNuevoSocio","tabBtnSocios",
                          "btnImportarAlic","btnNuevaFilaAlic","btnGuardarAlic",
                          "btnGuardarGoogle","btnConectarGmail"];
+/* «Probar» y «Cómo se saca» los ve cualquiera a propósito: el que se queda
+   trabado suele ser justamente el que no tiene permiso, y necesita ver por
+   qué antes que nadie. */
 
 /* Campos que solo un admin puede guardar: sin el botón al lado, dejarlos
    editables invita a escribir algo que después se pierde. */
@@ -9740,6 +9744,66 @@ function pintarEstadoGmail(){
       "y elegí <b>" + esc(cuenta) + "</b>. Después se renueva solo.</div></div>";
 }
 
+/* ---------- QUÉ FALTA PARA ADJUNTAR ----------
+   «No anda» puede ser cinco cosas distintas, y los avisos que se van solos a
+   los tres segundos no alcanzan para encontrar cuál. Esto revisa las cinco, de
+   arriba abajo, y deja el resultado escrito en la pantalla. */
+$("btnProbarGmail").onclick = function(){
+  var cont = $("cfgGmailEstado");
+  cont.innerHTML = '<div class="aviso info"><span>⏳</span><div>Revisando…</div></div>';
+
+  /* Se relee de la base a propósito: lo que importa es lo que quedó GUARDADO,
+     no lo que se ve escrito en el campo. */
+  ref("config/google").once("value").then(function(s){
+    var guardado = ((s.val() || {}).clientId || "").trim();
+    var enPantalla = $("cfgGoogleClientId").value.trim();
+    var cuenta = configCorreo().cuenta;
+    var filas = [];
+
+    function fila(ok, tit, sub){
+      filas.push("<li><span class=\"badge " + (ok ? "b-verde" : "b-rojo") + '">' + (ok ? "✓" : "✕") + "</span>" +
+        '<div class="crece"><div class="tit">' + tit + "</div>" +
+        (sub ? '<div class="sub">' + sub + "</div>" : "") + "</div></li>");
+    }
+
+    fila(esAdminRol(), "Tu rol permite guardar la configuración",
+      esAdminRol() ? "Sos <b>admin</b>" :
+        "Sos <b>" + esc(ESTADO.rol) + "</b>. La configuración sólo la guarda un <b>admin</b>: " +
+        "aunque pegues el ID y toques Guardar, la base lo rechaza. <b>Esto hay que arreglarlo primero.</b>");
+
+    fila(!!guardado, "El ID de cliente está guardado en la base",
+      guardado ? "<span class=\"mono\">" + esc(guardado.slice(0, 28)) + "…</span>"
+        : (enPantalla ? "Hay uno escrito en el campo pero <b>no se guardó</b>. Tocá <b>Guardar</b>."
+                      : "No hay ninguno. Pegá el que sacaste de la consola de Google y tocá <b>Guardar</b>."));
+
+    fila(!!(window.google && google.accounts && google.accounts.oauth2),
+      "La librería de Google cargó",
+      "Si falla, suele ser un bloqueador de anuncios o la conexión. Recargá la página.");
+
+    fila(gmailTokenVivo(), "Diste el permiso de Gmail",
+      gmailTokenVivo() ? "Conectado en esta sesión"
+        : "Tocá <b>Conectar Gmail</b> y elegí <b>" + esc(cuenta) + "</b>. Se hace una vez.");
+
+    fila(configCorreo().modo === "gmail", "El correo se abre con Gmail",
+      configCorreo().modo === "gmail" ? "Casilla: <b>" + esc(cuenta) + "</b>"
+        : "Está en «el programa del equipo». Cambialo en <b>Datos del estudio</b>.");
+
+    var todo = filas.filter(function(f){ return f.indexOf("b-rojo") !== -1; }).length === 0;
+
+    cont.innerHTML = '<div class="aviso ' + (todo ? "ok" : "warn") + '"><span>' + (todo ? "✅" : "⚠️") + "</span><div>" +
+      (todo ? "Está todo listo: «Enviar al cliente» deja el borrador con los archivos adentro."
+            : "Falta algo. Lo que tenga ✕ es lo que hay que resolver, de arriba para abajo.") +
+      "</div></div>" +
+      '<ul class="lista-simple">' + filas.join("") + "</ul>" +
+      '<div class="ayuda" style="margin-top:10px">Aparte de esto: Gmail sólo puede abrir una casilla que ' +
+        "ya esté iniciada en este navegador. Si <b>" + esc(cuenta) + "</b> no lo está, va a abrir la que tenga a mano. " +
+        "Se agrega desde gmail.com → tu foto → <b>Agregar otra cuenta</b>.</div>";
+  }).catch(function(e){
+    cont.innerHTML = '<div class="aviso bad"><span>⚠️</span><div>No pude ni leer la configuración: ' +
+      esc(explicarError(e)) + "</div></div>";
+  });
+};
+
 $("btnGuardarGoogle").onclick = function(){
   var cfg = { clientId: $("cfgGoogleClientId").value.trim() };
   ref("config/google").set(cfg).then(function(){
@@ -9747,7 +9811,13 @@ $("btnGuardarGoogle").onclick = function(){
     _gmToken = null;                 /* otro ID, otro permiso */
     pintarEstadoGmail();
     toast("Guardado", "ok");
-  }).catch(function(e){ toast(explicarError(e), "error"); });
+  }).catch(function(e){
+    /* Un aviso que se va solo a los tres segundos no alcanza para un error que
+       explica por qué nada funciona: queda escrito en la tarjeta. */
+    $("cfgGmailEstado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>No se guardó.</b> ' +
+      esc(explicarError(e)) + "</div></div>";
+    toast("No se guardó", "error");
+  });
 };
 
 $("btnConectarGmail").onclick = function(){
@@ -9757,8 +9827,12 @@ $("btnConectarGmail").onclick = function(){
     pintarEstadoGmail();
     toast("Gmail conectado", "ok");
   }).catch(function(e){
-    pintarEstadoGmail();
-    toast(e && e.message ? e.message : "No se pudo conectar", "error");
+    $("cfgGmailEstado").innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>No se conectó.</b> ' +
+      esc(e && e.message ? e.message : "Google no dio el permiso") +
+      "<div class=\"ayuda\" style=\"margin-top:6px\">Si Google dijo que la app no está verificada, entrá por " +
+      "<b>Configuración avanzada → Ir a…</b>. Si dijo que no tenés acceso, falta agregar tu correo como " +
+      "<b>usuario de prueba</b> en la consola de Google.</div></div></div>";
+    toast("No se pudo conectar", "error");
   });
 };
 
@@ -10598,7 +10672,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v62";
+var VERSION_APP = "v63";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
