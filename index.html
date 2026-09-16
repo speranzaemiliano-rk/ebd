@@ -6659,32 +6659,269 @@ function renderTablaComprobantes(){
   cont.innerHTML = html;
 }
 
+/* ==========================================================================
+   EL DETALLE DE UN PERÍODO — VER, EDITAR Y BORRAR
+
+   Los comprobantes entran importados de un archivo, y un archivo llega mal:
+   una fila con el importe cambiado, el mismo mes cargado dos veces, o todo un
+   período que se importó al cliente equivocado. Hasta acá esta pantalla sólo
+   miraba: la única salida era volver a importar encima.
+
+   Todo se hace SIN abrir otro cuadro —hay un solo modal en la app— así que
+   editar convierte la fila en campos y borrar pregunta en la propia fila.
+
+   Al tocar algo, los totales del período se vuelven a sumar desde los
+   comprobantes que quedaron. Si no se recalcularan, la recategorización y el
+   cálculo de ingresos brutos seguirían con el número viejo, que es el error
+   que no se ve.
+   ========================================================================== */
+
+var _detalle = null;   /* { clienteId, periodo, datos } */
+
 function verDetallePeriodo(clienteId, periodo){
   ref("comprobantes/" + clienteId + "/" + periodo).once("value").then(function(s){
-    var d = s.val() || {};
-    var lista = [];
-    ["emitido","recibido"].forEach(function(tp){
-      Object.keys(d[tp] || {}).forEach(function(k){ lista.push(d[tp][k]); });
-    });
-    lista.sort(function(a,b){ return a.fecha.localeCompare(b.fecha); });
-
-    var html;
-    if (!lista.length){
-      html = '<div class="vacio"><div class="ico">📄</div><div>Sin comprobantes en este período.</div></div>';
-    } else {
-      html = '<div class="tabla-wrap" style="max-height:460px;overflow-y:auto"><table><thead><tr>' +
-        "<th>Fecha</th><th>Tipo</th><th>Nº</th><th>Contraparte</th><th>E/R</th><th class=num>Total</th>" +
-        "</tr></thead><tbody>" + lista.map(function(c){
-          return "<tr><td>" + c.fecha.split("-").reverse().join("/") + "</td>" +
-            "<td>" + esc(c.cbteTipo || "—") + "</td>" +
-            '<td class="mono">' + (c.ptoVta ? String(c.ptoVta).padStart(5,"0") + "-" + String(c.nro).padStart(8,"0") : "—") + "</td>" +
-            "<td>" + esc(c.denom || formatCuit(c.docNro) || "—") + "</td>" +
-            '<td><span class="badge ' + (c.tipo === "emitido" ? "b-azul" : "b-gris") + '">' + (c.tipo === "emitido" ? "Emitido" : "Recibido") + "</span></td>" +
-            '<td class="num">' + pesos(c.total) + "</td></tr>";
-        }).join("") + "</tbody></table></div>";
-    }
-    abrirModal(ESTADO.clientes[clienteId].razonSocial + " · " + periodoLargo(periodo), html,
+    _detalle = { clienteId: clienteId, periodo: periodo, datos: s.val() || {} };
+    abrirModal(ESTADO.clientes[clienteId].razonSocial + " · " + periodoLargo(periodo),
+      '<div id="detalleCuerpo"></div>',
       [{ texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }], "ancho");
+    pintarDetallePeriodo();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
+
+/* Las dos ramas —emitido y recibido— aplanadas, recordando de cuál vino cada
+   una: sin la rama y la clave no se puede volver a escribir la fila. */
+function filasDelDetalle(){
+  var d = (_detalle && _detalle.datos) || {}, out = [];
+  ["emitido","recibido"].forEach(function(tp){
+    Object.keys(d[tp] || {}).forEach(function(k){
+      out.push(Object.assign({}, d[tp][k], { _tp: tp, _k: k }));
+    });
+  });
+  /* Ojo con el orden: una fila sin fecha rompía el localeCompare y se llevaba
+     puesta la pantalla entera. */
+  out.sort(function(a, b){ return String(a.fecha || "").localeCompare(String(b.fecha || "")); });
+  return out;
+}
+
+function _nroComprobante(c){
+  return c.ptoVta ? String(c.ptoVta).padStart(5,"0") + "-" + String(c.nro).padStart(8,"0") : "";
+}
+function _comoSeLlamaLaFila(c){
+  return (c.cbteTipo || "Comprobante") + " " + (_nroComprobante(c) || "") + " de " + pesos(c.total || 0);
+}
+
+function pintarDetallePeriodo(){
+  var cont = $("detalleCuerpo");
+  if (!cont || !_detalle) return;
+  var filas = filasDelDetalle(), puede = puedeEscribir();
+
+  if (!filas.length){
+    cont.innerHTML = '<div class="vacio"><div class="ico">📄</div><div>Sin comprobantes en este período.</div></div>';
+    return;
+  }
+
+  var sumaE = 0, sumaR = 0;
+  filas.forEach(function(c){ if (c.tipo === "recibido") sumaR += (c.total || 0); else sumaE += (c.total || 0); });
+
+  cont.innerHTML =
+    '<div class="tabla-wrap" style="max-height:440px;overflow-y:auto"><table><thead><tr>' +
+      "<th>Fecha</th><th>Tipo</th><th>Nº</th><th>Contraparte</th><th>E/R</th><th class=num>Total</th>" +
+      (puede ? "<th></th>" : "") +
+    "</tr></thead><tbody>" +
+    filas.map(function(c, i){
+      return '<tr id="cbteFila' + i + '">' +
+        "<td>" + esc(String(c.fecha || "").split("-").reverse().join("/")) + "</td>" +
+        "<td>" + esc(c.cbteTipo || "—") + "</td>" +
+        '<td class="mono">' + esc(_nroComprobante(c) || "—") + "</td>" +
+        "<td>" + esc(c.denom || formatCuit(c.docNro) || "—") + "</td>" +
+        '<td><span class="badge ' + (c.tipo === "emitido" ? "b-azul" : "b-gris") + '">' +
+          (c.tipo === "emitido" ? "Emitido" : "Recibido") + "</span></td>" +
+        '<td class="num">' + pesos(c.total || 0) + "</td>" +
+        (puede
+          ? '<td style="white-space:nowrap">' +
+            '<button type="button" class="btn-icono" title="Editar" onclick="editarComprobante(' + i + ')">✏️</button>' +
+            '<button type="button" class="btn-icono" title="Borrar" onclick="pedirBorrarComprobante(this,' + i + ')">🗑️</button>' +
+            "</td>"
+          : "") +
+      "</tr>";
+    }).join("") + "</tbody></table></div>" +
+    '<div class="ayuda" style="margin-top:10px">' + filas.length +
+      (filas.length === 1 ? " comprobante" : " comprobantes") +
+      " · Emitido " + pesos(sumaE) + " · Recibido " + pesos(sumaR) + "</div>" +
+    (puede
+      ? '<div style="margin-top:14px;display:flex;justify-content:flex-end">' +
+        '<button type="button" class="btn sec chico" onclick="pedirBorrarPeriodoEntero()">🗑️ Borrar todo el período</button></div>'
+      : "");
+}
+
+/* ---------- EDITAR: LA FILA SE VUELVE CAMPOS ---------- */
+function editarComprobante(i){
+  var c = filasDelDetalle()[i], tr = $("cbteFila" + i);
+  if (!c || !tr) return;
+  var per = _detalle.periodo;
+
+  tr.innerHTML =
+    '<td><input type="date" id="cbF" value="' + esc(c.fecha || "") + '" style="min-width:140px"></td>' +
+    '<td><input type="text" id="cbT" value="' + esc(c.cbteTipo || "") + '" style="min-width:90px"></td>' +
+    '<td><div style="display:flex;gap:4px">' +
+      '<input type="number" id="cbPV" value="' + (c.ptoVta || "") + '" placeholder="PV" style="width:70px">' +
+      '<input type="number" id="cbNro" value="' + (c.nro || "") + '" placeholder="Nº" style="width:100px">' +
+    "</div></td>" +
+    '<td><input type="text" id="cbD" value="' + esc(c.denom || "") + '" style="min-width:140px"></td>' +
+    '<td><select id="cbER">' +
+      '<option value="emitido"' + (c.tipo !== "recibido" ? " selected" : "") + ">Emitido</option>" +
+      '<option value="recibido"' + (c.tipo === "recibido" ? " selected" : "") + ">Recibido</option>" +
+    "</select></td>" +
+    '<td><input type="number" step="0.01" id="cbTot" value="' + (c.total || 0) + '" style="width:110px"></td>' +
+    '<td style="white-space:nowrap">' +
+      '<button type="button" class="btn chico" onclick="guardarComprobante(' + i + ')">Guardar</button> ' +
+      '<button type="button" class="btn gris chico" onclick="pintarDetallePeriodo()">Cancelar</button>' +
+    "</td>";
+
+  /* Cambiar el mes lo mueve de período, así que se avisa antes de que pase. */
+  $("cbF").title = "Si ponés una fecha de otro mes, el comprobante se muda a ese mes";
+  $("cbF").focus();
+}
+
+function guardarComprobante(i){
+  var vieja = filasDelDetalle()[i];
+  if (!vieja || !_detalle) return;
+  var id = _detalle.clienteId, per = _detalle.periodo;
+
+  var fecha = ($("cbF").value || "").trim();
+  if (!fecha){ toast("Falta la fecha", "error"); return; }
+  var total = parseFloat($("cbTot").value);
+  if (isNaN(total)){ toast("Falta el importe", "error"); return; }
+
+  var nuevo = Object.assign({}, vieja, {
+    fecha: fecha,
+    cbteTipo: $("cbT").value.trim(),
+    ptoVta: parseInt($("cbPV").value, 10) || 0,
+    nro: parseInt($("cbNro").value, 10) || 0,
+    denom: $("cbD").value.trim(),
+    tipo: $("cbER").value,
+    total: total
+  });
+  delete nuevo._tp; delete nuevo._k;
+
+  var perNuevo = fecha.slice(0,4) + fecha.slice(5,7);
+  moverOGuardarComprobante(id, per, vieja, nuevo, perNuevo)
+    .then(function(){ toast("Comprobante guardado", "ok"); })
+    .catch(function(e){ toast(explicarError(e), "error"); pintarDetallePeriodo(); });
+}
+
+/* Un comprobante puede cambiar de rama (emitido ↔ recibido) y hasta de mes, si
+   se corrige la fecha. En los dos casos hay que sacarlo de donde estaba: si
+   sólo se escribiera en el lugar nuevo quedarían dos, y los totales contarían
+   el importe dos veces. */
+function moverOGuardarComprobante(id, per, vieja, nuevo, perNuevo){
+  var updates = {};
+  updates["comprobantes/" + id + "/" + per + "/" + vieja._tp + "/" + vieja._k] = null;
+
+  var mismoLugar = perNuevo === per && nuevo.tipo === vieja._tp;
+  var claveNueva = mismoLugar ? vieja._k : (vieja._k + "-m" + Date.now().toString(36));
+  updates["comprobantes/" + id + "/" + perNuevo + "/" + nuevo.tipo + "/" + claveNueva] = nuevo;
+
+  /* La rama local también, para poder recalcular sin volver a bajar todo. */
+  if (_detalle.datos[vieja._tp]) delete _detalle.datos[vieja._tp][vieja._k];
+  if (perNuevo === per){
+    if (!_detalle.datos[nuevo.tipo]) _detalle.datos[nuevo.tipo] = {};
+    _detalle.datos[nuevo.tipo][claveNueva] = nuevo;
+  }
+
+  return ref("").update(updates)
+    .then(function(){ return recalcularTotalesDe(id, per); })
+    .then(function(){ return perNuevo === per ? null : recalcularTotalesDe(id, perNuevo); })
+    .then(function(){
+      pintarDetallePeriodo();
+      refrescarDondeSeVenLosComprobantes();
+      if (perNuevo !== per) toast("Se mudó a " + periodoLargo(perNuevo), "ok");
+    });
+}
+
+/* ---------- BORRAR ---------- */
+function pedirBorrarComprobante(btn, i){
+  var c = filasDelDetalle()[i];
+  if (!c || !_detalle) return;
+  var id = _detalle.clienteId, per = _detalle.periodo;
+
+  _confirmarEnFila(btn, function(){
+    var u = {};
+    u["comprobantes/" + id + "/" + per + "/" + c._tp + "/" + c._k] = null;
+    if (_detalle.datos[c._tp]) delete _detalle.datos[c._tp][c._k];
+    ref("").update(u)
+      .then(function(){ return recalcularTotalesDe(id, per); })
+      .then(function(){
+        pintarDetallePeriodo(); refrescarDondeSeVenLosComprobantes();
+        toast("Comprobante borrado", "ok");
+      })
+      .catch(function(e){ toast(explicarError(e), "error"); pintarDetallePeriodo(); });
+  }, pintarDetallePeriodo, _comoSeLlamaLaFila(c));
+}
+
+/* Borrar el período entero es lo que arregla «importé todo mal»: se va con los
+   comprobantes y con el total, así el mes desaparece del listado. La pregunta
+   reemplaza el cuerpo del mismo modal, que es el único que hay. */
+function pedirBorrarPeriodoEntero(){
+  if (!_detalle) return;
+  var id = _detalle.clienteId, per = _detalle.periodo;
+  var cuantos = filasDelDetalle().length;
+  var cont = $("detalleCuerpo");
+  if (!cont) return;
+
+  cont.innerHTML = '<div class="aviso bad"><span>⚠️</span><div>Se borran los <b>' + cuantos +
+    "</b> comprobantes de <b>" + periodoLargo(per) + "</b> y el total del mes. " +
+    "El período desaparece del listado y no se puede recuperar.</div></div>" +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button type="button" class="btn peligro" id="btnSiBorrarPer">Sí, borrar el período</button>' +
+      '<button type="button" class="btn gris" onclick="pintarDetallePeriodo()">Cancelar</button>' +
+    "</div>";
+
+  $("btnSiBorrarPer").onclick = function(){
+    var u = {};
+    u["comprobantes/" + id + "/" + per] = null;
+    u["totales/" + id + "/" + per] = null;
+    ref("").update(u).then(function(){
+      if (ESTADO.totales[id]) delete ESTADO.totales[id][per];
+      _detalle.datos = {};
+      cerrarModal();
+      refrescarDondeSeVenLosComprobantes();
+      toast("Período borrado", "ok");
+    }).catch(function(e){ toast(explicarError(e), "error"); pintarDetallePeriodo(); });
+  };
+}
+
+/* Los mismos números se ven en tres lados. `renderCliente` sólo se llama si
+   se está adentro de un cliente: con la ficha cerrada se iría solo al listado
+   de clientes, dejando al usuario en otra pantalla sin haber pedido nada. */
+function refrescarDondeSeVenLosComprobantes(){
+  renderTablaComprobantes();
+  renderHome();
+  var activo = document.querySelector(".panel.activo");
+  if (activo && activo.id === "tabCliente" && _clienteAbierto) renderCliente();
+}
+
+/* ---------- LOS TOTALES SE VUELVEN A SUMAR ---------- */
+function recalcularTotalesDe(clienteId, periodo){
+  return ref("comprobantes/" + clienteId + "/" + periodo).once("value").then(function(s){
+    var d = s.val() || {};
+    var e = 0, ce = 0, r = 0, cr = 0;
+    Object.keys(d.emitido || {}).forEach(function(k){ e += (d.emitido[k].total || 0); ce++; });
+    Object.keys(d.recibido || {}).forEach(function(k){ r += (d.recibido[k].total || 0); cr++; });
+
+    /* Sin ningún comprobante el período se va entero: dejar un total en cero
+       mostraría un mes que ya no existe. */
+    if (!ce && !cr){
+      return ref("totales/" + clienteId + "/" + periodo).remove().then(function(){
+        if (ESTADO.totales[clienteId]) delete ESTADO.totales[clienteId][periodo];
+      });
+    }
+    var nuevo = { emitido:e, recibido:r, cantEmitidos:ce, cantRecibidos:cr,
+                  actualizado: new Date().toISOString() };
+    return ref("totales/" + clienteId + "/" + periodo).set(nuevo).then(function(){
+      if (!ESTADO.totales[clienteId]) ESTADO.totales[clienteId] = {};
+      ESTADO.totales[clienteId][periodo] = nuevo;
+    });
   });
 }
 
@@ -9749,20 +9986,27 @@ function borrarArchivo(cli, id){
    cargando. Así que la pregunta va en la fila del papel — que además es la
    fila del papel del que se está hablando, y no hay forma de confundirse de
    archivo. Cancelar repinta la lista y no pasó nada. */
-function _confirmarEnFila(btn, alSi, alNo){
-  var li = btn;
-  while (li && li.tagName !== "LI") li = li.parentNode;
-  if (!li) return;
-  var tit = li.querySelector(".tit");
-  var nombre = tit ? tit.textContent : "este papel";
+function _confirmarEnFila(btn, alSi, alNo, queCosa){
+  var fila = btn;
+  while (fila && fila.tagName !== "LI" && fila.tagName !== "TR") fila = fila.parentNode;
+  if (!fila) return;
+  var tit = fila.querySelector(".tit");
+  var nombre = queCosa || (tit ? tit.textContent : "este papel");
 
-  li.innerHTML = '<span class="badge b-rojo">borrar</span>' +
+  var pregunta = '<span class="badge b-rojo">borrar</span>' +
     '<div class="crece"><div class="tit">¿Borrar ' + esc(nombre) + "?</div>" +
     '<div class="sub">No se puede recuperar.</div></div>' +
     '<button type="button" class="btn peligro chico">Sí, borrar</button>' +
     '<button type="button" class="btn gris chico">No</button>';
 
-  var bs = li.querySelectorAll("button");
+  /* En una tabla la pregunta ocupa la fila entera: repartida en las celdas
+     quedaría cortada por los anchos de las columnas. */
+  fila.innerHTML = fila.tagName === "TR"
+    ? '<td colspan="' + fila.children.length + '">' +
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' + pregunta + "</div></td>"
+    : pregunta;
+
+  var bs = fila.querySelectorAll("button");
   bs[0].onclick = alSi;
   bs[1].onclick = alNo;
 }
@@ -10030,7 +10274,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v59";
+var VERSION_APP = "v60";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

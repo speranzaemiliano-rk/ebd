@@ -243,6 +243,34 @@ hay que arrastrarlos a mano**: un `mailto:` no puede llevar archivos, y eso lo
 prohíbe el navegador — no es algo que falte programar. Por eso el sistema hace
 las dos mitades que sí puede: bajar los papeles y dejar el correo escrito.
 
+## Corregir los comprobantes importados
+
+Un archivo importado llega mal: una fila con el importe cambiado, el mismo mes
+cargado dos veces, o todo un período que se fue al cliente equivocado. Hasta
+acá esta pantalla sólo miraba, y la única salida era volver a importar encima.
+
+En **Comprobantes → 🔍** (o dentro del cliente, en *Comprobantes → Ver*) cada
+fila del detalle tiene ahora **✏️ editar** y **🗑️ borrar**, y abajo un
+**Borrar todo el período** para deshacer una importación entera.
+
+- **Editar** convierte la fila en campos, ahí mismo. Se puede cambiar la fecha,
+  el tipo, el número, la contraparte, el importe y si es emitido o recibido.
+- Pasar un comprobante de **emitido a recibido** lo mueve de una rama a la
+  otra: no queda duplicado ni contado dos veces.
+- Ponerle una **fecha de otro mes** lo muda a ese mes, y los totales de los dos
+  meses se recalculan.
+- **Borrar** pregunta en la propia fila; **borrar el período** pregunta en el
+  mismo cuadro y avisa cuántos comprobantes se lleva.
+
+Lo que importa y no se ve: después de cada cambio, **los totales del período se
+vuelven a sumar desde los comprobantes que quedaron**. Si no se recalcularan,
+la recategorización y el cálculo de ingresos brutos seguirían trabajando con el
+número viejo — que es el error que no se nota hasta que ya está presentado. Si
+no queda ningún comprobante, el período desaparece en vez de quedar en cero.
+
+Todo esto necesita permiso de escritura: un rol *lector* ve el detalle sin
+botones.
+
 ## Cerrar una ficha
 
 Las ventanas del sistema **no se cierran tocando afuera**. Para salir están la

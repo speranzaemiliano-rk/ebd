@@ -14,7 +14,7 @@
    VERSION de acá abajo. Si no, algunos navegadores siguen mostrando la vieja.
    ========================================================================== */
 
-var VERSION = "v59";
+var VERSION = "v60";
 var CACHE   = "ebd-" + VERSION;
 
 /* Archivos propios que se guardan para que la app abra sin conexión. */
