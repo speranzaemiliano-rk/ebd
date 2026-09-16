@@ -5521,17 +5521,22 @@ function enviarPapelesDelMes(clienteId, periodo){
 
   ref("archivos/" + clienteId).once("value").then(function(s){
     var g = papelesPorMes(clienteId, s.val() || {}).filter(function(x){ return x.periodo === periodo; })[0];
-    if (!g || !g.items.length){
-      soltarPestana();
-      toast("No hay papeles guardados de ese mes", "error");
+    var items = (g && g.items) || [];
+
+    /* Sin papeles el mail sale igual: casi siempre hay algo que decir —lo
+       facturado del mes, una observación— y quedarse sin mandar nada porque
+       todavía no se subió un PDF es peor que mandarlo sin adjuntos. */
+    if (!items.length){
+      toast("No hay papeles de " + periodoLargo(periodo) + ": abro el correo igual", "ok");
+      abrirMailDelMes(clienteId, c, periodo, [], { n: 0, zip: false }, pestana);
       return;
     }
     /* Con Gmail configurado, el mail sale armado y con los archivos adentro.
        Si no, el camino de siempre: bajarlos y abrir el correo escrito. */
     if (configCorreo().modo === "gmail" && gmailListo()){
-      return mandarConAdjuntos(clienteId, periodo, c, g.items, pestana);
+      return mandarConAdjuntos(clienteId, periodo, c, items, pestana);
     }
-    return bajarYAbrirElMail(clienteId, periodo, c, g.items, pestana);
+    return bajarYAbrirElMail(clienteId, periodo, c, items, pestana);
   }).catch(function(e){ soltarPestana(); toast(explicarError(e), "error"); });
 }
 
@@ -5573,6 +5578,13 @@ function contenidosDeLosPapeles(clienteId, items){
 }
 
 function mandarConAdjuntos(clienteId, periodo, c, items, pestana){
+  /* Sin papeles no hay nada que adjuntar: el borrador con adjuntos no aporta
+     nada sobre el correo de siempre, y una llamada a Gmail para mandar cero
+     archivos sólo agrega una forma más de fallar. */
+  if (!items.length){
+    abrirMailDelMes(clienteId, c, periodo, [], { n: 0, zip: false }, pestana);
+    return Promise.resolve();
+  }
   _cartelPestana(pestana, "Adjuntando los papeles…");
 
   return Promise.all([ pedirTokenGmail(false), contenidosDeLosPapeles(clienteId, items) ])
@@ -5781,12 +5793,17 @@ function textoDelMailDelMes(clienteId, c, periodo, items){
     return "• " + (i.etiqueta || "Papel") + (i.nombre ? " — " + i.nombre : "");
   }).join("\n");
 
+  /* Sin papeles no se pone una lista vacía: el mail igual tiene qué decir
+     —lo facturado del mes— y una viñeta sola quedaría rara. */
+  var apertura = items.length
+    ? "Le enviamos la documentación correspondiente al mes de " + periodoLargo(mes) + ":\n\n" + lista + "\n\n"
+    : "Le escribimos por el período de " + periodoLargo(mes) + ".\n\n";
+
   return {
     asunto: nombreEst + " — " + periodoLargo(mes),
     cuerpo:
       "Estimado/a " + (c.razonSocial || "") + ":\n\n" +
-      "Le enviamos la documentación correspondiente al mes de " + periodoLargo(mes) + ":\n\n" +
-      lista + "\n\n" +
+      apertura +
       _resumenComprobantesDelMes(clienteId, periodo) +
       "Quedamos a disposición por cualquier consulta.\n\n" +
       "Saludos cordiales,\n" + nombreEst +
@@ -5801,9 +5818,11 @@ function abrirMailDelMes(clienteId, c, periodo, items, bajado, pestana){
   var abrio = abrirCorreo(c.email || "", t.asunto, t.cuerpo, pestana);
   var n = (bajado && bajado.n) || 0;
 
-  var queBajo = bajado && bajado.zip
-    ? "Se descargó <b>un</b> archivo .zip con los " + n + " papeles: arrastralo al correo"
-    : n + (n === 1 ? " papel descargado" : " papeles descargados") + ": adjuntalos al correo";
+  var queBajo = !n
+    ? "Correo abierto. No había papeles de " + periodoLargo(periodo) + " para adjuntar"
+    : (bajado && bajado.zip
+      ? "Se descargó un archivo .zip con los " + n + " papeles: arrastralo al correo"
+      : n + (n === 1 ? " papel descargado" : " papeles descargados") + ": adjuntalos al correo");
 
   toast(!abrio
     ? "El navegador bloqueó la pestaña de Gmail: permitile abrir ventanas a este sitio"
@@ -11115,7 +11134,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v67";
+var VERSION_APP = "v68";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

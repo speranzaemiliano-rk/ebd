@@ -376,6 +376,22 @@ ocupa. Dos papeles con el mismo nombre no se pisan: al segundo se le agrega
 `(2)`. Si por lo que fuera el `.zip` no se pudiera armar, bajan de a uno como
 antes — mejor cuatro archivos que ninguno.
 
+### Sin papeles, el mail sale igual
+
+Antes, si el mes no tenía ningún papel cargado, «Enviar al cliente» avisaba que
+no había nada y no hacía nada más. Ahora **abre el correo igual**: casi siempre
+hay algo que decir —lo facturado del mes, una observación— y quedarse sin
+mandar nada porque todavía no se subió un PDF es peor que mandarlo sin
+adjuntos.
+
+El cuerpo se adapta: no promete documentación que no va ni deja una lista de
+papeles vacía. Dice *«Le escribimos por el período de mayo de 2026»* y abajo,
+los comprobantes del mes. El cierre y la firma, iguales.
+
+Y no se llama a Gmail para adjuntar cero archivos: sin papeles, el borrador con
+adjuntos no aporta nada sobre el correo de siempre y sólo agrega una forma más
+de fallar.
+
 ### El mail informa los comprobantes del mes
 
 Abajo de la lista de papeles, el mail dice cuánto facturó y cuánto compró el
