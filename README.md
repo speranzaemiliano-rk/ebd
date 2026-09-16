@@ -224,6 +224,13 @@ con el último CUIT usado en esa computadora y no hay forma de decirles cuál
 queremos, así que al llegar ya está en el portapapeles y alcanza con pegar. La
 contraseña sigue en la bóveda: acá no se muestra ninguna.
 
+Lo que se copia son los **once dígitos pelados** —`20123456780`, sin guiones—:
+así lo piden los formularios de ARCA, ARBA y los municipios, y si se pega con
+guiones lo rechazan, muchas veces sin decir por qué. El bloque lo muestra igual
+que como lo copia, para que no haya sorpresa al pegar. Lo mismo en la bóveda:
+si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
+—o una clave— se copia tal cual, letra por letra.
+
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
