@@ -208,6 +208,34 @@ cargado. Ahora entra igual: el botón dice **Ver** en vez de *Cargar*, los
 campos van bloqueados, no aparece *Guardar* —que le rebotaría— y los papeles se
 abren y se bajan normalmente.
 
+## Lo facturado y la puerta del organismo, en cada bloque
+
+Liquidar un mes es mirar cuánto facturó el cliente y entrar al sitio del
+organismo a sacar el volante. Las dos cosas estaban en otro lado: la
+facturación en Comprobantes, y el acceso en la bóveda —que además abre su
+propio cuadro, y adentro de la liquidación no puede, porque hay un solo—.
+
+Ahora cada bloque de impuesto arranca con las dos:
+
+> 🧾 Facturado en agosto de 2026: **$ 800.000** · lo facturado en 2025: **$ 8.400.000** · categoría **D** &nbsp;&nbsp; `🔑 Entrar a ARCA ↗`
+
+El enlace **copia el CUIT del cliente en el mismo clic**. Los organismos abren
+con el último CUIT usado en esa computadora y no hay forma de decirles cuál
+queremos, así que al llegar ya está en el portapapeles y alcanza con pegar. La
+contraseña sigue en la bóveda: acá no se muestra ninguna.
+
+El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
+sitio cargado no aparece el botón: no hay a dónde ir.
+
+## Los tres papeles de ARCA
+
+Un monotributista no presenta una declaración jurada todos los meses. Lo que se
+junta es otra cosa, y son los tres botones del bloque de ARCA:
+
+> 📎 Subir VEP de monotributo &nbsp;&nbsp; 📎 Subir credencial de pago &nbsp;&nbsp; 📎 Subir Formulario D960
+
+Los demás tipos siguen en la lista de abajo, para lo que aparezca.
+
 ## El papel equivocado no entra
 
 Pegar el VEP de ARBA en el casillero de ARCA es un error que después no se ve
@@ -330,26 +358,11 @@ dejar borradores, no leer el correo ni mandar nada por su cuenta.
 Si no está configurado —o si Gmail falla— vuelve solo al camino de siempre
 (bajar los papeles y abrir el correo escrito), diciendo por qué.
 
-### El mail habla del mes que se liquida
-
-El estudio liquida **a mes vencido**: los papeles que se juntan y se mandan en
-septiembre son los de **agosto**. La carpeta del sistema sigue siendo la del
-mes en que se cargaron —que es cuando uno los busca— pero el asunto y el cuerpo
-del mail nombran el mes anterior:
-
-> *Asunto:* EBD Consultores — agosto de 2026
-> *Cuerpo:* Le enviamos la documentación correspondiente al mes de agosto de 2026
-
-Decirle al cliente «documentación de septiembre» cuando se le manda la DDJJ de
-agosto es un error que después vuelve como consulta. El botón **Enviar al
-cliente** y el aviso de la liquidación dicen de qué mes va a hablar el mail,
-para que no sorprenda.
-
 ### Sin adjuntos, los papeles bajan en un solo .zip
 
 Mientras Gmail no esté configurado —o si falla— sigue funcionando el camino de
 siempre, pero **en una sola descarga**: un `.zip` con todos los papeles del mes,
-llamado `Papeles agosto de 2026 - Cliente.zip`. Cae en Descargas y se arrastra
+llamado `Papeles septiembre de 2026 - Cliente.zip`. Cae en Descargas y se arrastra
 entero al correo.
 
 Antes bajaba de a uno, con una pausa en el medio. Eso era cuatro veces la misma
@@ -362,6 +375,20 @@ nada y traer una librería por CDN costaría más que las cuarenta líneas que
 ocupa. Dos papeles con el mismo nombre no se pisan: al segundo se le agrega
 `(2)`. Si por lo que fuera el `.zip` no se pudiera armar, bajan de a uno como
 antes — mejor cuatro archivos que ninguno.
+
+### El mail informa los comprobantes del mes
+
+Abajo de la lista de papeles, el mail dice cuánto facturó y cuánto compró el
+cliente en ese período, con la cantidad de comprobantes de cada uno:
+
+```
+Comprobantes del período:
+  Emitidos: $ 900.000 (3 comprobantes)
+  Recibidos: $ 250.000 (1 comprobante)
+```
+
+Va sólo si hay algo cargado: una línea en cero no informa nada y hace dudar de
+si el sistema anda.
 
 ### Cómo funciona «Enviar al cliente»
 
