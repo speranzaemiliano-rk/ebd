@@ -1012,6 +1012,57 @@ tbody tr:hover{background:#FAFAFC}
     padding:14px 18px calc(14px + env(safe-area-inset-bottom,0px));
   }
   .modal-pie .btn{flex:1 1 auto;justify-content:center}
+
+  /* ---------- QUE EL TELÉFONO NO HAGA ZOOM SOLO ----------
+     Safari en iPhone agranda la página apenas tocás un campo que mide menos
+     de 16px, y no la vuelve a achicar: el formulario queda corrido, el botón
+     de guardar fuera de la pantalla, y hay que pellizcar para volver. Con
+     16px justos no pasa —es el umbral exacto de iOS—, y de paso se lee
+     mejor. Vale sólo en el teléfono: en la computadora los campos siguen
+     como estaban. */
+  input,select,textarea,
+  .filtros input[type=text],.filtros input[type=search],.filtros select,
+  .campo input[type=text],.campo input[type=email],.campo input[type=number],
+  .campo input[type=password],.campo input[type=date],.campo input[type=month],
+  .campo input[type=tel],.campo input[type=url],.campo select,.campo textarea,
+  select.pill,.as-pie textarea{font-size:16px}
+
+  /* ---------- BLANCOS DE 44px ----------
+     Lo que hace falta para pegarle con el dedo sin apuntar. Los campos y los
+     botones del encabezado medían 40. */
+  .filtros input[type=text],.filtros input[type=search],.filtros select,
+  select.pill,.card-head .btn{height:44px}
+  .filtros input[type=text],.filtros input[type=search]{line-height:42px}
+
+  /* El buscador ocupa el renglón entero: con un ancho mínimo de 230px dejaba
+     media fila vacía al lado y empujaba el resto para abajo. */
+  .filtros{gap:8px}
+  .filtros input[type=text],.filtros input[type=search]{flex:1 1 100%}
+
+  /* Los botones del encabezado: los secundarios de a dos por renglón y el
+     principal solo, abajo de todo, que es donde llega el pulgar. Antes cada
+     uno se llevaba un renglón entero y había que scrollear tres pantallas
+     para ver el primer cliente. El nowrap es a propósito: si un texto no
+     entra en media fila, ese botón se pasa solo al renglón de abajo en vez
+     de partirse en dos líneas. */
+  .card-head .btn{white-space:nowrap}
+  .card-head .btn.sec{flex:1 1 auto;padding-left:12px;padding-right:12px;font-size:14px}
+  .card-head .btn:not(.sec){flex:1 1 100%;order:9}
+
+  /* ---------- EL BORDE DE LA PANTALLA ----------
+     En un iPhone la barra de abajo se come los últimos píxeles y, acostado,
+     la muesca se come los de los costados. */
+  main{padding-bottom:calc(92px + env(safe-area-inset-bottom,0px))}
+  header.top{padding-left:calc(14px + env(safe-area-inset-left,0px));
+             padding-right:calc(14px + env(safe-area-inset-right,0px))}
+  #fabAsistente{bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+
+  /* La fila de solapas de adentro se arrastra: el degradé del final avisa
+     que hay más a la derecha en vez de dejar una palabra cortada al ras. */
+  .sub-tabs{
+    -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 22px),transparent);
+    mask-image:linear-gradient(to right,#000 calc(100% - 22px),transparent);
+  }
 }
 </style>
 </head>
@@ -2880,6 +2931,11 @@ function pintarSubnavClientes(tabId){
       : "");
   Array.prototype.forEach.call(barra.querySelectorAll("button[data-tab]"), function(b){
     b.onclick = function(){ irA(b.dataset.tab); };
+    /* Igual que la barra de arriba: en el teléfono esta fila también se
+       arrastra, así que la solapa abierta puede quedar fuera de la pantalla
+       y no se ve dónde estás parado. */
+    if (b.classList.contains("activo") && b.scrollIntoView)
+      b.scrollIntoView({ block:"nearest", inline:"center", behavior:"smooth" });
   });
 }
 
@@ -11243,7 +11299,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v71";
+var VERSION_APP = "v72";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
