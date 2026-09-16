@@ -295,6 +295,52 @@ no queda ningún comprobante, el período desaparece en vez de quedar en cero.
 Todo esto necesita permiso de escritura: un rol *lector* ve el detalle sin
 botones.
 
+## Usuarios y roles
+
+En **Configuración → Usuarios del sistema** está quién puede entrar y con qué
+rol. Cada fila tiene **su selector de rol**: se cambia ahí, sin tener que
+escribir el UID de Firebase a mano (un dato que uno no tiene ni sabe dónde
+buscar). El 🗑️ le quita el acceso, preguntando antes en la propia fila.
+
+| Rol | Qué puede |
+|---|---|
+| **Admin** | Todo, incluida la configuración y repartir roles |
+| **Editor** | Carga y edita datos; no toca la configuración |
+| **Lector** | Sólo mira |
+
+Tres cosas que evitan quedarse afuera:
+
+- **Nadie se puede sacar el admin a sí mismo** desde la lista: si es el único,
+  el sistema se queda sin quien reparta roles.
+- Si **no hay ningún admin** guardado, la tarjeta lo avisa arriba.
+- **Dos cuentas con el mismo correo** se marcan. Pasa siempre que una se creó
+  con contraseña y otra entrando con Google: son UID distintos, y sin el aviso
+  se le termina dando el rol a la que no se usa.
+
+### El correo del dueño, con puntos o sin puntos
+
+En Gmail, `speranza.emiliano@gmail.com` y `speranzaemiliano@gmail.com` son **la
+misma casilla**: Gmail ignora los puntos y todo lo que vaya después de un `+`.
+Comparar los textos tal cual dejó al dueño del sistema con rol **lector**, sin
+un solo admin y sin forma de arreglarlo desde adentro.
+
+Ahora los correos se comparan **normalizados** (fuera de Gmail los puntos sí
+cuentan), y si el dueño figura en la base con otro rol, el sistema **lo corrige
+en la base**, no sólo en pantalla. Antes se ponía admin en memoria pero la base
+seguía diciendo lector, así que las reglas de Firebase le rechazaban todo lo
+que guardara.
+
+Las reglas (`database.rules.json`) aceptan las dos escrituras del correo. ⚠️ Hay
+que **publicarlas a mano** en Firebase → Realtime Database → Reglas: el archivo
+del repo no se aplica solo.
+
+### Si te quedaste sin admin
+
+Es la situación en la que nadie puede arreglar nada desde adentro. La salida no
+depende del sistema: en **Firebase Console → Realtime Database**, abrí
+`estudioContable / usuarios / <tu-uid> / rol` y escribí `admin`. La tarjeta de
+Usuarios muestra tu UID exacto para que no haya que adivinarlo.
+
 ## Cerrar una ficha
 
 Las ventanas del sistema **no se cierran tocando afuera**. Para salir están la

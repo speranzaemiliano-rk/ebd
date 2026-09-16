@@ -5,7 +5,7 @@
       "usuarios": {
         ".read": "auth != null",
         "$uid": {
-          ".write": "auth != null && (!root.child('estudioContable/usuarios').exists() || auth.token.email === 'speranza.emiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin' || (auth.uid === $uid && !data.exists() && newData.child('rol').val() === 'lector'))"
+          ".write": "auth != null && (!root.child('estudioContable/usuarios').exists() || auth.token.email === 'speranza.emiliano@gmail.com' || auth.token.email === 'speranzaemiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin' || (auth.uid === $uid && !data.exists() && newData.child('rol').val() === 'lector'))"
         }
       },
 
@@ -65,22 +65,22 @@
 
       "socios": {
         ".read": "auth != null",
-        ".write": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')"
+        ".write": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || auth.token.email === 'speranzaemiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')"
       },
 
       "escalas": {
         ".read": "auth != null",
-        ".write": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')"
+        ".write": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || auth.token.email === 'speranzaemiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')"
       },
 
       "config": {
         ".read": "auth != null",
-        ".write": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')"
+        ".write": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || auth.token.email === 'speranzaemiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')"
       },
 
       "credenciales": {
-        ".read": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')",
-        ".write": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')"
+        ".read": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || auth.token.email === 'speranzaemiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')",
+        ".write": "auth != null && (auth.token.email === 'speranza.emiliano@gmail.com' || auth.token.email === 'speranzaemiliano@gmail.com' || root.child('estudioContable/usuarios/' + auth.uid + '/rol').val() === 'admin')"
       }
 
     },

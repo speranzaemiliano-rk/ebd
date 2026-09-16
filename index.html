@@ -1904,7 +1904,35 @@ var firebaseConfig = {
   appId:             "1:766506374673:web:97bac48439ee1e5853c3b0"
 };
 
-var ADMIN_INICIAL = "speranza.emiliano@gmail.com"; // siempre entra como admin
+/* Los correos que entran siempre como admin, pase lo que pase en la base.
+   ⚠️ En Gmail, `speranza.emiliano@` y `speranzaemiliano@` son LA MISMA casilla:
+   Gmail ignora los puntos y todo lo que vaya después de un «+». Comparar los
+   textos tal cual dejó al dueño del sistema con rol lector, sin un solo admin
+   y sin forma de arreglarlo desde adentro. Por eso se comparan normalizados. */
+var ADMINS_INICIALES = ["speranza.emiliano@gmail.com"];
+
+/* Se prende si el dueño no pudo ascenderse solo: las reglas de la base todavía
+   no aceptan su correo. Lo usa la tarjeta de Usuarios para explicar la salida. */
+var _avisoAdminTrabado = false;
+
+function _mailNormalizado(mail){
+  var t = String(mail || "").trim().toLowerCase();
+  var arroba = t.lastIndexOf("@");
+  if (arroba === -1) return t;
+  var usuario = t.slice(0, arroba), dominio = t.slice(arroba + 1);
+  var mas = usuario.indexOf("+");
+  if (mas !== -1) usuario = usuario.slice(0, mas);
+  if (dominio === "gmail.com" || dominio === "googlemail.com") usuario = usuario.replace(/\./g, "");
+  return usuario + "@" + dominio;
+}
+
+function esAdminInicial(mail){
+  var n = _mailNormalizado(mail);
+  for (var i = 0; i < ADMINS_INICIALES.length; i++){
+    if (_mailNormalizado(ADMINS_INICIALES[i]) === n) return true;
+  }
+  return false;
+}
 var RAIZ = "estudioContable";
 
 /* El arranque de Firebase va protegido: si todavía no pegaste las credenciales
@@ -2567,9 +2595,10 @@ auth.onAuthStateChanged(function(u){
     var perfil = lista[u.uid] || {};
     var existe = !!lista[u.uid];
 
-    if (vacio)                        ESTADO.rol = "admin";   // primer usuario del sistema
-    else if (u.email === ADMIN_INICIAL) ESTADO.rol = "admin";
-    else                              ESTADO.rol = perfil.rol || "lector";
+    var duenio = esAdminInicial(u.email);
+    if (vacio)       ESTADO.rol = "admin";   // primer usuario del sistema
+    else if (duenio) ESTADO.rol = "admin";
+    else             ESTADO.rol = perfil.rol || "lector";
 
     if (!existe){
       ref("usuarios/" + u.uid).set({
@@ -2579,6 +2608,14 @@ auth.onAuthStateChanged(function(u){
         alta: new Date().toISOString()
       }).catch(function(e){
         toast("No pude registrar tu usuario en la base: " + ((e && e.message) || e), "error");
+      });
+    } else if (duenio && perfil.rol !== "admin"){
+      /* Antes esto sólo se arreglaba en memoria: el dueño se veía como admin
+         pero en la base seguía siendo lector, así que las reglas de Firebase
+         le rechazaban todo lo que guardara. Y si nadie es admin en la base,
+         tampoco hay quien reparta roles. Se corrige de verdad. */
+      ref("usuarios/" + u.uid).update({ rol: "admin" }).catch(function(){
+        _avisoAdminTrabado = true;
       });
     }
     var nom = perfil.nombre || u.email.split("@")[0];
@@ -2594,7 +2631,7 @@ auth.onAuthStateChanged(function(u){
        dejar que se entere cuando le rebote el primer cliente que cargue. */
     if (ESTADO.rol === "lector"){
       setTimeout(function(){
-        toast("Entraste como LECTOR: podés mirar pero no guardar. Hay que cambiarte el rol a admin.", "error");
+        toast("Entraste como LECTOR: podés mirar pero no guardar. En Configuración → Usuarios dice cómo arreglarlo.", "error");
       }, 900);
     }
     cargarTodo();
@@ -9438,17 +9475,107 @@ function renderConfig(){
   $("cfgGoogleClientId").value = gmailClientId();
   pintarEstadoGmail();
 
+  pintarUsuarios();
+}
+
+/* ---------- QUIÉN PUEDE ENTRAR, Y CON QUÉ ROL ----------
+   La lista mostraba el rol como una etiqueta y nada más: para cambiarlo había
+   que usar «Asignar rol» y escribir a mano el UID de Firebase, un dato que uno
+   no tiene a mano ni sabe dónde buscar. Ahora el rol se cambia en la fila. */
+var ROLES = [
+  { clave:"admin",  nombre:"Admin",  ayuda:"todo, incluida la configuración y los roles" },
+  { clave:"editor", nombre:"Editor", ayuda:"carga y edita datos, no toca la configuración" },
+  { clave:"lector", nombre:"Lector", ayuda:"sólo mira" }
+];
+
+function pintarUsuarios(){
+  var cont = $("listaUsuarios");
+  if (!cont) return;
+
   ref("usuarios").once("value").then(function(s){
-    var us = s.val() || {};
-    var ks = Object.keys(us);
-    $("listaUsuarios").innerHTML = ks.length
-      ? '<ul class="lista-simple">' + ks.map(function(uid){
-          var u = us[uid];
-          return '<li><div class="crece"><div class="tit">' + esc(u.nombre || u.email) + '</div><div class="sub">' + esc(u.email) + "</div></div>" +
-            '<span class="badge ' + (u.rol === "admin" ? "b-azul" : (u.rol === "editor" ? "b-verde" : "b-gris")) + '">' + esc(u.rol) + "</span></li>";
-        }).join("") + "</ul>"
-      : '<div style="color:var(--gris);font-size:13px">Todavía no hay usuarios registrados.</div>';
+    var us = s.val() || {}, ks = Object.keys(us);
+    var yo = ESTADO.usuario ? ESTADO.usuario.uid : "";
+    var admin = esAdminRol();
+
+    /* Dos cuentas con el mismo correo es lo normal cuando una se creó con
+       contraseña y otra entrando con Google: son UID distintos. Conviene
+       marcarlo o se le termina dando el rol a la que no se usa. */
+    var porMail = {};
+    ks.forEach(function(uid){ var m = _mailNormalizado(us[uid].email); porMail[m] = (porMail[m] || 0) + 1; });
+
+    var aviso = "";
+    if (!admin){
+      aviso = '<div class="aviso warn"><span>🔒</span><div>Entraste con rol <b>' + esc(ESTADO.rol) +
+        "</b>, así que no podés repartir roles: eso lo hace un <b>admin</b>." +
+        (esAdminInicial(ESTADO.usuario && ESTADO.usuario.email)
+          ? " Tu correo es el del dueño del sistema, así que el arreglo es de una vez: " + _comoDesbloquear()
+          : "") + "</div></div>";
+    } else if (!ks.filter(function(uid){ return us[uid].rol === "admin"; }).length){
+      aviso = '<div class="aviso warn"><span>⚠️</span><div>No hay ningún <b>admin</b> guardado en la base. ' +
+        "Ponete admin a vos primero, o al salir nadie va a poder cambiar nada.</div></div>";
+    }
+
+    if (!ks.length){
+      cont.innerHTML = aviso + '<div class="ayuda">Todavía no hay usuarios registrados.</div>';
+      return;
+    }
+
+    cont.innerHTML = aviso + '<ul class="lista-simple">' + ks.sort(function(a,b){
+      return (us[a].nombre || us[a].email || "").localeCompare(us[b].nombre || us[b].email || "");
+    }).map(function(uid){
+      var u = us[uid], rol = u.rol || "lector";
+      var repetido = porMail[_mailNormalizado(u.email)] > 1;
+      return "<li>" +
+        '<div class="crece"><div class="tit">' + esc(u.nombre || u.email || uid) +
+          (uid === yo ? ' <span class="badge b-azul">vos</span>' : "") + "</div>" +
+        '<div class="sub">' + esc(u.email || "") +
+          (repetido ? ' · <span style="color:var(--amar)">otra cuenta usa este correo</span>' : "") + "</div></div>" +
+        (admin
+          ? '<select class="pill" style="height:32px;font-size:13px" onchange="cambiarRolUsuario(\'' + uid + '\', this.value)">' +
+            ROLES.map(function(r){
+              return '<option value="' + r.clave + '"' + (r.clave === rol ? " selected" : "") + ">" + r.nombre + "</option>";
+            }).join("") + "</select>" +
+            (uid === yo ? "" : '<button type="button" class="btn-icono" title="Quitarle el acceso" onclick="pedirQuitarUsuario(this,\'' + uid + '\')">🗑️</button>')
+          : '<span class="badge ' + (rol === "admin" ? "b-azul" : (rol === "editor" ? "b-verde" : "b-gris")) + '">' + esc(rol) + "</span>") +
+        "</li>";
+    }).join("") + "</ul>" +
+    '<div class="ayuda" style="margin-top:10px">' +
+      ROLES.map(function(r){ return "<b>" + r.nombre + "</b>: " + r.ayuda; }).join(" · ") + "</div>";
+  }).catch(function(e){
+    cont.innerHTML = '<div class="aviso bad"><span>⚠️</span><div>' + esc(explicarError(e)) + "</div></div>";
   });
+}
+
+/* El camino que no depende de nada del sistema: tocarlo a mano en la consola.
+   Cuando nadie es admin, es la única puerta que queda. */
+function _comoDesbloquear(){
+  var uid = ESTADO.usuario ? ESTADO.usuario.uid : "tu-uid";
+  return "en <b>Firebase Console → Realtime Database</b>, abrí " +
+    '<span class="mono">estudioContable / usuarios / ' + esc(uid) + ' / rol</span> ' +
+    "y escribí <span class=\"mono\">admin</span>. Después volvé a entrar.";
+}
+
+function cambiarRolUsuario(uid, rol){
+  /* Sacarse a uno mismo el admin sin que haya otro deja el sistema sin nadie
+     que pueda repartir roles: el que se queda afuera es uno. */
+  if (uid === (ESTADO.usuario || {}).uid && rol !== "admin"){
+    toast("No te podés sacar el admin a vos mismo desde acá", "error");
+    pintarUsuarios();
+    return;
+  }
+  ref("usuarios/" + uid).update({ rol: rol }).then(function(){
+    toast("Rol cambiado a " + rol, "ok");
+    pintarUsuarios();
+  }).catch(function(e){ toast(explicarError(e), "error"); pintarUsuarios(); });
+}
+
+function pedirQuitarUsuario(btn, uid){
+  _confirmarEnFila(btn, function(){
+    ref("usuarios/" + uid).remove().then(function(){
+      toast("Se le quitó el acceso", "ok");
+      pintarUsuarios();
+    }).catch(function(e){ toast(explicarError(e), "error"); pintarUsuarios(); });
+  }, pintarUsuarios, "el acceso de este usuario");
 }
 
 /* La casilla sólo tiene sentido con Gmail: con el programa del equipo, el
@@ -9620,7 +9747,8 @@ $("btnNuevoUsuario").onclick = function(){
           if (!uid){ toast("Falta el UID", "error"); return; }
           ref("usuarios/" + uid).update({
             nombre:$("nuNombre").value.trim(), email:$("nuMail").value.trim(), rol:$("nuRol").value
-          }).then(function(){ cerrarModal(); toast("Rol asignado", "ok"); renderConfig(); });
+          }).then(function(){ cerrarModal(); toast("Rol asignado", "ok"); pintarUsuarios(); })
+            .catch(function(e){ toast(explicarError(e), "error"); });
         } }
     ]);
 };
@@ -10347,7 +10475,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v61";
+var VERSION_APP = "v62";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
@@ -11247,7 +11375,7 @@ function clientesDelReparto(){
 
 var REGLA_SOCIOS = '"socios": {\n' +
   '  ".read": "auth != null",\n' +
-  '  ".write": "auth != null && (auth.token.email === \'speranza.emiliano@gmail.com\' || root.child(\'estudioContable/usuarios/\' + auth.uid + \'/rol\').val() === \'admin\')"\n' +
+  '  ".write": "auth != null && (auth.token.email === \'speranza.emiliano@gmail.com\' || auth.token.email === \'speranzaemiliano@gmail.com\' || root.child(\'estudioContable/usuarios/\' + auth.uid + \'/rol\').val() === \'admin\')"\n' +
   "}";
 
 function renderSocios(){
