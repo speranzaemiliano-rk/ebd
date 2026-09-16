@@ -152,6 +152,20 @@ Dos frenos: **no pisa** un mes que ya tiene una liquidación cargada, y pide
 guardar antes si hay algo escrito sin guardar (mover rearma el cuadro desde la
 base y se perdería sin decir nada).
 
+## Borrar una liquidación
+
+Una liquidación cargada al cliente equivocado, o duplicada, no tenía forma de
+irse: se podían vaciar los importes a mano, pero el mes seguía figurando.
+
+Adentro de la liquidación, en la misma línea del período:
+
+> Período liquidado: **septiembre de 2026** · cambiar · **borrar**
+
+Antes de borrar dice exactamente qué se lleva —qué importes, cuántos VEP— y qué
+**no**: los papeles subidos (DDJJ, acuses, boletas) **no se tocan**. Viven en
+los papeles del cliente y son suyos; la liquidación es sólo el mes donde se los
+cargó. Los VEP sí se van, porque viven adentro de ella.
+
 ## Ver y descargar no necesita permiso de escritura
 
 El botón para entrar a la liquidación existía **sólo con permiso de edición**,
