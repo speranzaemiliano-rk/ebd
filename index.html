@@ -4314,7 +4314,14 @@ var LETRAS_CAT = "ABCDEFGHIJK";
 /* Las etiquetas que usan las dos constancias. Sirven para saber dónde termina
    un valor: pdf.js devuelve todo pegado con espacios simples, así que cortar
    "por dos espacios" no funciona y el nombre se lleva puesto medio PDF. */
-var _ETIQ_CONST = "CUIT|CUIL|Estado|Domicilio|Impuestos?|Actividades?|Actividad Principal|Fecha|" +
+/* Ojo con los plurales: el `?` se lleva la letra de ANTES, no la sílaba. El
+   plural de «Actividad» es «Actividades», así que `Actividades?` pide
+   «Actividade» y no engancha con el singular, que es justo como lo imprimen
+   las constancias. Estuvo así desde el principio y el efecto era mudo: el
+   domicilio fiscal no terminaba nunca —seguía hasta el final del texto— y esa
+   cola se guardaba como localidad. `Impuestos?` sí está bien: ahí el plural
+   agrega una sola letra. */
+var _ETIQ_CONST = "CUIT|CUIL|Estado|Domicilio|Impuestos?|Actividad(?:es)?|Fecha|" +
   "Clave|Monotributo|Categor[ií]a|R[eé]gimen|N[uú]mero|N[°º]|Apellido y Nombre|Denominaci[oó]n|" +
   "Raz[oó]n Social|Per[ií]odo|Condici[oó]n|Inscripci[oó]n|Constancia|Emisi[oó]n|Sede|Anexo";
 
@@ -4377,7 +4384,13 @@ function _partirDomicilio(txt){
      Donde estaba el código queda una barra, y eso además PARTE la dirección:
      en estas constancias lo que va antes es la calle y lo que va después, la
      localidad, aunque no haya ningún otro separador. */
-  var mc = t.match(/\(?\s*\b([A-Za-z]\d{4}[A-Za-z]{3})\b\s*\)?/);
+  /* Las tres letras del final del CPA son OPCIONALES: ARCA imprime muchísimo
+     «(B1870)» —la letra de la provincia y los cuatro dígitos de siempre— y con
+     las tres letras obligatorias ese caso no lo tomaba ninguna de las dos
+     ramas: el de cuatro dígitos exige que adentro del paréntesis haya SÓLO
+     números. El código quedaba vacío y, peor, se lo llevaba la localidad:
+     «B1870) AVELLANEDA». */
+  var mc = t.match(/\(?\s*\b([A-Za-z]\d{4}(?:[A-Za-z]{3})?)\b\s*\)?/);
   if (mc){ out.cp = mc[1].toUpperCase(); t = t.replace(mc[0], "|"); }
   else {
     var m4 = t.match(/\(\s*(\d{4})\s*\)/) || t.match(/(?:^|[-–,|])\s*(\d{4})\s*(?=[-–,|]|$)/);
@@ -4551,6 +4564,28 @@ function leerConstancia(){
    revisión y el aviso de CUIT repetido son los mismos. Tampoco acá se crea el
    cliente solo: la IA se equivoca igual que una expresión regular, sólo que de
    otra manera. */
+/* Arma el domicilio de lo que devolvió la IA. Manda lo que ella partió; para
+   cada campo que dejó vacío se usa lo que sale de partir el renglón crudo con
+   las reglas de siempre. Así un modelo que devuelve todo junto en «calle»
+   —o que se olvida el código postal— igual termina completando la ficha. */
+function _domicilioDeLaIA(d){
+  var out = { calle:"", piso:"", localidad:"", provincia:"", cp:"" };
+  var dio = d.domicilio && typeof d.domicilio === "object" ? d.domicilio : {};
+  var delTexto = _partirDomicilio(d.domicilioTexto);
+
+  Object.keys(out).forEach(function(k){
+    out[k] = String(dio[k] || "").replace(/\s+/g, " ").trim() || delTexto[k] || "";
+  });
+
+  /* Si metió todo en «calle», el renglón crudo manda: la calle sola es lo que
+     va en el campo calle, y el resto ya quedó repartido arriba. */
+  if (delTexto.calle && out.calle !== delTexto.calle &&
+      _sinTildes(out.calle).toUpperCase().indexOf(_sinTildes(delTexto.localidad || "|no|").toUpperCase()) !== -1){
+    out.calle = delTexto.calle;
+  }
+  return out;
+}
+
 function leerConstanciaConIA(){
   var f = $("ctcFile").files[0];
   var pegado = $("ctcTexto").value.trim();
@@ -4558,15 +4593,28 @@ function leerConstanciaConIA(){
 
   $("ctcResultado").innerHTML = '<div class="aviso info"><span>✨</span><div>Leyendo con IA… puede tardar unos segundos.</div></div>';
 
+  /* El domicilio se pide DOS veces: partido en campos y además tal cual está
+     escrito. Partido porque es lo que necesita la ficha, y crudo porque si la
+     IA parte mal —o deja algo afuera— queda el renglón entero para partirlo
+     acá con las mismas reglas que usa la lectura sin IA. Antes no se pedía de
+     ninguna forma: el resto del programa esperaba `d.domicilio` y la IA nunca
+     lo mandaba, así que leer una constancia con IA jamás completaba el
+     domicilio y no había manera de darse cuenta de por qué. */
   var consigna =
     "Sos un asistente de un estudio contable argentino. Te paso una CONSTANCIA DE INSCRIPCIÓN " +
     "de ARCA (ex AFIP) o de AGIP (ingresos brutos de la Ciudad de Buenos Aires). " +
     "Devolvé SOLO un objeto JSON, sin texto alrededor, con estas claves exactas:\n" +
     '{"organismo":"arca|agip","cuit":"11 dígitos sin guiones","razonSocial":"","actividad":"descripción de la actividad principal",' +
-    '"codigoActividad":"6 dígitos","categoria":"letra A a K del monotributo","nroIIBB":"","regimen":""}\n' +
+    '"codigoActividad":"6 dígitos","categoria":"letra A a K del monotributo","nroIIBB":"","regimen":"",' +
+    '"domicilioTexto":"el domicilio fiscal completo, tal como está escrito, en un solo renglón",' +
+    '"domicilio":{"calle":"calle y altura","piso":"piso y depto si los hay","localidad":"","provincia":"","cp":""}}\n' +
     "Reglas: si un dato no está en la constancia, poné cadena vacía. No inventes nada. " +
     "El CUIT es el del contribuyente, NO el del organismo que emite la constancia. " +
-    "La categoría es la del monotributo, una sola letra." +
+    "La categoría es la del monotributo, una sola letra. " +
+    "El domicilio es el FISCAL del contribuyente, no el del organismo: en las constancias aparece " +
+    "bajo «Domicilio Fiscal». En «calle» va sólo la calle y la altura, sin el piso, sin la localidad, " +
+    "sin la provincia y sin el código postal, que van en sus propias claves. La provincia escribila " +
+    "con su nombre completo («Buenos Aires», «Ciudad Autónoma de Buenos Aires», «Córdoba»)." +
     (pegado ? "\n\nTexto de la constancia:\n" + pegado : "");
 
   preguntarAGemini(consigna, f, 0).then(function(txt){
@@ -4577,11 +4625,15 @@ function leerConstanciaConIA(){
     d.categoria = String(d.categoria || "").toUpperCase().slice(0, 1);
     if (LETRAS_CAT.indexOf(d.categoria) === -1) d.categoria = "";
     d.cuitDudoso = !!(d.cuit && !cuitValido(d.cuit));
+    d.domicilio = _domicilioDeLaIA(d);
+    d.domicilioTexto = String(d.domicilioTexto || "").replace(/\s+/g, " ").trim() ||
+                       domicilioEnUnaLinea(d.domicilio);
 
     var campos = [
       { clave:"cuit", nombre:"CUIT" }, { clave:"razonSocial", nombre:"Razón social / Nombre" },
       { clave:"actividad", nombre:"Actividad" }, { clave:"categoria", nombre:"Categoría de monotributo" },
-      { clave:"nroIIBB", nombre:"Nº de Ingresos Brutos" }
+      { clave:"nroIIBB", nombre:"Nº de Ingresos Brutos" },
+      { clave:"domicilioTexto", nombre:"Domicilio fiscal" }
     ];
     d.encontrados = campos.filter(function(c){ return d[c.clave]; });
     d.faltantes   = campos.filter(function(c){ return !d[c.clave]; });
@@ -11620,7 +11672,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v74";
+var VERSION_APP = "v75";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
