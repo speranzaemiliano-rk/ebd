@@ -234,6 +234,44 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## Documentos del cliente
+
+Además de los papeles de cada mes, un cliente tiene papeles que **no son de
+ningún mes**: el contrato de alquiler, el título profesional que AGIP pide para
+la exención, el estatuto de la sociedad, una habilitación municipal.
+
+Esos van a un bloque propio —**📁 Documentos del cliente**— arriba de todo, en
+la solapa **Papeles** de su ficha. Se cargan con **+ Agregar documento**: el
+archivo, qué es, y un detalle (el detalle importa: sin él quedan tres «Contrato
+de alquiler» iguales y hay que abrirlos de a uno para saber cuál es cuál).
+
+No se mezclan con los meses y **no salen en el correo mensual**: el bloque ni
+siquiera ofrece «Enviar al cliente», porque no hay mes que mandar. Se ven, se
+bajan y se borran igual que cualquier otro papel.
+
+## Bienes Personales
+
+En la ficha del cliente hay un casillero: **«Se le hace la declaración jurada de
+Bienes Personales»**. Es anual y se presenta en ARCA, así que va aparte de
+«Impuestos que liquida»: marcarlo no agrega ninguna fila a la liquidación del
+mes. Lo que hace es dejar al cliente identificado —se ve en el listado y en la
+ficha— y el instructivo a mano.
+
+Al tildarlo aparece **📘 Cómo se presenta**, que abre ahí mismo el texto de la
+guía oficial de ARCA: quiénes están alcanzados, la declaración **determinativa**
+(la que determina el saldo a pagar, con su tope) y la **informativa** (la que no
+arroja saldo, con el suyo y la lista de actividades), y la opción de **Régimen
+Simplificado**. Abajo, el link a la guía de ARCA.
+
+Se abre en el mismo lugar y no en otra ventana a propósito: la app tiene un solo
+modal, y desde un formulario a medio llenar abrir otro se lo llevaría puesto.
+
+⚠️ **Los topes cambian todos los años.** El texto sale de la guía de ARCA al
+17/09/2026 y el cartel lo dice. Cuando cambien, se corrigen desde
+**Configuración → Guía de Bienes Personales** y quedan corregidos para todos,
+sin esperar una versión nueva del sistema. Un renglón que empieza con `# ` es un
+título y uno con `- ` una viñeta; vaciar el cuadro vuelve al texto original.
+
 ## El sistema en el teléfono
 
 La app ya se adaptaba al celular —las tablas se leen como tarjetas, los
