@@ -1762,6 +1762,19 @@ tbody tr:hover{background:#FAFAFC}
         </div>
 
         <div class="card">
+          <h2>Guía de Bienes Personales</h2>
+          <p class="desc">El texto que se abre desde la ficha del cliente con <b>📘 Cómo se presenta</b>. Sale de la guía oficial de ARCA, pero <b>los topes cambian todos los años</b>: cuando cambien, corregilos acá y quedan corregidos para todos, sin esperar una versión nueva del sistema. Un renglón que empieza con <span class="mono"># </span> es un título y uno con <span class="mono">- </span> una viñeta.</p>
+          <div class="campo"><label>Texto de la guía</label>
+            <textarea id="cfgGuiaBP" rows="12" placeholder="Vacío: usa el texto con el que vino el sistema"></textarea>
+            <div class="ayuda">Vacío vuelve al texto original, el de ARCA al 17/09/2026.</div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn" id="btnGuardarGuiaBP">Guardar</button>
+            <button class="btn gris" id="btnVerGuiaBP">Ver cómo queda</button>
+            <button class="btn gris" id="btnResetGuiaBP">Volver al texto original</button>
+          </div>
+        </div>
+
+        <div class="card">
           <h2>Adjuntar en Gmail</h2>
           <p class="desc">Sin esto, «Enviar al cliente» descarga los papeles y abre el correo escrito: los archivos se arrastran a mano. Con esto, el sistema deja el correo <b>ya armado y con los archivos adentro</b>, como borrador en la casilla del estudio, para revisarlo y mandarlo.</p>
           <div class="campo"><label>ID de cliente de Google</label>
@@ -2046,6 +2059,137 @@ var TIPOS_ARCHIVO = [
   { clave:"otro",       nombre:"Otro" }
 ];
 
+/* ---------- BIENES PERSONALES ----------
+   El texto es el de la guía oficial de ARCA «¿Cómo presento la declaración
+   jurada de Bienes Personales?», tomado el 17/09/2026. Se guarda como dato y
+   no como pantalla a propósito: **los topes cambian todos los años**, y así se
+   corrigen desde Configuración sin tocar el programa ni esperar una versión
+   nueva. Lo que esté cargado en `config/guiaBP` gana; esto es el piso con el
+   que sale la app. */
+var GUIA_BP_URL   = "https://serviciosweb.afip.gob.ar/genericos/guiaspasopaso/VerGuia.aspx?id=366";
+var GUIA_BP_FECHA = "17/09/2026";
+var GUIA_BP_DEFECTO = [
+  "# Qué es",
+  "El impuesto se aplica a los bienes situados en el país y en el exterior que integran el patrimonio al 31 de diciembre de cada año.",
+  "",
+  "# Quiénes están alcanzados",
+  "- Personas humanas residentes en el país y sucesiones indivisas radicadas en el país: por los bienes situados en el país y en el exterior.",
+  "- Personas humanas residentes en el exterior y sucesiones indivisas radicadas en el exterior: por los bienes situados en el país.",
+  "- Las sucesiones indivisas tributan por los bienes que posean al 31 de diciembre, siempre que esa fecha caiga entre el fallecimiento y la declaratoria de herederos —o la declaración de validez del testamento que cumpla esa finalidad—.",
+  "",
+  "# Declaración jurada DETERMINATIVA",
+  "Es la presentación en la que se determina el saldo a pagar: el monto que corresponde ingresar por el período fiscal.",
+  "Hay que inscribirse en el impuesto y presentarla cuando los bienes al 31 de diciembre estén valuados por más de $ 292.994.964,89.",
+  "",
+  "# Declaración jurada INFORMATIVA",
+  "Es el informe del patrimonio que pide ARCA. No arroja saldo a pagar y no corresponde inscribirse en el impuesto.",
+  "La presentan quienes obtengan ingresos brutos anuales iguales o superiores a $ 150.000.000 por estas actividades:",
+  "- Cargos públicos nacionales, provinciales, municipales y de CABA, incluidos los cargos electivos de los Poderes Ejecutivo y Legislativo.",
+  "- Magistrados, funcionarios y empleados del Poder Judicial nombrados a partir de 2017.",
+  "- Trabajo en relación de dependencia.",
+  "- Jubilación.",
+  "- Pensión.",
+  "- Retiros o subsidios cuyo origen sea el trabajo personal, en la medida en que hayan estado sujetos al pago del impuesto.",
+  "- Asignaciones mensuales y vitalicias reconocidas a presidentes y vicepresidentes de la Nación.",
+  "- Trabajo personal de socios de sociedades cooperativas de trabajo.",
+  "- Rentas exentas, no alcanzadas o no computables en el impuesto a las ganancias.",
+  "- Actores que perciban sus ingresos a través de la Asociación Argentina de Actores.",
+  "",
+  "# Régimen simplificado",
+  "Pueden optar por presentarla desde la opción «Régimen Simplificado» del servicio quienes, además de tener exclusivamente ingresos por las actividades de arriba, hayan obtenido en el período rentas por:",
+  "- Actividades como monotributista.",
+  "- Actividades u obligaciones gravadas por el impuesto cedular.",
+  "- Rentas exentas, no alcanzadas o no computables en el impuesto a las ganancias."
+].join("\n");
+
+function textoGuiaBP(){
+  var t = ((ESTADO.config || {}).guiaBP || "").trim();
+  return t || GUIA_BP_DEFECTO;
+}
+
+/* Lo escrito se pinta igual que se lee: «# » es un título, «- » una viñeta y
+   el renglón en blanco separa. No es Markdown de verdad —no hace falta— y
+   sobre todo: todo pasa por esc(), así que lo que se cargue desde Configuración
+   no puede meter HTML en la pantalla. */
+function guiaBPEnHtml(){
+  var html = "", enLista = false;
+  textoGuiaBP().split("\n").forEach(function(linea){
+    var l = linea.trim();
+    if (l.indexOf("- ") === 0){
+      if (!enLista){ html += '<ul style="margin:6px 0 10px 18px">'; enLista = true; }
+      html += "<li>" + esc(l.slice(2)) + "</li>";
+      return;
+    }
+    if (enLista){ html += "</ul>"; enLista = false; }
+    if (!l) return;
+    if (l.indexOf("# ") === 0)
+      html += '<div style="font-weight:600;margin:14px 0 4px">' + esc(l.slice(2)) + "</div>";
+    else
+      html += '<p style="margin:0 0 8px">' + esc(l) + "</p>";
+  });
+  if (enLista) html += "</ul>";
+  return html;
+}
+
+/* El bloque se abre y se cierra en el mismo lugar: la app tiene un solo modal
+   y desde la ficha del cliente —que ya es un modal— abrir otro se llevaría
+   puesto el formulario a medio llenar. */
+function cuerpoGuiaBP(){
+  return '<div class="aviso warn" style="margin-top:0"><span>⚠️</span><div>Los <b>topes cambian todos los años</b>. ' +
+      "Este texto es el de la guía oficial de ARCA al <b>" + GUIA_BP_FECHA + "</b>" +
+      ((ESTADO.config || {}).guiaBP ? " (editado desde Configuración)" : "") +
+      ". Antes de presentar, confirmalo contra la guía.</div></div>" +
+    guiaBPEnHtml() +
+    '<div style="margin-top:14px"><a class="btn sec chico" href="' + GUIA_BP_URL +
+      '" target="_blank" rel="noopener">Abrir la guía de ARCA ↗</a></div>';
+}
+
+function bloqueGuiaBP(){
+  return '<div id="guiaBP" class="oculto" style="margin-top:12px;border:1px solid var(--pelo);' +
+      'border-radius:var(--r2);padding:16px 18px;background:var(--fondo)">' +
+    cuerpoGuiaBP() + "</div>";
+}
+
+/* Desde la ficha del cliente —que es una pantalla, no un modal— se puede abrir
+   en grande sin pisar nada. */
+function verGuiaBienesPersonales(){
+  abrirModal("Bienes Personales · cómo se presenta", cuerpoGuiaBP(),
+    [{ texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }], "ancho");
+}
+
+function toggleBienesPersonales(){
+  var w = $("wrapBP");
+  if (w) w.style.display = $("fcBienesPersonales").checked ? "" : "none";
+}
+
+function toggleGuiaBP(btn){
+  var g = $("guiaBP");
+  if (!g) return;
+  var abierto = !g.classList.contains("oculto");
+  g.classList.toggle("oculto", abierto);
+  if (btn) btn.textContent = abierto ? "📘 Cómo se presenta" : "📘 Ocultar";
+}
+
+/* ---------- DOCUMENTOS DEL CLIENTE ----------
+   Son los papeles que no son de un mes: el contrato de alquiler, el título
+   profesional que AGIP pide para la exención, el estatuto de la sociedad. Van
+   al mismo lugar que los demás (`archivos/<cliente>`), pero marcados con
+   `doc:true` y sin período, así no se mezclan con los papeles de septiembre ni
+   salen en el correo del mes. Para el que mira la ficha son un bloque propio,
+   arriba de todo, que no cambia de un mes al otro. */
+var TIPOS_DOC_CLIENTE = [
+  { clave:"contrato",     nombre:"Contrato de alquiler" },
+  { clave:"contratoOtro", nombre:"Otro contrato" },
+  { clave:"titulo",       nombre:"Título profesional" },
+  { clave:"matricula",    nombre:"Matrícula / colegiatura" },
+  { clave:"dni",          nombre:"DNI" },
+  { clave:"societario",   nombre:"Estatuto / contrato social" },
+  { clave:"poder",        nombre:"Poder / autorización" },
+  { clave:"escritura",    nombre:"Escritura / título de propiedad" },
+  { clave:"habilitacion", nombre:"Habilitación municipal" },
+  { clave:"docOtro",      nombre:"Otro documento" }
+];
+
 /* Lo que se adjunta en la liquidación de cada impuesto. El VEP es el único que
    se guarda adentro de la liquidación —viene de antes y el sistema lo usa para
    contar cuántos faltan—; el resto va a los papeles del cliente, en el mes que
@@ -2236,7 +2380,7 @@ var CAMPOS_ADMIN = ["cfgNombre","cfgCuit","cfgMail","cfgTel",
                     "escalaVigencia","escalaAlquileres",
                     "plantillaAsunto","plantillaCuerpo",
                     "cfgBackUrl","cfgBackToken","cfgGeminiKey","cfgGeminiModelo",
-                    "alicVigencia","alicGeneral","alicMinimo","alicFuente"];
+                    "alicVigencia","alicGeneral","alicMinimo","alicFuente","cfgGuiaBP"];
 
 function aplicarPermisos(){
   BOTONES_ESCRITURA.forEach(function(id){
@@ -3625,6 +3769,7 @@ function pintarFilasClientes(){
         : etiquetaImpuesto(id, "agip", "b-amar", "AGIP"));
       if (c.impuestos.municipal) tags.push(etiquetaImpuesto(id, "municipal", "b-gris", c.municipio || "Municipal"));
     }
+    if (c.bienesPersonales) tags.push('<span class="badge b-viol" title="Se le hace la DDJJ de Bienes Personales">Bienes Pers.</span>');
     var actTxt = c.actividad === "bienes" ? "Venta de bienes" : (c.actividad === "mixto" ? "Mixto" : "Servicios");
 
     return "<tr" + (c.activo === false ? ' style="opacity:.5"' : "") + ">" +
@@ -3735,6 +3880,21 @@ function formCliente(c, idCliente){
   '<div class="campo" id="wrapMuni"' + (imp.municipal ? "" : ' style="display:none"') + '>' +
     '<label>Municipio</label><input type="text" id="fcMunicipio" list="listaMunicipios" value="' + esc(c.municipio || "") + '" placeholder="Avellaneda">' +
     '<div class="ayuda">El sitio donde se paga la tasa se carga una vez por municipio, en Configuración → Municipios.</div>' +
+  "</div>" +
+
+  /* Bienes Personales no es mensual ni se liquida acá: es anual y se presenta
+     en ARCA. Por eso va aparte de «Impuestos que liquida» —marcarlo no agrega
+     ninguna fila a la liquidación del mes— y lo único que hace el sistema es
+     acordarse de a quién le corresponde y tener el instructivo a mano. */
+  '<div class="seccion-tit">Bienes Personales</div>' +
+  '<label class="check"><input type="checkbox" id="fcBienesPersonales"' +
+    (c.bienesPersonales ? " checked" : "") + ' onchange="toggleBienesPersonales()"> ' +
+    "Se le hace la <b>declaración jurada de Bienes Personales</b></label>" +
+  '<div id="wrapBP"' + (c.bienesPersonales ? "" : ' style="display:none"') + ' style="margin-top:10px">' +
+    '<div class="ayuda" style="margin-bottom:10px">Es anual y se presenta en ARCA: no se liquida mes a mes ' +
+      "y no agrega nada a la liquidación. Marcarlo deja el cliente identificado y el instructivo a mano.</div>" +
+    '<button type="button" class="btn sec chico" onclick="toggleGuiaBP(this)">📘 Cómo se presenta</button>' +
+    bloqueGuiaBP() +
   "</div>" +
 
   /* Con la alícuota cargada, la liquidación mensual se calcula sola sobre lo
@@ -4039,6 +4199,7 @@ function guardarFormCliente(id){
     categoriaActual: $("fcCategoria").value || null,
     obraSocial: $("fcObraSocial").value.trim(),
     soloImpuestoIntegrado: $("fcSoloIntegrado").checked,
+    bienesPersonales: $("fcBienesPersonales").checked,
     impuestoIntegradoManual: parseFloat($("fcIntegrado").value) || null,
     superficie: parseFloat($("fcSup").value) || null,
     energiaKw: parseFloat($("fcKw").value) || null,
@@ -4705,6 +4866,10 @@ function _volcarEnElForm(d){
   p("fcNombre", d.razonSocial); p("fcFantasia", d.nombreFantasia);
   p("fcCuit", d.cuit ? formatCuit(d.cuit) : ""); p("fcIIBB", d.nroIIBB);
   p("fcMail", d.email); p("fcMail2", d.email2); p("fcTel", d.telefono);
+  if (d.bienesPersonales && $("fcBienesPersonales")){
+    $("fcBienesPersonales").checked = true;
+    toggleBienesPersonales();
+  }
   p("fcCategoria", d.categoriaActual); p("fcMunicipio", d.municipio);
   var dom = d.domicilio || {};
   p("fcDomCalle", dom.calle); p("fcDomPiso", dom.piso); p("fcDomLocalidad", dom.localidad);
@@ -4729,6 +4894,9 @@ function _datosDelFormCliente(){
     razonSocial: v("fcNombre"), nombreFantasia: v("fcFantasia"),
     cuit: v("fcCuit").replace(/\D/g, ""), nroIIBB: v("fcIIBB"),
     email: v("fcMail"), email2: v("fcMail2"), telefono: v("fcTel"),
+    /* Sin esto, tildar Bienes Personales y después leer una constancia
+       destildaba el casillero sin que nadie lo note. */
+    bienesPersonales: !!($("fcBienesPersonales") || {}).checked,
     categoriaActual: v("fcCategoria"),
     actividades: acts,
     actividadIIBB: (acts[0] || {}).descripcion || "",
@@ -5230,6 +5398,10 @@ function papelesPorMes(clienteId, arch){
 
   Object.keys(arch || {}).forEach(function(k){
     var a = arch[k];
+    /* Los documentos del cliente tienen su propio bloque: si entraran acá
+       caerían todos juntos en «Sin mes asignado», mezclados con los papeles
+       de un mes que quedó sin cargar. */
+    if (a.doc) return;
     meter(a.periodo, {
       origen: "archivo", id: k, tipo: a.tipo, periodo: a.periodo || "",
       nombre: a.nombre || "", nota: a.nota || "",
@@ -5243,7 +5415,7 @@ function papelesPorMes(clienteId, arch){
     vepsDeLaLiquidacion(clienteId, per).forEach(function(v){ meter(per, v); });
   });
 
-  return Object.keys(meses).sort(function(a, b){
+  var porMes = Object.keys(meses).sort(function(a, b){
     if (!a) return 1;
     if (!b) return -1;
     return b.localeCompare(a);
@@ -5251,6 +5423,27 @@ function papelesPorMes(clienteId, arch){
     var items = meses[per].sort(function(x, y){ return (x.etiqueta || "").localeCompare(y.etiqueta || ""); });
     return { periodo: per, items: items };
   });
+
+  /* Los documentos arriba de todo: son los que se buscan sueltos —«pasame el
+     contrato»— y no envejecen con el mes. */
+  var docs = documentosDeCliente(arch);
+  return docs.length ? [{ periodo:"", docs:true, items:docs }].concat(porMes) : porMes;
+}
+
+/* Los documentos del cliente, del último cargado al primero. */
+function documentosDeCliente(arch){
+  var out = [];
+  Object.keys(arch || {}).forEach(function(k){
+    var a = arch[k];
+    if (!a.doc) return;
+    out.push({
+      origen: "archivo", id: k, tipo: a.tipo, periodo: "", doc: true,
+      nombre: a.nombre || "", nota: a.nota || "",
+      etiqueta: nombreTipoArchivo(a.tipo),
+      subido: a.subido || ""
+    });
+  });
+  return out.sort(function(x, y){ return String(y.subido).localeCompare(String(x.subido)); });
 }
 
 function pintarArchivosDeLaFicha(id){
@@ -5270,11 +5463,16 @@ function pintarArchivosDeLaFicha(id){
       "<b>Enviar al cliente</b> descarga los papeles del mes y abre tu programa de correo con el texto listo. " +
       "Los adjuntos hay que arrastrarlos a mano: el navegador no puede adjuntar archivos por su cuenta." +
       (puede ? ' <a href="#" onclick="agregarPapelAlMes(\'' + id + '\',\'\');return false;">Subir papeles</a>.' : "") +
+      "<br>Los <b>documentos del cliente</b> —contrato de alquiler, título profesional, estatuto— van en su propio " +
+      "bloque arriba de todo: no son de un mes y no salen en el correo mensual." +
+      (puede ? ' <a href="#" onclick="abrirSubirDocumento(\'' + id + '\');return false;">Agregar un documento</a>.' : "") +
       "</div>";
 
     if (!grupos.length){
       cont.innerHTML = cabecera + '<div class="ayuda">Todavía no hay papeles guardados de este cliente. ' +
-        "Se suben desde acá mismo, desde la solapa <b>Archivos</b>, o leyendo su constancia desde <b>Clientes</b>.</div>";
+        "Se suben desde acá mismo, desde la solapa <b>Archivos</b>, o leyendo su constancia desde <b>Clientes</b>.</div>" +
+        (puede ? '<div style="margin-top:12px"><button class="btn sec chico" onclick="abrirSubirDocumento(\'' + id +
+          '\')">📁 Agregar un documento</button></div>' : "");
       return;
     }
     cont.innerHTML = cabecera + grupos.map(function(g, gi){ return bloqueMesPapeles(id, g, gi); }).join("");
@@ -5337,13 +5535,19 @@ function pedirBorrarPapelDeLaFicha(btn, gi, ii){
 
 function bloqueMesPapeles(clienteId, g, gi){
   var puede = puedeEscribir();
-  var titulo = g.periodo ? periodoLargo(g.periodo) : "Sin mes asignado";
+  var titulo = g.docs ? "📁 Documentos del cliente"
+                      : (g.periodo ? periodoLargo(g.periodo) : "Sin mes asignado");
+  var cuantos = g.docs
+    ? g.items.length + (g.items.length === 1 ? " documento" : " documentos")
+    : g.items.length + (g.items.length === 1 ? " papel" : " papeles");
 
   return '<div class="mes-papeles">' +
     '<div class="mes-head">' +
       '<div class="crece"><b>' + esc(titulo) + "</b>" +
-        '<span class="ayuda" style="margin-left:8px">' + g.items.length +
-        (g.items.length === 1 ? " papel" : " papeles") + "</span></div>" +
+        '<span class="ayuda" style="margin-left:8px">' + cuantos + "</span></div>" +
+      (puede && g.docs
+        ? '<button class="btn sec chico" onclick="abrirSubirDocumento(\'' + clienteId + '\')">+ Agregar documento</button>'
+        : "") +
       (puede && g.periodo
         ? '<button class="btn sec chico" onclick="agregarPapelAlMes(\'' + clienteId + "','" + g.periodo + '\')">+ Agregar</button>'
         : "") +
@@ -5353,7 +5557,8 @@ function bloqueMesPapeles(clienteId, g, gi){
     "</div>" +
     '<ul class="lista-simple">' + g.items.map(function(it, ii){
       return "<li>" +
-        '<span class="badge ' + (it.origen === "liq" ? "b-verde" : "b-azul") + '">' + esc(it.etiqueta) + "</span>" +
+        '<span class="badge ' + (it.doc ? "b-viol" : it.origen === "liq" ? "b-verde" : "b-azul") + '">' +
+          esc(it.etiqueta) + "</span>" +
         '<div class="crece"><div class="tit mono" style="overflow:hidden;text-overflow:ellipsis">' + esc(it.nombre) + "</div>" +
           (it.nota ? '<div class="sub">' + esc(it.nota) + "</div>" : "") + "</div>" +
         '<button class="btn-icono" title="Ver" onclick="verPapelDeLaFicha(' + gi + "," + ii + ')">📄</button>' +
@@ -6004,7 +6209,12 @@ function pintarCabeceraCliente(id, c){
       return exentoDe(c, i.clave)
         ? '<span class="badge b-verde">' + i.corto + " exento</span>"
         : '<span class="badge b-azul">' + i.corto + "</span>";
-    }).join(" ");
+    }).join(" ") +
+    /* Anual y aparte de los mensuales: el color lo distingue de un vistazo. */
+    (c.bienesPersonales
+      ? ' <button class="badge b-viol" style="border:0;cursor:pointer" title="Ver cómo se presenta"' +
+        ' onclick="verGuiaBienesPersonales()">Bienes Personales</button>'
+      : "");
 
   $("clienteCabecera").innerHTML =
     '<button class="volver" onclick="irA(\'tabClientes\')">‹ Clientes</button>' +
@@ -10191,6 +10401,7 @@ function renderConfig(){
   $("cfgCorreoCuenta").value = corr.cuenta;
   _mostrarCampoCuentaGmail();
   $("cfgCorreoModo").onchange = _mostrarCampoCuentaGmail;
+  if ($("cfgGuiaBP")) $("cfgGuiaBP").value = (ESTADO.config || {}).guiaBP || "";
 
   var ejs = ESTADO.config.emailjs || {};
   $("cfgEjsService").value  = ejs.serviceId || "";
@@ -10531,6 +10742,34 @@ function pedirBorrarMunicipio(slug){
           .catch(function(e){ toast(explicarError(e), "error"); });
      }}]);
 }
+
+/* ---------- LA GUÍA DE BIENES PERSONALES, EDITABLE ----------
+   Guardar el texto en la nube y no en el programa es lo que permite corregir
+   los topes de enero sin publicar una versión. Vacío borra el nodo y vuelve al
+   texto con el que salió la app: así «volver al original» es de verdad volver,
+   y no copiar y pegar el viejo a mano. */
+$("btnGuardarGuiaBP").onclick = function(){
+  var t = $("cfgGuiaBP").value.trim();
+  var tarea = t ? ref("config/guiaBP").set(t) : ref("config/guiaBP").remove();
+  tarea.then(function(){
+    ESTADO.config.guiaBP = t;
+    toast(t ? "Guía guardada" : "Guía vuelta al texto original", "ok");
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+};
+
+$("btnVerGuiaBP").onclick = function(){
+  /* Lo que se ve es lo que está escrito ahora en el cuadro, no lo guardado:
+     mirar antes de guardar es justo para lo que sirve. */
+  var antes = (ESTADO.config || {}).guiaBP;
+  ESTADO.config.guiaBP = $("cfgGuiaBP").value.trim();
+  verGuiaBienesPersonales();
+  ESTADO.config.guiaBP = antes;
+};
+
+$("btnResetGuiaBP").onclick = function(){
+  $("cfgGuiaBP").value = "";
+  toast("Cuadro vaciado: apretá Guardar para volver al texto original", "ok");
+};
 
 $("btnGuardarMuni").onclick = function(){
   var nombre = $("cfgMuniNombre").value.trim();
@@ -10906,7 +11145,10 @@ function renderArchivos(){
   var selTipo = $("arcTipo");
   if (selTipo.options.length <= 1){
     selTipo.innerHTML = '<option value="">Todos los tipos</option>' +
-      TIPOS_ARCHIVO.map(function(t){ return '<option value="' + t.clave + '">' + t.nombre + "</option>"; }).join("");
+      TIPOS_ARCHIVO.map(function(t){ return '<option value="' + t.clave + '">' + t.nombre + "</option>"; }).join("") +
+      '<optgroup label="Documentos del cliente">' +
+      TIPOS_DOC_CLIENTE.map(function(t){ return '<option value="' + t.clave + '">' + t.nombre + "</option>"; }).join("") +
+      "</optgroup>";
   }
   pintarArchivos();
 }
@@ -10914,6 +11156,7 @@ function renderArchivos(){
 function nombreTipoArchivo(clave){
   var out = clave;
   TIPOS_ARCHIVO.forEach(function(t){ if (t.clave === clave) out = t.nombre; });
+  TIPOS_DOC_CLIENTE.forEach(function(t){ if (t.clave === clave) out = t.nombre; });
   return out;
 }
 
@@ -11059,6 +11302,82 @@ var MAX_PAPEL_MB = 5;
    modal, así que subir un papel la cierra, y volver sola a donde uno estaba es
    lo que uno espera. */
 var _volverAFicha = "";
+
+/* ---------- SUBIR UN DOCUMENTO DEL CLIENTE ----------
+   Un archivo por vez y a mano: acá no hay nada que detectar —el tipo lo sabe
+   la persona que lo sube— y son papeles que se cargan una vez y quedan, no una
+   pila mensual. La pantalla de «Subir papeles», con su IA y su período, sería
+   un rodeo para esto. */
+var _docCliente = "";
+
+function abrirSubirDocumento(clienteId){
+  if (!puedeEscribir()){ toast("No tenés permiso para cargar documentos", "error"); return; }
+  var c = ESTADO.clientes[clienteId];
+  if (!c){ toast("No encontré ese cliente", "error"); return; }
+  _docCliente = clienteId;
+  /* Si venimos de la ficha, al guardar hay que volver ahí: el modal es uno
+     solo y abrirlo se llevó puesta la ficha. */
+  _volverAFicha = clienteId;
+
+  abrirModal("Agregar un documento",
+    '<div class="aviso info"><span>📁</span><div>Los documentos del cliente <b>no son de un mes</b>: quedan ' +
+      "guardados en su ficha y no salen en el correo mensual. Sirve para el contrato de alquiler, el título " +
+      "profesional que pide AGIP para la exención, el estatuto de la sociedad, una habilitación.</div></div>" +
+    '<div class="campo"><label>Cliente</label>' +
+      '<input type="text" value="' + esc(c.razonSocial || "") + '" readonly></div>' +
+    '<div class="campo"><label>Archivo *</label>' +
+      '<input type="file" id="dcArchivo" accept="application/pdf,image/*">' +
+      '<div class="ayuda">PDF o foto, hasta ' + MAX_PAPEL_MB + " MB.</div></div>" +
+    '<div class="campo"><label>Qué es *</label><select id="dcTipo">' +
+      TIPOS_DOC_CLIENTE.map(function(t){ return '<option value="' + t.clave + '">' + t.nombre + "</option>"; }).join("") +
+    "</select></div>" +
+    '<div class="campo"><label>Detalle</label>' +
+      '<input type="text" id="dcNota" placeholder="Ej.: local de Av. Mitre 1234, vence 03/2027">' +
+      '<div class="ayuda">Opcional, pero es lo que se lee en la lista: sin esto quedan tres «Contrato de alquiler» iguales.</div></div>',
+    [
+      { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
+      { texto:"Guardar", id:"btnDcGuardar", accion:guardarDocumentoCliente }
+    ]);
+}
+
+function guardarDocumentoCliente(){
+  var cli = _docCliente;
+  if (!cli){ toast("No sé de qué cliente es", "error"); return; }
+  var input = $("dcArchivo");
+  if (!input || !input.files || !input.files[0]){ toast("Elegí el archivo", "error"); return; }
+
+  var tipo = $("dcTipo").value || "docOtro";
+  var nota = $("dcNota").value.trim();
+  var btn = $("btnDcGuardar");
+  if (btn){ btn.disabled = true; btn.textContent = "Guardando…"; }
+
+  leerArchivo(input, MAX_PAPEL_MB).then(function(a){
+    if (!a) throw new Error("No pude leer el archivo");
+    var id = ref("archivos/" + cli).push().key;
+    var updates = {};
+    updates["archivos/" + cli + "/" + id] = {
+      doc: true,           /* esto es lo que lo saca de los meses */
+      tipo: tipo,
+      periodo: "",
+      nombre: a.nombre,
+      nota: nota,
+      peso: (input.files[0] || {}).size || 0,
+      subido: a.subido
+    };
+    updates["archivosContenido/" + id] = a.contenido;
+    return ref("").update(updates);
+  }).then(function(){
+    cerrarModal();
+    toast("Documento guardado", "ok");
+    pintarArchivos();
+    var vuelta = _volverAFicha;
+    _volverAFicha = "";
+    if (vuelta) setTimeout(function(){ verFichaCliente(vuelta); }, 220);
+  }).catch(function(e){
+    toast(explicarError(e), "error");
+    if (btn){ btn.disabled = false; btn.textContent = "Guardar"; }
+  });
+}
 
 function abrirSubirArchivo(cliFijo, perFijo){
   _papeles = [];
@@ -11299,7 +11618,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v72";
+var VERSION_APP = "v73";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
