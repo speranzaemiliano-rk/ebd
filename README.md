@@ -234,6 +234,25 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## La Caja por período
+
+La Caja mostraba **un mes por vez** y no había forma de ver dos seguidos, ni el
+año, ni todo. Ahora el filtro es un **rango**: *Desde* y *Hasta*, más tres
+atajos — **Este mes**, **Este año** y **Todo**.
+
+- Arranca en el mes en curso, igual que antes: es lo que se mira casi siempre.
+- Dejar **Desde** vacío significa «desde el principio»; **Hasta** vacío, «hasta
+  hoy»; los dos vacíos, todo. Eso es lo que hace **Todo**.
+- Si se escriben al revés, el rango **se da vuelta solo**: es más probable que
+  sea un error de tipeo que querer ver la nada.
+- Los totales dicen de cuándo a cuándo y cuántos movimientos son («Totales de
+  enero de 2026 a diciembre de 2026 · 4 movimientos»), y la última columna pasa
+  de **Saldo del mes** a **Saldo acumulado** cuando el rango es más de un mes.
+- **Exportar CSV baja lo que se está viendo**, no el mes en curso, y el archivo
+  se llama por el rango (`caja-202601-a-202612.csv`, `caja-todo.csv`).
+- Una vez que tocaste el rango, cambiar de cuenta o de tipo **no te devuelve al
+  mes en curso**.
+
 ## Editar un cobro desde la Caja
 
 Los movimientos que se generan al cobrar un mes en Honorarios aparecían en la
