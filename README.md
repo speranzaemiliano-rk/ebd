@@ -234,6 +234,27 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## El total de honorarios de cada mes
+
+El cuadro de Honorarios tenía los cuatro indicadores del **año** arriba y la
+deuda de cada cliente a la derecha, pero no el total de **cada mes**: la
+pregunta de todos los meses —«cuánto factura el estudio en agosto»— había que
+sacarla sumando la columna a mano.
+
+Ahora el cuadro cierra con una fila **Total del mes**:
+
+- El número grande es **lo que corresponde cobrar** ese mes, sumando todos los
+  clientes de la columna. Abajo, en chico, **lo que falta cobrar** —o
+  «cobrado» si entró todo, o «sin cobrar» si no entró nada—. Se muestra lo que
+  falta y no lo cobrado porque es la misma información y la que sirve para
+  actuar es la que falta (y entra en el ancho de la columna).
+- Un mes en el que ningún cliente tenía honorario queda en guion, no en cero.
+- La última columna trae la **deuda de todos sumada**.
+- Con un cliente elegido, la fila suma sólo a él y lo aclara («1 cliente»).
+
+El CSV exportado cierra con las mismas dos filas, **TOTAL DEL MES** y **COBRADO
+DEL MES**, para no tener que rearmarlas con una fórmula.
+
 ## La Caja por período
 
 La Caja mostraba **un mes por vez** y no había forma de ver dos seguidos, ni el
