@@ -11724,7 +11724,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v76";
+var VERSION_APP = "v77";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
@@ -13106,12 +13106,12 @@ function renderCaja(){
       '<td class="num" style="color:var(--rojo)">' + (m.tipo === "egreso" ? pesos(m.monto) : "") + "</td>" +
       '<td class="num">' + pesos(corriente) + "</td>" +
       '<td style="white-space:nowrap">' +
-        (m.origen === "honorario"
-          ? '<span style="font-size:11px;color:var(--gris2)">desde Honorarios</span>'
-          : (puedeEscribir()
-            ? '<button class="btn-icono" onclick="editarMovimiento(\'' + m._id + '\')" title="Editar">✏️</button>' +
-              '<button class="btn-icono" onclick="borrarMovimiento(\'' + m._id + '\')" title="Eliminar">🗑️</button>'
-            : "")) +
+        (puedeEscribir()
+          ? '<button class="btn-icono" onclick="editarMovimiento(\'' + m._id + '\')" title="' +
+              (m.origen === "honorario" ? "Editar — también actualiza el cobro en Honorarios" : "Editar") + '">✏️</button>' +
+            '<button class="btn-icono" onclick="borrarMovimiento(\'' + m._id + '\')" title="' +
+              (m.origen === "honorario" ? "Eliminar — el mes vuelve a quedar impago" : "Eliminar") + '">🗑️</button>'
+          : "") +
       "</td></tr>";
   });
 
@@ -13126,9 +13126,15 @@ function formMovimiento(m){
   var nuevo = !m;
   m = m || {};
   var hoyISO = new Date().toISOString().slice(0,10);
+  /* Un movimiento «atado» es el cobro de un mes de honorarios: existe de los
+     dos lados y los dos lados tienen que decir lo mismo. La fecha, el medio,
+     la cuenta, el concepto y el IMPORTE se editan y el cobro se actualiza
+     solo; el tipo y la contraparte no, porque cambiarlos rompería el vínculo
+     —el mes cobrado es de ESE cliente y un cobro no puede volverse egreso—. */
+  var atado = m.origen === "honorario" && m.refHonorario;
   return '' +
     '<div class="grid g2">' +
-      '<div class="campo"><label>Tipo *</label><select id="mvTipo">' +
+      '<div class="campo"><label>Tipo *</label><select id="mvTipo"' + (atado ? " disabled" : "") + ">" +
         '<option value="ingreso"' + (m.tipo !== "egreso" ? " selected" : "") + ">Ingreso</option>" +
         '<option value="egreso"'  + (m.tipo === "egreso" ? " selected" : "") + ">Egreso</option>" +
       "</select></div>" +
@@ -13137,12 +13143,13 @@ function formMovimiento(m){
     '<div class="campo"><label>Concepto *</label><input type="text" id="mvConcepto" value="' + esc(m.concepto || "") +
       '" placeholder="Alquiler de la oficina, librería, honorarios…"></div>' +
     '<div class="grid g2">' +
-      '<div class="campo"><label>Contraparte</label><select id="mvContraparteTipo">' +
+      '<div class="campo"><label>Contraparte</label><select id="mvContraparteTipo"' + (atado ? " disabled" : "") + ">" +
         '<option value="otro"'      + (!m.contraparteTipo || m.contraparteTipo === "otro" ? " selected" : "") + ">Sin especificar</option>" +
         '<option value="cliente"'   + (m.contraparteTipo === "cliente"   ? " selected" : "") + ">Cliente</option>" +
         '<option value="proveedor"' + (m.contraparteTipo === "proveedor" ? " selected" : "") + ">Proveedor</option>" +
       "</select></div>" +
-      '<div class="campo" id="wrapContraparte"><label>¿Quién?</label><select id="mvContraparteId"></select></div>' +
+      '<div class="campo" id="wrapContraparte"><label>¿Quién?</label><select id="mvContraparteId"' +
+        (atado ? " disabled" : "") + "></select></div>" +
     "</div>" +
     '<div class="grid g3">' +
       '<div class="campo"><label>Importe *</label><input type="number" step="0.01" id="mvMonto" value="' + (m.monto || "") + '"></div>' +
@@ -13154,10 +13161,23 @@ function formMovimiento(m){
     "</div>" +
     (nuevo
       ? '<div id="wrapImputar"></div>'
-      : (m.origen === "honorario"
-          ? '<div class="aviso info"><span>ℹ️</span><div>Este movimiento es el cobro de un mes de honorarios. ' +
-            "Para cambiar el importe cobrado, editalo desde <b>Honorarios</b>: así el cuadro de deuda y la caja no quedan diciendo cosas distintas.</div></div>"
+      : (atado
+          ? '<div class="aviso info"><span>🔗</span><div>Este movimiento es el <b>cobro de ' +
+            esc(_mesDelHonorario(m)) + "</b>. Lo que cambies acá se actualiza también en <b>Honorarios</b>: " +
+            "si tocás el importe, cambia lo cobrado de ese mes. El tipo y el cliente no se pueden cambiar " +
+            "—el mes cobrado es de este cliente—; para eso, anulá el cobro en Honorarios y cargalo de nuevo.</div></div>"
           : ""));
+}
+
+/* "cli1/202608" → "agosto de 2026". Sirve para nombrar el mes en pantalla sin
+   que haya que ir a buscarlo a Honorarios. */
+function _refHonorarioPartida(m){
+  var r = String((m || {}).refHonorario || "").split("/");
+  return r.length === 2 && r[0] && r[1] ? { clienteId: r[0], periodo: r[1] } : null;
+}
+function _mesDelHonorario(m){
+  var r = _refHonorarioPartida(m);
+  return r ? periodoLargo(r.periodo) : "un mes de honorarios";
 }
 
 function cablearContraparte(m){
@@ -13389,6 +13409,18 @@ function guardarMovimiento(id){
     creado: (ESTADO.caja[id] || {}).creado || new Date().toISOString()
   };
 
+  /* Editar el cobro de un mes de honorarios: no se convierte en manual y no se
+     suelta del mes. Se escriben los dos nodos en UNA sola operación, así no
+     puede pasar que la caja diga un importe y el cuadro de deuda otro porque
+     se cortó la conexión en el medio. */
+  var previo = id ? (ESTADO.caja[id] || {}) : {};
+  if (id && previo.origen === "honorario" && previo.refHonorario){
+    datos.origen = "honorario";
+    datos.refHonorario = previo.refHonorario;
+    guardarMovimientoAtado(id, datos);
+    return;
+  }
+
   /* Sólo en el alta: editar un movimiento ya imputado se hace desde
      Honorarios, para no tener dos pantallas moviendo el mismo número. */
   if (!id && datos.tipo === "ingreso" && tipoCp === "cliente" && cpId){
@@ -13415,20 +13447,83 @@ function guardarMovimiento(id){
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
+/* El movimiento y el mes cobrado son el mismo hecho contado dos veces. Acá se
+   actualizan a la par: el importe del movimiento pasa a ser lo cobrado del mes,
+   y de ahí sale si el mes queda pago o parcial. */
+function guardarMovimientoAtado(id, datos){
+  var r = _refHonorarioPartida(datos);
+  if (!r){ toast("Este movimiento apunta a un mes que no puedo leer", "error"); return; }
+
+  var e = estadoHonorario(r.clienteId, r.periodo);
+  var previoHon = e.registro || {};
+  var reg = Object.assign({}, previoHon, {
+    monto: e.monto,
+    montoPagado: datos.monto,
+    pagado: e.monto > 0 && datos.monto >= e.monto - 0.005,
+    fechaPago: datos.fecha,
+    medio: datos.medio,
+    cuentaId: datos.cuentaId,
+    movimientoId: id,
+    actualizado: new Date().toISOString()
+  });
+
+  var updates = {};
+  updates["caja/" + id] = datos;
+  updates["honorarios/" + r.clienteId + "/" + r.periodo] = reg;
+
+  ref("").update(updates).then(function(){
+    ESTADO.caja[id] = datos;
+    if (!ESTADO.honorarios[r.clienteId]) ESTADO.honorarios[r.clienteId] = {};
+    ESTADO.honorarios[r.clienteId][r.periodo] = reg;
+    cerrarModal();
+    /* Se dice qué pasó del otro lado: el que edita está mirando la caja y el
+       número que cambió también está en Honorarios. */
+    toast("Movimiento guardado · " + periodoLargo(r.periodo) + " queda " +
+          (reg.pagado ? "cobrado" : "con saldo " + pesos(Math.max(0, e.monto - datos.monto))), "ok");
+    renderCaja(); renderHonorarios(); renderHome();
+  }).catch(function(err){ toast(explicarError(err), "error"); });
+}
+
 function borrarMovimiento(id){
   var m = ESTADO.caja[id];
   if (!m) return;
+  var r = m.origen === "honorario" ? _refHonorarioPartida(m) : null;
+
   abrirModal("Eliminar movimiento",
     '<div class="aviso bad"><span>⚠️</span><div>Esto no se puede deshacer.</div></div>' +
     "<p>¿Eliminar <b>" + esc(m.concepto) + "</b> del " + m.fecha.split("-").reverse().join("/") +
-    " por <b>" + pesos(m.monto) + "</b>?</p>",
+    " por <b>" + pesos(m.monto) + "</b>?</p>" +
+    /* Borrar la plata sin descobrar el mes dejaría a Honorarios diciendo que
+       está cobrado y a la caja sin el ingreso. Se avisa antes, no después. */
+    (r ? '<div class="aviso warn"><span>⚠️</span><div>Es el cobro de <b>' + esc(periodoLargo(r.periodo)) +
+         "</b>. Al borrarlo, ese mes <b>vuelve a quedar impago</b> en Honorarios.</div></div>" : ""),
     [
       { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
       { texto:"Eliminar", clase:"peligro", accion:function(){
-          ref("caja/" + id).remove().then(function(){
-            delete ESTADO.caja[id];
-            cerrarModal(); toast("Movimiento eliminado", "ok"); renderCaja();
+          if (!r){
+            ref("caja/" + id).remove().then(function(){
+              delete ESTADO.caja[id];
+              cerrarModal(); toast("Movimiento eliminado", "ok"); renderCaja();
+            }).catch(function(e){ toast(explicarError(e), "error"); });
+            return;
+          }
+          var previoHon = honorarioDe(r.clienteId, r.periodo) || {};
+          var reg = Object.assign({}, previoHon, {
+            montoPagado: 0, pagado: false, fechaPago: null,
+            medio: null, cuentaId: null, movimientoId: null,
+            actualizado: new Date().toISOString()
           });
+          var updates = {};
+          updates["caja/" + id] = null;
+          updates["honorarios/" + r.clienteId + "/" + r.periodo] = reg;
+          ref("").update(updates).then(function(){
+            delete ESTADO.caja[id];
+            if (!ESTADO.honorarios[r.clienteId]) ESTADO.honorarios[r.clienteId] = {};
+            ESTADO.honorarios[r.clienteId][r.periodo] = reg;
+            cerrarModal();
+            toast("Movimiento eliminado · " + periodoLargo(r.periodo) + " vuelve a figurar impago", "ok");
+            renderCaja(); renderHonorarios(); renderHome();
+          }).catch(function(e){ toast(explicarError(e), "error"); });
         } }
     ], "angosto");
 }
