@@ -647,6 +647,12 @@ tbody tr:hover{background:#FAFAFC}
 .dobleentrada tbody tr:hover td.cli{background:#FAFAFC}
 .dobleentrada th.mes{text-align:center;width:62px;padding:10px 4px}
 .dobleentrada td.mes{text-align:center;padding:5px 4px}
+/* La fila de totales: se lee como parte del cuadro pero se distingue de un
+   cliente. El sticky de la primera columna la acompaña. */
+.dobleentrada tr.fila-totales td{background:var(--fondo);border-top:2px solid var(--pelo)}
+.dobleentrada tr.fila-totales td.cli{background:var(--fondo)}
+.dobleentrada tr.fila-totales td.mes{font-size:12px;line-height:1.25}
+.dobleentrada tr.fila-totales .m{display:block;font-size:10px;color:var(--gris);font-weight:400}
 .celda{
   display:block;width:100%;border-radius:9px;padding:7px 3px;
   font-size:11.5px;font-weight:500;line-height:1.25;cursor:pointer;letter-spacing:.005em;
@@ -11732,7 +11738,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v78";
+var VERSION_APP = "v79";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
@@ -12112,6 +12118,12 @@ function renderHonorarios(){
   }
 
   var totalAsignado = 0, totalCobrado = 0, totalDeuda = 0, morosos = 0;
+  /* Los KPI de arriba son del año entero. Esto es lo de cada mes: lo que
+     corresponde cobrar y lo que entró, sumando todos los clientes de la
+     columna. Es la pregunta de todos los meses —«cuánto factura el estudio en
+     agosto»— y había que sacarla a mano de la grilla. */
+  var asignadoMes = [], cobradoMes = [], conDatosMes = [];
+  for (var im = 0; im < 12; im++){ asignadoMes[im] = 0; cobradoMes[im] = 0; conDatosMes[im] = 0; }
 
   var html = '<div class="tabla-wrap"><table class="dobleentrada"><thead><tr><th class="cli">Cliente</th>';
   for (var m = 1; m <= 12; m++) html += '<th class="mes">' + MESES[m-1].slice(0,3) + "</th>";
@@ -12134,7 +12146,12 @@ function renderHonorarios(){
     for (var mm = 1; mm <= 12; mm++){
       var per = anio + String(mm).padStart(2,"0");
       var e = estadoHonorario(id, per);
-      if (e.estado !== "nada"){ totalAsignado += e.monto; totalCobrado += e.pagado; }
+      if (e.estado !== "nada"){
+        totalAsignado += e.monto; totalCobrado += e.pagado;
+        asignadoMes[mm-1] += e.monto;
+        cobradoMes[mm-1]  += e.pagado;
+        conDatosMes[mm-1]++;
+      }
 
       var clase = { pago:"c-pago", debe:"c-debe", porvenir:"c-porv", parcial:"c-parc", nada:"c-nada" }[e.estado];
       var texto = "—", sub = "";
@@ -12156,6 +12173,28 @@ function renderHonorarios(){
       ? '<b style="color:var(--rojo)">' + pesos(deuda) + "</b>"
       : '<span style="color:var(--verde)">al día</span>') + "</td></tr>";
   });
+
+  /* La fila va adentro del tbody y no en un tfoot: en el teléfono la tabla se
+     vuelve tarjetas y un tfoot quedaría afuera del armado. */
+  html += '<tr class="fila-totales"><td class="cli"><b>Total del mes</b>' +
+    '<div style="color:var(--gris);font-size:11.5px">' + ids.length +
+      (ids.length === 1 ? " cliente" : " clientes") + "</div></td>";
+  for (var t = 0; t < 12; t++){
+    /* Abajo va lo que FALTA y no lo cobrado: son la misma información y la que
+       sirve para actuar es la que falta. Además entra en el ancho de la
+       columna —«falta $ 50 k» contra «cobr. $ 100 k»—, que con 62 px no es un
+       detalle: partido en tres renglones no se lee ninguno de los dos. */
+    var faltaMes = asignadoMes[t] - cobradoMes[t];
+    html += '<td class="mes">' + (conDatosMes[t]
+      ? '<b>' + pesosCorto(asignadoMes[t]) + "</b>" +
+        '<span class="m">' + (faltaMes <= 0.005
+          ? "cobrado"
+          : (cobradoMes[t] <= 0.005 ? "sin cobrar" : "falta " + pesosCorto(faltaMes))) + "</span>"
+      : '<span style="color:var(--gris2)">—</span>') + "</td>";
+  }
+  html += '<td class="num col-deuda">' + (totalDeuda > 0.005
+    ? '<b style="color:var(--rojo)">' + pesos(totalDeuda) + "</b>"
+    : '<span style="color:var(--verde)">al día</span>') + "</td></tr>";
 
   $("tablaHonorarios").innerHTML = html + "</tbody></table></div>";
 
@@ -12342,6 +12381,10 @@ $("btnHonExportar").onclick = function(){
   for (var m = 1; m <= 12; m++) cab.push(MESES[m-1]);
   cab.push("Deuda acumulada");
   var filas = [cab];
+  /* Los mismos totales que la última fila del cuadro: si alguien abre el CSV
+     en una planilla, no tiene que rearmarlos con una fórmula. */
+  var totMes = [], cobMes = [], deudaTot = 0;
+  for (var z = 0; z < 12; z++){ totMes[z] = 0; cobMes[z] = 0; }
 
   Object.keys(ESTADO.clientes).forEach(function(id){
     var cli = ESTADO.clientes[id];
@@ -12352,13 +12395,25 @@ $("btnHonExportar").onclick = function(){
              cli.honorarioModalidad === "vencido" ? "mes vencido" : "mes en curso"];
     for (var mm = 1; mm <= 12; mm++){
       var e = estadoHonorario(id, anio + String(mm).padStart(2,"0"));
+      if (e.estado !== "nada"){ totMes[mm-1] += e.monto; cobMes[mm-1] += e.pagado; }
       f.push(e.estado === "nada" ? "" :
              e.estado === "pago" ? "PAGADO" :
              e.saldo.toFixed(2) + (e.estado === "debe" ? " (debe)" : e.estado === "parcial" ? " (parcial)" : " (por venir)"));
     }
-    f.push(deudaCliente(id).toFixed(2));
+    var d = deudaCliente(id);
+    deudaTot += d;
+    f.push(d.toFixed(2));
     filas.push(f);
   });
+
+  var fTot = ["TOTAL DEL MES", "", "", "", ""];
+  var fCob = ["COBRADO DEL MES", "", "", "", ""];
+  for (var k = 0; k < 12; k++){ fTot.push(totMes[k].toFixed(2)); fCob.push(cobMes[k].toFixed(2)); }
+  fTot.push(deudaTot.toFixed(2));
+  fCob.push("");
+  filas.push(fTot);
+  filas.push(fCob);
+
   bajarCSV(filas, "honorarios-" + anio + ".csv");
 };
 
