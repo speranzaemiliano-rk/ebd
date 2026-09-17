@@ -1321,7 +1321,9 @@ tbody tr:hover{background:#FAFAFC}
     <button data-tab="tabClientes">Clientes</button>
     <button data-tab="tabRecat">Recategorización</button>
     <button data-tab="tabSocios" id="tabBtnSocios">Socios</button>
+    <button data-tab="tabLiquidacion">Liquidación</button>
     <button data-tab="tabCaja">Caja</button>
+    <button data-tab="tabHonorarios">Honorarios</button>
     <button data-tab="tabMails">Mails</button>
     <button data-tab="tabArchivos">Archivos</button>
     <button data-tab="tabEscalas">Escalas ARCA</button>
@@ -3009,11 +3011,19 @@ window.addEventListener("resize", _programarEtiquetado);
    un cliente están las mismas, pero filtradas a él (ver CLI_VISTAS). Así hay
    una sola puerta de entrada y la barra de arriba deja de tener cinco solapas
    que hablaban de lo mismo. */
+/* Las pantallas que son «Clientes» para la barra de arriba: estando en
+   cualquiera de ellas, el botón que queda marcado es Clientes.
+
+   Antes acá vivían también Liquidación y Honorarios, con una sub-barra propia
+   que las repetía. No eran del cliente: la liquidación mensual es la grilla de
+   TODO el estudio en un mes y honorarios es el cuadro del año entero. Ahora
+   están donde corresponde —arriba, al lado de Caja, con las demás vistas
+   generales— y la sub-barra dejó de existir. Comprobantes sí se queda: es la
+   pantalla de importar el archivo de ARCA y se entra desde el cliente, con el
+   cliente ya elegido. */
 var TABS_CLIENTES = [
   { tab:"tabClientes",     nombre:"Clientes" },
-  { tab:"tabComprobantes", nombre:"Comprobantes" },
-  { tab:"tabLiquidacion",  nombre:"Liquidación" },
-  { tab:"tabHonorarios",   nombre:"Honorarios" }
+  { tab:"tabComprobantes", nombre:"Comprobantes" }
 ];
 /* ---------- EL CLIENTE ELEGIDO NO SE PIERDE AL CAMBIAR DE VISTA ----------
    Las cuatro vistas hablan del mismo cliente, pero cada una tenía su propia
@@ -3021,9 +3031,10 @@ var TABS_CLIENTES = [
    Liquidación, nada en Honorarios. Pasar de una a otra obligaba a volver a
    buscarlo, y en un estudio con cien clientes eso es la mitad del trabajo.
 
-   Ahora hay UN cliente elegido para todas. Queda a la vista en la sub-barra,
-   con una ✕ para volver a verlos a todos. Se guarda en el navegador para que
-   tampoco se pierda al recargar. */
+   Ahora hay UN cliente elegido para todas. Queda a la vista en una tira arriba
+   del contenido, con una ✕ para volver a verlos a todos, y se guarda en el
+   navegador para que tampoco se pierda al recargar. Cuando no hay ninguno
+   elegido, la tira no se dibuja: no tiene nada que decir. */
 var _clienteActivo = "";
 
 function fijarClienteActivo(id, repintar){
@@ -3058,29 +3069,20 @@ function esDeClientes(tabId){
   for (var i = 0; i < TABS_CLIENTES.length; i++) if (TABS_CLIENTES[i].tab === tabId) return true;
   return false;
 }
-/* Se pinta sólo adentro del panel que se está mostrando: los otros tres
-   quedan con la sub-barra vieja, que nadie ve, y se repinta al entrar. */
-function pintarSubnavClientes(tabId){
+/* Se pinta sólo adentro del panel que se está mostrando: los otros quedan con
+   la tira vieja, que nadie ve, y se repinta al entrar. */
+function pintarBarraClienteElegido(tabId){
   var panel = $(tabId);
   if (!panel) return;
   var barra = panel.querySelector(".subnav-clientes");
   if (!barra) return;
-  barra.innerHTML = TABS_CLIENTES.map(function(v){
-    return '<button data-tab="' + v.tab + '"' + (v.tab === tabId ? ' class="activo"' : "") +
-      ">" + v.nombre + "</button>";
-  }).join("") +
-    (_clienteActivo
-      ? '<span class="chip-cliente" id="chipClienteActivo">👤 ' + esc(nombreClienteActivo()) +
-        '<button type="button" title="Ver todos los clientes" onclick="fijarClienteActivo(\'\')">✕</button></span>'
-      : "");
-  Array.prototype.forEach.call(barra.querySelectorAll("button[data-tab]"), function(b){
-    b.onclick = function(){ irA(b.dataset.tab); };
-    /* Igual que la barra de arriba: en el teléfono esta fila también se
-       arrastra, así que la solapa abierta puede quedar fuera de la pantalla
-       y no se ve dónde estás parado. */
-    if (b.classList.contains("activo") && b.scrollIntoView)
-      b.scrollIntoView({ block:"nearest", inline:"center", behavior:"smooth" });
-  });
+  /* Sin cliente elegido la tira se esconde: vacía seguía ocupando su margen y
+     dejaba un escalón en blanco arriba de la tarjeta. */
+  barra.classList.toggle("oculto", !_clienteActivo);
+  barra.innerHTML = _clienteActivo
+    ? '<span class="chip-cliente" id="chipClienteActivo">👤 ' + esc(nombreClienteActivo()) +
+      '<button type="button" title="Ver todos los clientes" onclick="fijarClienteActivo(\'\')">✕</button></span>'
+    : "";
 }
 
 function irA(tabId){
@@ -3089,7 +3091,7 @@ function irA(tabId){
     var el = $(t);
     if (el) el.classList.toggle("activo", t === tabId);
   });
-  pintarSubnavClientes(tabId);
+  pintarBarraClienteElegido(tabId);
   var tabMarcado = esDeClientes(tabId) ? "tabClientes" : tabId;
   Array.prototype.forEach.call($("navTabs").children, function(b){
     var activo = b.dataset.tab === tabMarcado;
@@ -3179,7 +3181,7 @@ function inicializarUI(){
      cliente del que se está hablando. */
   $("verCompCliente").onchange    = function(){
     fijarClienteActivo($("verCompCliente").value, false);
-    pintarSubnavClientes("tabComprobantes");
+    pintarBarraClienteElegido("tabComprobantes");
     renderTablaComprobantes();
   };
   $("verCompAnio").onchange       = renderTablaComprobantes;
@@ -3329,10 +3331,10 @@ var PANTALLAS_BUSCABLES = [
   { tab:"tabClientes",     nombre:"Clientes" },
   { tab:"tabComprobantes", nombre:"Comprobantes",   en:"Clientes" },
   { tab:"tabRecat",        nombre:"Recategorización" },
-  { tab:"tabLiquidacion",  nombre:"Liquidación",     en:"Clientes" },
-  { tab:"tabHonorarios",   nombre:"Honorarios",      en:"Clientes" },
   { tab:"tabSocios",       nombre:"Socios" },
+  { tab:"tabLiquidacion",  nombre:"Liquidación" },
   { tab:"tabCaja",         nombre:"Caja" },
+  { tab:"tabHonorarios",   nombre:"Honorarios" },
   { tab:"tabMails",        nombre:"Mails" },
   { tab:"tabArchivos",     nombre:"Archivos" },
   { tab:"tabEscalas",      nombre:"Escalas ARCA" },
@@ -7831,7 +7833,7 @@ function limpiarFiltrosLiquidacion(){
   /* Limpiar los filtros es el gesto de «mostrámelos a todos», así que también
      suelta al cliente elegido: si no, volvería solo en el repintado. */
   fijarClienteActivo("", false);
-  pintarSubnavClientes("tabLiquidacion");
+  pintarBarraClienteElegido("tabLiquidacion");
   renderLiquidacion();
 }
 
@@ -11618,7 +11620,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v73";
+var VERSION_APP = "v74";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
