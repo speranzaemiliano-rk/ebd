@@ -234,6 +234,27 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## Monotributo Unificado (ARBA)
+
+En la ficha del cliente, dentro del bloque de ARBA, hay un casillero:
+**Monotributo Unificado**. En ese régimen los ingresos brutos de Provincia van
+adentro de la cuota del monotributo —un solo pago a ARCA—, así que no hay
+boleta de ARBA aparte.
+
+Marcarlo cambia tres cosas:
+
+- **Deja de pedir la alícuota**: el importe no sale de lo facturado, es el de la
+  cuota. El valor que hubiera quedaba guardado, por si mañana sale del régimen.
+- **ARBA sale de lo que falta cargar** y no cuenta como VEP pendiente: el pago
+  es el del monotributo. Sin esto el contador quedaba en 2/3 para siempre y el
+  mes nunca se daba por listo.
+- En la grilla mensual la columna de ARBA dice **unificado** en vez de «falta»,
+  y al abrir la liquidación lo explica en lugar de pedir un cálculo.
+
+No se confunde con el **Régimen simplificado** de AGIP, que es otra cosa: ahí sí
+hay una boleta propia, fija por categoría, aunque algunos meses no salga
+ninguna.
+
 ## Leer la constancia: el domicilio
 
 Leer una constancia **con IA** nunca traía el domicilio. La consigna que se le
