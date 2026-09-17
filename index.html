@@ -3765,7 +3765,9 @@ function pintarFilasClientes(){
       if (c.impuestos.arca)      tags.push(etiquetaImpuesto(id, "arca", "b-azul", "ARCA"));
       if (c.impuestos.arba)      tags.push(exentoDe(c, "arba")
         ? '<span class="badge b-gris" title="Exento">ARBA exento</span>'
-        : etiquetaImpuesto(id, "arba", "b-viol", "ARBA"));
+        : unificadoArba(c)
+          ? '<span class="badge b-azul" title="Monotributo Unificado: va adentro de la cuota">ARBA unificado</span>'
+          : etiquetaImpuesto(id, "arba", "b-viol", "ARBA"));
       if (c.impuestos.agip)      tags.push(exentoDe(c, "agip")
         ? '<span class="badge b-gris" title="Exento">AGIP exento</span>'
         : etiquetaImpuesto(id, "agip", "b-amar", "AGIP"));
@@ -3936,7 +3938,16 @@ function formCliente(c, idCliente){
         ? '<label class="check"><input type="checkbox" id="fcSimpl_agip"' + (conf.simplificado ? " checked" : "") +
           "> <b>Régimen simplificado</b> — el importe es fijo por categoría, no sale de lo facturado</label>"
         : "") +
-      '<div class="grid g2" id="wrapAlic_' + k + '"' + (conf.exento ? ' style="display:none"' : "") + '>' +
+      /* En el Unificado, ARBA se paga adentro de la cuota del monotributo:
+         marcarlo saca a ARBA de lo que hay que cargar cada mes. */
+      (k === "arba"
+        ? '<label class="check"><input type="checkbox" id="fcUnif_arba" onchange="toggleUnificadoArba()"' +
+          (conf.unificado ? " checked" : "") +
+          "> <b>Monotributo Unificado</b> — ingresos brutos van adentro de la cuota del monotributo, " +
+          "en un solo pago a ARCA</label>"
+        : "") +
+      '<div class="grid g2" id="wrapAlic_' + k + '"' +
+        (conf.exento || (k === "arba" && conf.unificado) ? ' style="display:none"' : "") + '>' +
         '<div class="campo" style="margin-top:12px"><label>Alícuota %</label>' +
           '<input type="number" step="0.001" id="fcAlic_' + k + '" value="' + (conf.alicuota || "") + '" placeholder="3,5"></div>' +
         '<div class="campo" style="margin-top:12px"><label>Mínimo mensual</label>' +
@@ -4226,6 +4237,7 @@ function guardarFormCliente(id){
         minimo:   parseFloat($("fcMin_" + k).value)  || null,
         exento:   $("fcExento_" + k).checked,
         simplificado: k === "agip" ? !!($("fcSimpl_agip") || {}).checked : false,
+        unificado:     k === "arba" ? !!($("fcUnif_arba")  || {}).checked : false,
         motivoExencion: $("fcMotivo_" + k).value.trim()
       };
       return acc;
@@ -7835,11 +7847,24 @@ function pintarDatalistMunicipios(){
 
 /* Muestra el motivo o la alícuota según corresponda. Están los dos en el HTML
    siempre: así al destildar vuelve lo que había cargado. */
+/* Con el Unificado no hay alícuota que aplicar: el importe es el de la cuota
+   del monotributo. Se esconde igual que cuando está exento, y el valor queda
+   guardado por si mañana sale del régimen. */
+function toggleUnificadoArba(){
+  var on = $("fcUnif_arba").checked;
+  if ($("fcExento_arba") && $("fcExento_arba").checked) return;   /* manda el exento */
+  $("wrapAlic_arba").style.display = on ? "none" : "";
+  if ($("sugAlic_arba")) $("sugAlic_arba").style.display = on ? "none" : "";
+}
+
 function toggleExento(k){
   var on = $("fcExento_" + k).checked;
   $("wrapExento_" + k).style.display = on ? "" : "none";
-  $("wrapAlic_" + k).style.display   = on ? "none" : "";
-  if ($("sugAlic_" + k)) $("sugAlic_" + k).style.display = on ? "none" : "";
+  /* Destildar «exento» no puede destapar la alícuota de un ARBA unificado:
+     son dos motivos distintos para esconderla y hay que respetar los dos. */
+  var tapa = on || (k === "arba" && $("fcUnif_arba") && $("fcUnif_arba").checked);
+  $("wrapAlic_" + k).style.display   = tapa ? "none" : "";
+  if ($("sugAlic_" + k)) $("sugAlic_" + k).style.display = tapa ? "none" : "";
 }
 
 /* La exención se carga una vez en la ficha y vale para todos los períodos: no
@@ -7910,6 +7935,10 @@ function _estadoLiqDe(id, periodo){
   IMPUESTOS.forEach(function(i){
     if (!(c.impuestos && c.impuestos[i.clave])) return;
     if (exentoDe(c, i.clave)) return;
+    /* En el Unificado, el pago de ARBA ES el del monotributo: no tiene VEP
+       propio, así que contarlo entre los pedidos dejaría el contador en 2/3
+       para siempre. */
+    if (i.clave === "arba" && unificadoArba(c)) return;
     pedidos++;
     if (!((liq[i.clave] || {}).monto) && !((c.iibb || {})[i.clave] || {}).simplificado) sinCargar.push(i.clave);
     if ((liq[i.clave] || {}).vep || (liq[i.clave] || {}).vepArchivo) veps++;
@@ -8043,8 +8072,13 @@ function pintarFilasLiquidacion(){
         /* Un simplificado sin importe puede ser un mes sin boleta, no un
            olvido: se muestra con un guion, no con «falta» en amarillo. */
         var simpl = ((c.iibb || {})[i.clave] || {}).simplificado;
-        fila += '<td class="num"' + (m || simpl ? "" : ' style="color:var(--amar)"') + ">" +
-          (m ? pesos(m) : (simpl ? "—" : "falta")) + "</td>";
+        if (i.clave === "arba" && unificadoArba(c)){
+          /* Acá no falta nada: está adentro de la cuota del monotributo. */
+          fila += '<td class="num"><span class="badge b-azul" title="Va adentro de la cuota del monotributo">unificado</span></td>';
+        } else {
+          fila += '<td class="num"' + (m || simpl ? "" : ' style="color:var(--amar)"') + ">" +
+            (m ? pesos(m) : (simpl ? "—" : "falta")) + "</td>";
+        }
       }
     });
 
@@ -8086,8 +8120,26 @@ function pintarCalculoIIBB(clave){
                                     { retenciones: campo ? campo.value : 0 });
 }
 
+/* Monotributo Unificado (Provincia de Buenos Aires): el impuesto sobre los
+   ingresos brutos de ARBA se paga ADENTRO de la cuota del monotributo, en un
+   solo pago a ARCA. No hay boleta de ARBA aparte ni VEP propio, así que no
+   corresponde pedirle un importe al mes ni contarlo como pendiente: estaría
+   pidiendo dos veces lo mismo. Se distingue del régimen simplificado de AGIP,
+   donde sí hay una boleta propia —fija por categoría— aunque algunos meses no
+   salga ninguna. */
+function unificadoArba(c){
+  return !!(((c || {}).iibb || {}).arba || {}).unificado;
+}
+
 function textoCalculoIIBB(c, clienteId, periodo, clave, d){
   var conf = (c.iibb || {})[clave] || {};
+
+  if (clave === "arba" && conf.unificado){
+    return '<div class="aviso ok"><span>🔗</span><div><b>Monotributo Unificado.</b> ' +
+      "Ingresos brutos de Provincia va adentro de la cuota del monotributo: se paga todo junto a ARCA, " +
+      "no hay boleta de ARBA aparte. Acá no hay nada que cargar — el importe del mes es el de la cuota, " +
+      "en ARCA.</div></div>";
+  }
 
   /* En el simplificado no hay nada que calcular: el importe es fijo por
      categoría y hay meses sin boleta. Pedir una alícuota acá sería pedir un
@@ -11672,7 +11724,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v75";
+var VERSION_APP = "v76";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
