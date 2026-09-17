@@ -234,6 +234,37 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## Leer la constancia: el domicilio
+
+Leer una constancia **con IA** nunca traía el domicilio. La consigna que se le
+manda pedía CUIT, razón social, actividad, categoría y Nº de IIBB — **el
+domicilio no estaba en la lista**, así que la IA no lo devolvía. El resto del
+programa sí lo esperaba: por eso el campo quedaba vacío sin ningún error a la
+vista.
+
+Ahora se lo pide de dos formas a la vez: **partido** en calle, piso, localidad,
+provincia y código postal, y además **el renglón entero tal como está escrito**.
+Se usa lo que la IA partió, y cada campo que haya dejado vacío se completa
+partiendo el renglón crudo con las mismas reglas de la lectura sin IA. Así un
+modelo que mete todo junto en «calle» —o que se olvida el código postal— igual
+termina completando la ficha.
+
+Buscándolo aparecieron dos errores más, que también rompían la lectura **sin**
+IA:
+
+- **El código postal `(B1870)` no se reconocía.** El patrón del CPA exigía las
+  tres letras del final (`B1870ABC`) y el otro exigía cuatro dígitos pelados
+  dentro del paréntesis, así que la forma que ARCA imprime todo el tiempo —la
+  letra de la provincia y los cuatro dígitos— no la tomaba ninguno de los dos.
+  El código quedaba vacío y encima se lo llevaba la localidad:
+  «B1870) AVELLANEDA».
+- **El domicilio no terminaba nunca.** Para saber dónde termina un valor, el
+  lector busca dónde empieza la etiqueta siguiente, y en esa lista estaba
+  escrito `Actividades?`. El `?` se lleva la letra de antes, no la sílaba: eso
+  pide «Actividade», y las constancias dicen «Actividad». Como nunca cortaba,
+  el domicilio seguía hasta el final del texto y esa cola se guardaba como
+  localidad.
+
 ## Cada pantalla en su lugar
 
 La barra de Clientes repetía cuatro solapas —Clientes · Comprobantes ·
