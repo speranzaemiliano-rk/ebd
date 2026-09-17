@@ -234,6 +234,27 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## Cada pantalla en su lugar
+
+La barra de Clientes repetía cuatro solapas —Clientes · Comprobantes ·
+Liquidación · Honorarios—, y no todas eran del cliente:
+
+- **Liquidación mensual** es la grilla de **todo el estudio** en un mes: quién
+  falta liquidar. **Honorarios** es el cuadro del año entero, con sus totales
+  arriba. Ninguna de las dos habla de un cliente: son vistas generales, como
+  Caja. Ahora viven **arriba, una a cada lado de Caja**, y al entrar se enciende
+  su propio botón.
+- **Comprobantes** es la pantalla de importar el archivo de Mis Comprobantes de
+  ARCA. Salió de la barra porque ya se llega **desde adentro del cliente**, con
+  el botón *Importar* —que además lo deja elegido, sin buscarlo de nuevo—. Sigue
+  contando como Clientes: estando ahí, arriba queda encendida Clientes.
+- Lo del cliente vive **adentro del cliente**: su ficha tiene Resumen,
+  Comprobantes, Liquidaciones, Papeles y Honorarios.
+
+De la sub-barra sólo queda **la tira del cliente elegido** —👤 con su ✕ para
+soltarlo—, que sigue haciendo falta porque filtra Liquidación. Sin cliente
+elegido no se dibuja: vacía dejaba un escalón en blanco arriba de la tarjeta.
+
 ## Documentos del cliente
 
 Además de los papeles de cada mes, un cliente tiene papeles que **no son de
