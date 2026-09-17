@@ -234,6 +234,27 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## Editar un cobro desde la Caja
+
+Los movimientos que se generan al cobrar un mes en Honorarios aparecían en la
+Caja con la leyenda «desde Honorarios» y **sin botones**: para corregir una
+fecha o un medio de pago había que ir a Honorarios a buscar el mes.
+
+Ahora se editan y se borran desde la Caja, y **Honorarios se actualiza solo**:
+
+- Si cambiás el **importe**, cambia lo cobrado de ese mes. Si queda por debajo
+  del honorario, el mes pasa a cobro **parcial** con su saldo; si lo cubre,
+  queda **pago**. Los dos nodos se escriben en **una sola operación**, así no
+  puede pasar que la caja diga un número y el cuadro de deuda otro porque se
+  cortó la conexión en el medio.
+- Si lo **borrás**, el mes **vuelve a quedar impago**. El cuadro lo avisa antes,
+  nombrando el mes.
+- El **tipo** y el **cliente** quedan trabados: el mes cobrado es de ese cliente
+  y un cobro no puede volverse egreso. Para eso, se anula el cobro en Honorarios
+  y se carga de nuevo.
+
+Los movimientos cargados a mano siguen editándose enteros, sin trabas.
+
 ## Monotributo Unificado (ARBA)
 
 En la ficha del cliente, dentro del bloque de ARBA, hay un casillero:
