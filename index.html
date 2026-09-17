@@ -879,6 +879,10 @@ tbody tr:hover{background:#FAFAFC}
    misma pantalla no terminaban de alinearse. */
 .filtros{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
 .filtros input[type=text]{min-width:230px}
+/* «Desde» y «Hasta» pegados a su campo: sueltos, dos meses seguidos no se
+   sabe cuál es cuál. */
+.rango{display:inline-flex;align-items:center;gap:7px}
+.rango > span{color:var(--gris);font-size:13px;letter-spacing:-.003em}
 
 .dropzone{
   border:1.5px dashed var(--borde);border-radius:var(--r);padding:44px 20px;text-align:center;
@@ -1583,7 +1587,11 @@ tbody tr:hover{background:#FAFAFC}
           <button class="btn" id="btnNuevoMovimiento">+ Movimiento</button>
         </div>
         <div class="filtros">
-          <input type="month" id="cajaPeriodo" class="pill">
+          <label class="rango"><span>Desde</span><input type="month" id="cajaDesde" class="pill"></label>
+          <label class="rango"><span>Hasta</span><input type="month" id="cajaHasta" class="pill"></label>
+          <button class="btn sec chico" id="btnCajaMes">Este mes</button>
+          <button class="btn sec chico" id="btnCajaAnio">Este año</button>
+          <button class="btn sec chico" id="btnCajaTodo">Todo</button>
           <select id="cajaCuenta"></select>
           <select id="cajaTipo">
             <option value="">Ingresos y egresos</option>
@@ -11724,7 +11732,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v77";
+var VERSION_APP = "v78";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
@@ -13039,14 +13047,59 @@ function opcionesClientes(sel){
   }).join("");
 }
 
+/* Una vez que se tocó el rango no se vuelve a imponer el mes en curso: si
+   alguien eligió «Todo» y después cambia de cuenta, la pantalla no puede
+   volver sola a septiembre. */
+var _cajaRangoTocado = false;
+
+/* De un <input type=month> al período "AAAAMM", o "" si está vacío. El helper
+   de siempre devuelve el mes actual cuando el campo está en blanco, y acá
+   vacío significa «sin tope», que es otra cosa. */
+function _perOVacio(id){
+  var v = ($(id) || {}).value || "";
+  return v ? v.replace("-", "") : "";
+}
+
+/* El rango elegido. Vacío de un lado = abierto de ese lado; vacío de los dos =
+   todos los movimientos. Si quedaron al revés se dan vuelta solos: es más
+   probable que se haya escrito mal que querer ver la nada. */
+function rangoCaja(){
+  var d = _perOVacio("cajaDesde"), h = _perOVacio("cajaHasta");
+  if (d && h && d > h){ var x = d; d = h; h = x; }
+  return { desde: d, hasta: h };
+}
+
+function textoRangoCaja(r){
+  if (!r.desde && !r.hasta) return "todos los movimientos";
+  if (r.desde && r.hasta && r.desde === r.hasta) return periodoLargo(r.desde);
+  if (r.desde && r.hasta) return periodoLargo(r.desde) + " a " + periodoLargo(r.hasta);
+  if (r.desde) return "desde " + periodoLargo(r.desde);
+  return "hasta " + periodoLargo(r.hasta);
+}
+
+function entraEnRango(m, r){
+  if (!m.fecha) return false;
+  var per = m.fecha.slice(0,4) + m.fecha.slice(5,7);
+  if (r.desde && per < r.desde) return false;
+  if (r.hasta && per > r.hasta) return false;
+  return true;
+}
+
 function renderCaja(){
-  if (!$("cajaPeriodo").value) $("cajaPeriodo").value = periodoAMonthInput(periodoHoy());
+  /* Arranca en el mes en curso: es lo que se mira casi siempre, y el que
+     quiera más abre el rango. */
+  if (!$("cajaDesde").value && !$("cajaHasta").value && !_cajaRangoTocado){
+    $("cajaDesde").value = periodoAMonthInput(periodoHoy());
+    $("cajaHasta").value = periodoAMonthInput(periodoHoy());
+  }
 
   var selC = $("cajaCuenta"), actual = selC.value;
   selC.innerHTML = '<option value="">Todas las cuentas</option>' + opcionesCuentas(null);
   if (actual) selC.value = actual;
 
-  ["cajaPeriodo","cajaCuenta","cajaTipo"].forEach(function(id){ $(id).onchange = renderCaja; });
+  ["cajaDesde","cajaHasta","cajaCuenta","cajaTipo"].forEach(function(id){
+    $(id).onchange = function(){ _cajaRangoTocado = true; renderCaja(); };
+  });
   $("cajaBuscar").oninput = renderCaja;
 
   /* Tarjetas de saldo por cuenta */
@@ -13064,7 +13117,7 @@ function renderCaja(){
   $("kpisCuentas").innerHTML = kpis;
 
   /* Movimientos filtrados */
-  var per   = monthInputAPeriodo($("cajaPeriodo").value);
+  var r     = rangoCaja();
   var fCta  = $("cajaCuenta").value;
   var fTipo = $("cajaTipo").value;
   var q     = ($("cajaBuscar").value || "").toLowerCase().trim();
@@ -13072,8 +13125,7 @@ function renderCaja(){
   var lista = Object.keys(ESTADO.caja).map(function(k){
     return Object.assign({ _id:k }, ESTADO.caja[k]);
   }).filter(function(m){
-    if (!m.fecha) return false;
-    if (m.fecha.slice(0,4) + m.fecha.slice(5,7) !== per) return false;
+    if (!entraEnRango(m, r)) return false;
     if (fCta && m.cuentaId !== fCta) return false;
     if (fTipo && m.tipo !== fTipo) return false;
     if (q && ((m.concepto || "") + " " + (m.contraparteNombre || "")).toLowerCase().indexOf(q) === -1) return false;
@@ -13082,14 +13134,16 @@ function renderCaja(){
   lista.sort(function(a,b){ return a.fecha.localeCompare(b.fecha) || (a.creado || "").localeCompare(b.creado || ""); });
 
   if (!lista.length){
-    $("tablaCaja").innerHTML = '<div class="vacio"><div class="ico">💵</div><div>Sin movimientos en ' + periodoLargo(per) + ".</div></div>";
+    $("tablaCaja").innerHTML = '<div class="vacio"><div class="ico">💵</div><div>Sin movimientos en ' +
+      esc(textoRangoCaja(r)) + ".</div></div>";
     return;
   }
 
   var ing = 0, egr = 0, corriente = 0;
   var html = '<div class="tabla-wrap"><table><thead><tr>' +
     "<th>Fecha</th><th>Concepto</th><th>Contraparte</th><th>Medio</th><th>Cuenta</th>" +
-    "<th class=num>Ingreso</th><th class=num>Egreso</th><th class=num>Saldo del mes</th><th></th>" +
+    "<th class=num>Ingreso</th><th class=num>Egreso</th><th class=num>" +
+      (r.desde && r.hasta && r.desde === r.hasta ? "Saldo del mes" : "Saldo acumulado") + "</th><th></th>" +
     "</tr></thead><tbody>";
 
   lista.forEach(function(m){
@@ -13115,7 +13169,9 @@ function renderCaja(){
       "</td></tr>";
   });
 
-  html += '<tr style="background:var(--fondo)"><td colspan="5"><b>Totales de ' + periodoLargo(per) + "</b></td>" +
+  html += '<tr style="background:var(--fondo)"><td colspan="5"><b>Totales de ' +
+    esc(textoRangoCaja(r)) + " · " + lista.length +
+    (lista.length === 1 ? " movimiento" : " movimientos") + "</b></td>" +
     '<td class="num"><b style="color:var(--verde)">' + pesos(ing) + "</b></td>" +
     '<td class="num"><b style="color:var(--rojo)">' + pesos(egr) + "</b></td>" +
     '<td class="num"><b>' + pesos(ing - egr) + "</b></td><td></td></tr>";
@@ -13528,17 +13584,39 @@ function borrarMovimiento(id){
     ], "angosto");
 }
 
+/* Los tres atajos. Escriben el rango y repintan: no son un filtro aparte, así
+   que lo que quede en los campos siempre es lo que se está mirando. */
+function _fijarRangoCaja(desde, hasta){
+  _cajaRangoTocado = true;
+  $("cajaDesde").value = desde;
+  $("cajaHasta").value = hasta;
+  renderCaja();
+}
+$("btnCajaMes").onclick  = function(){
+  var m = periodoAMonthInput(periodoHoy());
+  _fijarRangoCaja(m, m);
+};
+$("btnCajaAnio").onclick = function(){
+  var a = periodoHoy().slice(0,4);
+  _fijarRangoCaja(a + "-01", a + "-12");
+};
+$("btnCajaTodo").onclick = function(){ _fijarRangoCaja("", ""); };
+
 $("btnCajaExportar").onclick = function(){
-  var per = monthInputAPeriodo($("cajaPeriodo").value);
+  /* Se baja lo que se está viendo, no el mes en curso: si alguien abrió el año
+     entero y exporta, esperar un solo mes sería una sorpresa fea. */
+  var r = rangoCaja();
   var filas = [["Fecha","Tipo","Concepto","Contraparte","Medio","Cuenta","Importe"]];
   Object.keys(ESTADO.caja).map(function(k){ return ESTADO.caja[k]; })
-    .filter(function(m){ return m.fecha && m.fecha.slice(0,4) + m.fecha.slice(5,7) === per; })
+    .filter(function(m){ return entraEnRango(m, r); })
     .sort(function(a,b){ return a.fecha.localeCompare(b.fecha); })
     .forEach(function(m){
       filas.push([m.fecha, m.tipo, m.concepto, m.contraparteNombre || "",
                   nombreMedio(m.medio), nombreCuenta(m.cuentaId), m.monto.toFixed(2)]);
     });
-  bajarCSV(filas, "caja-" + per + ".csv");
+  var nombre = !r.desde && !r.hasta ? "todo"
+             : (r.desde === r.hasta ? r.desde : (r.desde || "inicio") + "-a-" + (r.hasta || "hoy"));
+  bajarCSV(filas, "caja-" + nombre + ".csv");
 };
 
 /* --- Cuentas --- */
