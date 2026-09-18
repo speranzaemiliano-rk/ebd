@@ -740,6 +740,30 @@ tbody tr:hover{background:#FAFAFC}
   /* Una hoja no se desvanece: se va para abajo, por donde vino. */
   .modal-fondo.cerrando .modal{opacity:1;transform:translateY(100%)}
 }
+
+/* ---------- LA HOJA SE AGARRA ----------
+   Mientras el dedo la lleva, nada más la mueve: ni la animación de entrada ni
+   la transición de cierre. Si compitieran, el dedo dejaría de mandar y se
+   perdería el 1 a 1, que es lo único que hace que se sienta un objeto. */
+.modal.arrastrando{
+  animation:none;transition:none;will-change:transform;touch-action:none;
+  /* Al agarrarla se despega del marco: las esquinas de arriba se redondean y
+     aparece una sombra por encima. Quieta ocupa la pantalla entera y las
+     esquinas rectas son las correctas; en la mano es una hoja apoyada sobre
+     lo de atrás, y eso se ve. */
+  border-radius:18px 18px 0 0;
+  box-shadow:0 -14px 44px rgba(0,0,0,.20);
+}
+.modal-fondo.arrastrando{transition:none}
+.hoja-agarre{
+  display:none;width:100%;padding:8px 0 2px;cursor:grab;touch-action:none;
+  -webkit-tap-highlight-color:transparent;
+}
+.hoja-agarre::before{
+  content:"";display:block;width:38px;height:5px;margin:0 auto;border-radius:999px;
+  background:var(--borde);transition:background .15s, transform .15s;
+}
+.hoja-agarre:active::before{background:var(--gris2);transform:scaleX(1.12)}
 .modal-head{padding:26px 28px 0;display:flex;align-items:flex-start;gap:12px}
 .modal-head h3{font-size:22px;letter-spacing:-.024em;flex:1}
 .modal-body{padding:22px 28px}
@@ -1066,6 +1090,11 @@ tbody tr:hover{background:#FAFAFC}
   header.top{padding-left:calc(14px + env(safe-area-inset-left,0px));
              padding-right:calc(14px + env(safe-area-inset-right,0px))}
   #fabAsistente{bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+
+  /* La barrita de arriba dice, sin una palabra, que la hoja se agarra. Va acá
+     abajo y no al lado de la hoja: la regla que la esconde está escrita más
+     adelante en el archivo y, a igual peso, gana la última. */
+  .hoja-agarre{display:block}
 
   /* La fila de solapas de adentro se arrastra: el degradé del final avisa
      que hay más a la derecha en vez de dejar una palabra cortada al ras. */
@@ -1886,6 +1915,7 @@ tbody tr:hover{background:#FAFAFC}
 
 <div class="modal-fondo" id="modalFondo">
   <div class="modal" id="modalCaja">
+    <div class="hoja-agarre" id="hojaAgarre" title="Arrastrá para cerrar"></div>
     <div class="modal-head"><h3 id="modalTitulo">Título</h3><button class="btn-icono" id="modalCerrar">✕</button></div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-pie" id="modalPie"></div>
@@ -2707,6 +2737,72 @@ function _pintarPieModal(botones){
   });
 }
 
+/* ---------- UN RESORTE, NO UNA TRANSICIÓN ----------
+   Para lo que se agarra con el dedo no sirve una transición de CSS: tiene una
+   duración fija y arranca del valor final, así que si el usuario vuelve a
+   agarrar la hoja en el medio del camino, salta. Un resorte arranca siempre
+   del valor que está EN PANTALLA y se le puede cambiar el destino sin cortar
+   el movimiento.
+
+   Dos parámetros, los mismos que usa Apple:
+   - amortiguación 1 = llega y se queda, sin rebote. Menos de 1 rebota.
+   - respuesta = en cuántos segundos llega. No es una duración: el resorte no
+     tiene duración, el tiempo de llegada sale de los dos números.
+   La velocidad inicial es la del dedo al soltar: eso es lo que hace que no se
+   note la costura entre arrastrar y animar. */
+function _resorte(desde, hasta, opts){
+  opts = opts || {};
+  var amort = opts.amortiguacion === undefined ? 1 : opts.amortiguacion;
+  var resp  = opts.respuesta === undefined ? 0.35 : opts.respuesta;
+  var x = desde, v = opts.velocidad || 0;
+  var w = 2 * Math.PI / resp;               /* frecuencia natural */
+  var vivo = true, ultimo = null;
+
+  /* Con «menos movimiento» pedido no se hace física: se llega y punto. */
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches){
+    if (opts.paso) opts.paso(hasta);
+    if (opts.fin) opts.fin();
+    return { cortar: function(){}, valor: function(){ return hasta; } };
+  }
+
+  function cuadro(t){
+    if (!vivo) return;
+    if (ultimo === null) ultimo = t;
+    /* Se acota el paso: si la pestaña estuvo en segundo plano, un salto de dos
+       segundos de golpe manda el resorte a la loma del orto. */
+    var dt = Math.min((t - ultimo) / 1000, 1 / 30);
+    ultimo = t;
+
+    var a = -w * w * (x - hasta) - 2 * amort * w * v;
+    v += a * dt;
+    x += v * dt;
+
+    if (Math.abs(x - hasta) < 0.5 && Math.abs(v) < 20){
+      x = hasta; vivo = false;
+      if (opts.paso) opts.paso(x);
+      if (opts.fin) opts.fin();
+      return;
+    }
+    if (opts.paso) opts.paso(x);
+    requestAnimationFrame(cuadro);
+  }
+  requestAnimationFrame(cuadro);
+
+  return {
+    cortar: function(){ vivo = false; },
+    valor:  function(){ return x; }
+  };
+}
+
+/* A dónde llegaría algo lanzado a esta velocidad. Es la fórmula del frenado
+   por rozamiento que usa el scroll: sirve para decidir con la INTENCIÓN del
+   gesto y no con el lugar donde el dedo se levantó. Un envión corto y rápido
+   cierra la hoja aunque haya recorrido tres centímetros. */
+function _proyectar(velocidad, frenado){
+  frenado = frenado === undefined ? 0.998 : frenado;
+  return (velocidad / 1000) * frenado / (1 - frenado);
+}
+
 function abrirModal(titulo, html, botones, ancho){
   clearTimeout(_cierreModalPendiente);
   _cierreModalPendiente = null;
@@ -2721,11 +2817,190 @@ function abrirModal(titulo, html, botones, ancho){
   _pintarPieModal(_modalBotones);
   _modalFoto    = _fotoModal();
 
+  /* Por si quedó movida de un arrastre anterior: se abre siempre desde cero. */
+  $("modalCaja").style.transform = "";
+  $("modalFondo").style.opacity  = "";
+  $("modalCaja").classList.remove("arrastrando");
+  $("modalFondo").classList.remove("arrastrando");
   $("modalFondo").classList.add("abierto");
   /* Mientras hay un modal, el asistente se esconde: en el teléfono queda justo
      arriba del botón Guardar. */
   $("fabAsistente").classList.add("tapado");
 }
+
+/* ---------- ARRASTRAR LA HOJA PARA CERRARLA ----------
+   En el teléfono el modal no es una ventana: es una hoja que sube desde abajo.
+   Una hoja se agarra y se baja; llegar hasta la ✕ de la esquina de arriba con
+   el pulgar es el camino largo para lo que se hace veinte veces por día.
+
+   Cuatro cosas hacen que se sienta un objeto y no una animación:
+   - va pegada al dedo, 1 a 1, desde donde se la agarró;
+   - hacia arriba se resiste cada vez más en vez de frenar en seco;
+   - al soltar se decide por a dónde IBA —velocidad proyectada—, no por dónde
+     quedó: un envión corto y rápido la cierra;
+   - se puede volver a agarrar en el medio del camino y traerla de vuelta, y
+     ahí el movimiento arranca del valor que está en pantalla, no del final.
+
+   Y una que no es de diseño sino de respeto: si hay cambios sin guardar, el
+   gesto NO cierra nada. Vuelve sola a su lugar y aparece la misma pregunta que
+   con la ✕. Un gesto rápido no puede perder lo que uno cargó. */
+var _hoja = null;          /* estado del arrastre en curso */
+var _hojaVolviendo = null; /* el resorte que la está llevando a algún lado */
+
+function _esCelular(){ return matchMedia("(max-width:640px)").matches; }
+
+/* Lo que ya está dibujado en la pantalla, no lo que el programa cree. Es de
+   acá de donde tiene que arrancar cualquier movimiento nuevo. */
+function _yDeLaHoja(caja){
+  var m = /translateY\(([-0-9.]+)px\)/.exec(caja.style.transform || "");
+  return m ? parseFloat(m[1]) : 0;
+}
+
+function _pintarHoja(y){
+  var caja = $("modalCaja"), fondo = $("modalFondo");
+  caja.style.transform = y ? "translateY(" + y + "px)" : "";
+  /* El velo del fondo acompaña: al bajar la hoja se ve más lo de atrás, así
+     que el gesto se entiende sin haberlo terminado. */
+  var alto = window.innerHeight || 800;
+  fondo.style.opacity = y > 0 ? String(Math.max(0.15, 1 - (y / alto) * 1.15)) : "";
+}
+
+/* Cuanto más se pasa del borde, menos sigue: lo que se resiste de a poco se
+   lee como «hay algo, pero no hay más»; lo que frena en seco, como colgado. */
+function _gomita(exceso, alto){
+  var k = 0.55;
+  return (exceso * alto * k) / (alto + k * Math.abs(exceso));
+}
+
+function _engancharHoja(){
+  var agarre = $("hojaAgarre"), caja = $("modalCaja"), cuerpo = $("modalBody");
+  if (!agarre || !caja) return;
+
+  function arranca(e){
+    if (!_esCelular()) return;
+    /* Desde el cuerpo sólo se agarra si ya está arriba de todo: si no, el
+       dedo está scrolleando el formulario y la hoja no tiene por qué moverse. */
+    if (e.currentTarget === cuerpo && cuerpo.scrollTop > 0) return;
+    if (e.currentTarget === cuerpo){
+      var t = e.target;
+      /* Ni sobre un campo ni sobre un botón: ahí el dedo está haciendo otra cosa. */
+      if (t.closest("input,select,textarea,button,a,label")) return;
+    }
+
+    /* Si venía volviendo sola, se corta ahí donde está: el dedo manda sobre
+       cualquier animación en curso, siempre. */
+    if (_hojaVolviendo){ _hojaVolviendo.cortar(); _hojaVolviendo = null; }
+    _hoja = {
+      id: e.pointerId,
+      y0: e.clientY,
+      /* Arranca del valor que está EN PANTALLA: así agarrarla mientras vuelve
+         no la hace saltar. */
+      base: _yDeLaHoja(caja),
+      muestras: [{ y: e.clientY, t: (e.timeStamp || 0) }],
+      movio: false,
+      desde: e.currentTarget === cuerpo ? "cuerpo" : "agarre"
+    };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  function mueve(e){
+    if (!_hoja || e.pointerId !== _hoja.id) return;
+    var dy = e.clientY - _hoja.y0;
+
+    /* Un umbral chico antes de comprometerse: si no, un toque con el dedo
+       tembloroso arrastraría la hoja sin que nadie se lo pidiera. */
+    if (!_hoja.movio){
+      if (Math.abs(dy) < 8) return;
+      if (_hoja.desde === "cuerpo" && dy < 0){ _hoja = null; return; }   /* quiere scrollear */
+      _hoja.movio = true;
+      caja.classList.add("arrastrando");
+      $("modalFondo").classList.add("arrastrando");
+    }
+
+    var y = _hoja.base + dy;
+    var alto = caja.getBoundingClientRect().height || window.innerHeight;
+    if (y < 0) y = -_gomita(-y / alto, alto);   /* hacia arriba, se resiste */
+    _pintarHoja(y);
+
+    _hoja.muestras.push({ y: e.clientY, t: (e.timeStamp || 0) });
+    if (_hoja.muestras.length > 12) _hoja.muestras.shift();
+    e.preventDefault();
+  }
+
+  function suelta(e){
+    if (!_hoja || e.pointerId !== _hoja.id) return;
+    var h = _hoja;
+    _hoja = null;
+    caja.classList.remove("arrastrando");
+    $("modalFondo").classList.remove("arrastrando");
+    if (!h.movio) return;
+
+    /* Velocidad de los últimos 100 ms, no de todo el recorrido. Es la
+       diferencia entre leer el gesto y leer el promedio del gesto: si alguien
+       baja la hoja, se arrepiente y la sube justo antes de soltar, el promedio
+       sigue diciendo «iba para abajo» y la hoja se cierra en contra de lo que
+       pidió. Los últimos milímetros son los que llevan la intención. */
+    var b = h.muestras[h.muestras.length - 1];
+    var recientes = h.muestras.filter(function(m){ return b.t - m.t <= 100; });
+    if (recientes.length < 2) recientes = h.muestras.slice(-2);
+    var a = recientes[0];
+    var dt = Math.max(1, b.t - a.t);
+    var vel = (b.y - a.y) / dt * 1000;        /* px por segundo */
+
+    var y = _yDeLaHoja(caja);
+    var alto = caja.getBoundingClientRect().height || window.innerHeight;
+    var proyectado = y + _proyectar(vel);
+    var cierra = proyectado > alto * 0.32;
+
+    if (cierra && hayCambiosSinGuardar()){
+      /* La hoja vuelve y la pregunta aparece: el gesto no decide por el que
+         cargó los datos. */
+      _volverHoja(y, vel);
+      cerrarModalPedido();
+      return;
+    }
+    if (cierra){ _irseHoja(y, vel, alto); return; }
+    _volverHoja(y, vel);
+  }
+
+  function _volverHoja(y, vel){
+    if (!y){ _pintarHoja(0); return; }
+    _hojaResorte(y, 0, vel, function(){
+      caja.style.transform = ""; $("modalFondo").style.opacity = "";
+    });
+  }
+
+  function _irseHoja(y, vel, alto){
+    _hojaResorte(y, alto + 40, vel, function(){
+      cerrarModal();
+      /* Se queda fuera de la pantalla hasta que el cierre termina: si se le
+         sacara el transform acá, volvería al centro por un cuadro antes de
+         desaparecer, que es exactamente el salto que se quiere evitar. */
+      setTimeout(function(){
+        caja.style.transform = ""; $("modalFondo").style.opacity = "";
+      }, MS_CIERRE_MODAL + 60);
+    });
+  }
+
+  function _hojaResorte(desde, hasta, vel, fin){
+    _hojaVolviendo = _resorte(desde, hasta, {
+      amortiguacion: 1,        /* sin rebote: una hoja no rebota contra el marco */
+      respuesta: 0.32,
+      velocidad: vel,          /* la del dedo: sin costura entre arrastrar y animar */
+      paso: _pintarHoja,
+      fin: function(){ _hojaVolviendo = null; if (fin) fin(); }
+    });
+    return _hojaVolviendo;
+  }
+
+  [agarre, cuerpo].forEach(function(el){
+    el.addEventListener("pointerdown", arranca);
+    el.addEventListener("pointermove", mueve);
+    el.addEventListener("pointerup", suelta);
+    el.addEventListener("pointercancel", suelta);
+  });
+}
+_engancharHoja();
 
 /* input y change burbujean, así que alcanza con escucharlos en el contenedor:
    sirve para lo que ya está y para lo que se agregue después. */
@@ -11738,7 +12013,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v79";
+var VERSION_APP = "v80";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
