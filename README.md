@@ -234,6 +234,45 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## La hoja del teléfono se agarra
+
+En el celular el modal no es una ventana: es una hoja que sube desde abajo.
+Hasta ahora sólo se podía cerrar con la ✕ de la esquina de arriba — el camino
+largo para el pulgar, veinte veces por día. Ahora **se agarra y se baja**, con
+una barrita arriba que lo dice sin una palabra.
+
+Cuatro cosas hacen que se sienta un objeto y no una animación:
+
+- **Va pegada al dedo, 1 a 1**, desde donde se la agarró.
+- **Hacia arriba se resiste cada vez más** en vez de frenar en seco: lo que se
+  resiste de a poco se lee como «hay algo, pero no hay más».
+- **Al soltar decide por a dónde iba, no por dónde quedó.** Se proyecta la
+  velocidad —la misma cuenta que usa el scroll para frenar— así que un envión
+  corto y rápido la cierra aunque haya recorrido tres centímetros, y bajarla
+  despacio y poco no.
+- **Se puede volver a agarrar en pleno regreso.** El movimiento arranca siempre
+  del valor que está *en pantalla*, no del final, así que agarrarla en el medio
+  del camino no la hace saltar.
+
+La velocidad se mide sobre los **últimos 100 ms**, no sobre todo el recorrido: si
+alguien baja la hoja, se arrepiente y la sube justo antes de soltar, el promedio
+del gesto seguiría diciendo «iba para abajo» y la cerraría en contra de lo que
+pidió.
+
+El velo del fondo se aclara a medida que la hoja baja, así el gesto se entiende
+sin haberlo terminado; y al agarrarla, las esquinas de arriba se redondean y
+aparece una sombra: la hoja se despega del marco.
+
+Para que se pueda agarrar de cualquier lado, el gesto también arranca desde el
+cuerpo del formulario — pero **sólo si ya está arriba de todo y el dedo va hacia
+abajo**; si no, está scrolleando, y sobre un campo o un botón nunca.
+
+⚠️ **Si hay cambios sin guardar, el gesto no cierra nada.** La hoja vuelve sola
+a su lugar y aparece la misma pregunta que con la ✕. Un gesto rápido no puede
+perder lo que uno cargó.
+
+En la computadora nada de esto aparece: ahí sigue siendo una ventana centrada.
+
 ## El total de honorarios de cada mes
 
 El cuadro de Honorarios tenía los cuatro indicadores del **año** arriba y la
