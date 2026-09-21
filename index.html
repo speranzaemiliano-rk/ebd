@@ -1346,6 +1346,7 @@ tbody tr:hover{background:#FAFAFC}
           style="font-size:11.5px;color:var(--gris2);letter-spacing:.005em">&nbsp;</span>
     <div class="sep"></div>
     <button class="btn sec chico oculto" id="btnInstalar" title="Instalar como aplicación">⬇<span class="solo-ancho"> Instalar app</span></button>
+    <button class="btn-icono" id="btnBandeja" title="Abrir la casilla del estudio">✉️</button>
     <button class="btn-icono" id="btnBuscar" title="Buscar en todo (Ctrl+K)">🔍</button>
     <button class="btn-icono" id="btnBoveda" title="Bóveda de claves">🔒</button>
     <div class="chip-user">
@@ -3236,6 +3237,8 @@ function cargarTodo(){
       ESTADO.config.plantilla = PLANTILLA_DEFECTO;
       ref("config/plantilla").set(PLANTILLA_DEFECTO);
     }
+    /* Recién acá se sabe qué casilla tiene configurada el estudio. */
+    _refrescarTituloBandeja();
 
     /* Primera vez: el municipio con el que arrancó el estudio, para que la
        tabla no esté vacía el primer día. Se agrega sólo si no hay ninguno;
@@ -5980,6 +5983,35 @@ function urlDeCorreo(para, asunto, cuerpo){
     "&to=" + encodeURIComponent(para || "") +
     "&su=" + encodeURIComponent(asunto || "") +
     "&body=" + encodeURIComponent(cuerpo || "");
+}
+
+/* ---------- LA CASILLA DEL ESTUDIO, A UN TOQUE ----------
+   El resto del sistema abre Gmail para ESCRIBIR uno. Esto es lo otro: la
+   bandeja de entrada, para leer lo que llegó. Va a la casilla configurada y no
+   a una escrita a mano acá, así que si mañana el estudio cambia de dirección
+   en Configuración, el botón la sigue sin tocar el programa.
+
+   El `authuser` es por si en el navegador hay varias cuentas de Google
+   abiertas: sin eso, Gmail abre la que quedó logueada de última, que en una
+   computadora compartida es cualquiera. */
+function urlDeLaBandeja(){
+  return "https://mail.google.com/mail/u/?authuser=" +
+    encodeURIComponent(configCorreo().cuenta);
+}
+
+$("btnBandeja").onclick = function(){
+  var cuenta = configCorreo().cuenta;
+  /* La pestaña se abre con un enlace de verdad y no con window.open: una
+     pestaña abierta por código es un pop-up para el navegador. */
+  _clickEnlace(urlDeLaBandeja(), true);
+  toast("Abriendo " + cuenta, "ok");
+};
+
+/* El título dice de qué casilla se trata, y se actualiza si la cambian en
+   Configuración: un botón que no dice a dónde lleva no se toca. */
+function _refrescarTituloBandeja(){
+  var b = $("btnBandeja");
+  if (b) b.title = "Abrir la casilla del estudio (" + configCorreo().cuenta + ")";
 }
 
 /* ==========================================================================
@@ -10945,7 +10977,9 @@ $("btnGuardarEstudio").onclick = function(){
               correoModo:$("cfgCorreoModo").value,
               correoCuenta:$("cfgCorreoCuenta").value.trim() };
   ref("config/estudio").set(cfg).then(function(){
-    ESTADO.config.estudio = cfg; toast("Datos guardados", "ok");
+    ESTADO.config.estudio = cfg;
+    _refrescarTituloBandeja();
+    toast("Datos guardados", "ok");
   });
 };
 /* ---------- ADJUNTAR EN GMAIL, EN CONFIGURACIÓN ---------- */
@@ -12013,7 +12047,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v80";
+var VERSION_APP = "v81";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
