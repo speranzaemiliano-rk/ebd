@@ -234,6 +234,25 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## La casilla del estudio, a un toque
+
+En la barra de arriba hay un botón **✉️** que abre la casilla de
+**ebdconsultores@gmail.com** en una pestaña nueva. Está al lado del buscador,
+así que se llega desde cualquier pantalla.
+
+Es lo otro que faltaba del correo: el resto del sistema abre Gmail para
+**escribir** uno (el mail del mes, la liquidación); esto abre la **bandeja de
+entrada**, para leer lo que llegó.
+
+Dos detalles que importan:
+
+- Va a la casilla **configurada**, no a una escrita a mano en el programa: si
+  mañana el estudio cambia de dirección en **Configuración → Casilla de Gmail
+  del estudio**, el botón la sigue sola, y el título del botón también.
+- Lleva `authuser`, igual que el resto del sistema: si en el navegador hay
+  varias cuentas de Google abiertas, sin eso Gmail abre la que quedó logueada
+  de última — en una computadora compartida, cualquiera.
+
 ## La hoja del teléfono se agarra
 
 En el celular el modal no es una ventana: es una hoja que sube desde abajo.
