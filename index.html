@@ -6785,15 +6785,15 @@ function vistaLiquidacionesCliente(id, c){
     var liq = liqDe(id, p), tot = totalLiq(c, liq);
     html += "<tr><td>" + periodoLargo(p) + "</td>";
     cols.forEach(function(i){
-      if (exentoDe(c, i.clave)){ html += '<td class="num"><span class="badge b-verde">exento</span></td>'; return; }
-      var m = (liq[i.clave] || {}).monto || 0;
-      html += '<td class="num"' + (m ? "" : ' style="color:var(--amar)"') + ">" + (m ? pesos(m) : "falta") + "</td>";
+      html += celdaImpuestoLiqHTML(celdaImpuestoLiq(c, liq, i.clave));
     });
-    var veps = cols.filter(function(i){ return (liq[i.clave] || {}).vep || (liq[i.clave] || {}).vepArchivo; }).length;
-    var pedidos = cols.filter(function(i){ return !exentoDe(c, i.clave); }).length;
+    /* El contador de VEP y el estado salen de _estadoLiqDe, el mismo que usa la
+       grilla mensual: antes se recalculaban acá a mano y las dos pantallas
+       podían decir cosas distintas del mismo mes. */
+    var e = _estadoLiqDe(id, p);
     html += '<td class="num"><b>' + pesos(tot) + "</b></td>" +
-      '<td><span class="badge ' + (veps ? "b-verde" : "b-gris") + '">' + veps + "/" + pedidos + "</span></td>" +
-      "<td>" + badgeEstadoLiq(liq.enviado ? "enviado" : (liq.completada ? "completa" : (tot ? "listo" : "pendiente"))) + "</td>" +
+      '<td><span class="badge ' + (e.veps ? "b-verde" : "b-gris") + '">' + e.veps + "/" + e.pedidos + "</span></td>" +
+      "<td>" + badgeEstadoLiq(e.estado) + "</td>" +
       '<td><button class="btn sec chico" onclick="editarLiquidacion(\'' + id + "','" + p + '\')">' +
         (puedeEscribir() ? "Cargar" : "Ver") + "</button></td></tr>";
   });
@@ -8250,6 +8250,50 @@ function badgeEstadoLiq(estado){
   return '<span class="badge ' + e[0] + '">' + e[1] + "</span>";
 }
 
+/* ---------- QUÉ DICE LA CELDA DE UN IMPUESTO EN UN MES ----------
+   Vive en un solo lugar a propósito. La grilla mensual y la ficha del cliente
+   muestran lo mismo y lo decidían por su cuenta, así que iban quedando
+   distintas: la ficha no sabía del régimen simplificado de AGIP ni del
+   Monotributo Unificado de ARBA y decía «falta» donde la grilla decía «—».
+   Dos pantallas que dicen cosas distintas del mismo mes es peor que cualquiera
+   de las dos equivocada: no se sabe a cuál creerle.
+
+   `falta` es la única verdad de «este mes está esperando un importe», y de ahí
+   salen el estado del mes y el filtro «le falta algo». */
+function celdaImpuestoLiq(c, liq, clave){
+  if (exentoDe(c, clave))
+    return { tipo:"exento", texto:"exento", badge:"b-verde", falta:false };
+
+  if (clave === "arba" && unificadoArba(c))
+    return { tipo:"unificado", texto:"unificado", badge:"b-azul",
+             titulo:"Va adentro de la cuota del monotributo", falta:false };
+
+  var d = (liq || {})[clave] || {};
+  var m = d.monto || 0;
+  /* Con importe cargado no hay nada que discutir, aunque esté tildado «sin
+     boleta»: lo que hay manda sobre lo que se dijo que no iba a haber. */
+  if (m) return { tipo:"monto", monto:m, falta:false };
+
+  if (d.sinBoleta)
+    return { tipo:"sinboleta", texto:"—", titulo:"Marcado: este mes no hay boleta", falta:false };
+
+  if (((c.iibb || {})[clave] || {}).simplificado)
+    return { tipo:"simpl", texto:"—",
+             titulo:"Régimen simplificado: el importe es fijo por categoría", falta:false };
+
+  return { tipo:"falta", texto:"falta", falta:true };
+}
+
+/* El HTML de esa celda, para las dos tablas. */
+function celdaImpuestoLiqHTML(info){
+  if (info.tipo === "monto") return '<td class="num">' + pesos(info.monto) + "</td>";
+  if (info.badge)
+    return '<td class="num"><span class="badge ' + info.badge + '"' +
+      (info.titulo ? ' title="' + esc(info.titulo) + '"' : "") + ">" + esc(info.texto) + "</span></td>";
+  return '<td class="num"' + (info.falta ? ' style="color:var(--amar)"' : "") +
+    (info.titulo ? ' title="' + esc(info.titulo) + '"' : "") + ">" + esc(info.texto) + "</td>";
+}
+
 function _estadoLiqDe(id, periodo){
   var c = ESTADO.clientes[id], liq = liqDe(id, periodo);
   var pedidos = 0, sinCargar = [], veps = 0;
@@ -8258,10 +8302,13 @@ function _estadoLiqDe(id, periodo){
     if (exentoDe(c, i.clave)) return;
     /* En el Unificado, el pago de ARBA ES el del monotributo: no tiene VEP
        propio, así que contarlo entre los pedidos dejaría el contador en 2/3
-       para siempre. */
+       para siempre. Lo mismo un mes marcado sin boleta: no hay papel que
+       esperar. */
     if (i.clave === "arba" && unificadoArba(c)) return;
+    var info = celdaImpuestoLiq(c, liq, i.clave);
+    if (info.tipo === "sinboleta") return;
     pedidos++;
-    if (!((liq[i.clave] || {}).monto) && !((c.iibb || {})[i.clave] || {}).simplificado) sinCargar.push(i.clave);
+    if (info.falta) sinCargar.push(i.clave);
     if ((liq[i.clave] || {}).vep || (liq[i.clave] || {}).vepArchivo) veps++;
   });
   var tot = totalLiq(c, liq);
@@ -8385,21 +8432,10 @@ function pintarFilasLiquidacion(){
     IMPUESTOS.forEach(function(i){
       if (!(c.impuestos && c.impuestos[i.clave])){
         fila += '<td class="num" style="color:var(--gris2)">—</td>';
-      } else if (exentoDe(c, i.clave)){
-        fila += '<td class="num"><span class="badge b-verde">exento</span></td>';
       } else {
-        var m = (liq[i.clave] || {}).monto || 0;
-        totales[i.clave] += m;
-        /* Un simplificado sin importe puede ser un mes sin boleta, no un
-           olvido: se muestra con un guion, no con «falta» en amarillo. */
-        var simpl = ((c.iibb || {})[i.clave] || {}).simplificado;
-        if (i.clave === "arba" && unificadoArba(c)){
-          /* Acá no falta nada: está adentro de la cuota del monotributo. */
-          fila += '<td class="num"><span class="badge b-azul" title="Va adentro de la cuota del monotributo">unificado</span></td>';
-        } else {
-          fila += '<td class="num"' + (m || simpl ? "" : ' style="color:var(--amar)"') + ">" +
-            (m ? pesos(m) : (simpl ? "—" : "falta")) + "</td>";
-        }
+        var info = celdaImpuestoLiq(c, liq, i.clave);
+        if (info.tipo === "monto") totales[i.clave] += info.monto;
+        fila += celdaImpuestoLiqHTML(info);
       }
     });
 
@@ -8828,11 +8864,43 @@ function _traeNroDeVep(clave){
   return t === undefined || t === "vep" || t === "pago" || t === "boleta";
 }
 
+/* `campo` es el final del id en pantalla, `guarda` el nombre con el que vive en
+   la base: no son iguales (vto / vencimiento) y hacen falta los dos. */
 var CAMPOS_VEP = [
-  { dato:"importe",     campo:"monto", rotulo:"Importe" },
-  { dato:"nroVep",      campo:"vep",   rotulo:"Nº de VEP" },
-  { dato:"vencimiento", campo:"vto",   rotulo:"Vencimiento" }
+  { dato:"importe",     campo:"monto", guarda:"monto",       rotulo:"Importe" },
+  { dato:"nroVep",      campo:"vep",   guarda:"vep",         rotulo:"Nº de VEP" },
+  { dato:"vencimiento", campo:"vto",   guarda:"vencimiento", rotulo:"Vencimiento" }
 ];
+
+/* ---------- LO QUE SACA EL PAPEL SE GUARDA SOLO ----------
+   El papel se guarda apenas se sube. El importe que sale de él, hasta ahora,
+   no: se escribía en la pantalla y se perdía si el cuadro se cerraba sin
+   apretar Guardar. Dos mitades de una misma acción que se guardaban distinto,
+   y la segunda sin que nada lo dijera.
+
+   El síntoma era exactamente éste: la boleta municipal archivada y el mes
+   diciendo «falta» para siempre, con el usuario seguro de haberlo cargado. */
+function _guardarDatosDelPapel(clave, campos){
+  if (!_liqActual || !campos || !Object.keys(campos).length) return Promise.resolve();
+  var cli = _liqActual.clienteId, per = _liqActual.periodo;
+  var base = "liquidaciones/" + cli + "/" + per + "/" + clave + "/";
+  var upd = {};
+  Object.keys(campos).forEach(function(k){ upd[base + k] = campos[k]; });
+
+  /* Por ruta puntual y no escribiendo el nodo entero: al lado viven el archivo
+     del VEP y el link, que este camino no conoce y no tiene por qué pisar. */
+  return ref("").update(upd).then(function(){
+    /* La copia en memoria también, o la grilla de atrás sigue diciendo «falta»
+       hasta recargar. */
+    var L = ESTADO.liquidaciones;
+    if (!L[cli]) L[cli] = {};
+    if (!L[cli][per]) L[cli][per] = {};
+    if (!L[cli][per][clave]) L[cli][per][clave] = {};
+    Object.keys(campos).forEach(function(k){ L[cli][per][clave][k] = campos[k]; });
+  }).catch(function(e){
+    toast("Lo leí pero no pude guardarlo: " + explicarError(e) + ". Apretá Guardar.", "error");
+  });
+}
 
 function leerPapelDeLiquidacion(clave, reintento){
   var campo = $("lq_" + clave + "_file");
@@ -8903,13 +8971,25 @@ function leerPapelDeLiquidacion(clave, reintento){
     var saturado = _geminiSaturado(e);
     /* No se pudo verificar: entra igual, pero se dice que no se revisó. */
     guardarElPapel().catch(function(){});
-    est.innerHTML = '<div class="aviso warn"><span>⚠️</span><div>' +
+    /* Lo que más confunde no es que la IA falle: es creer que el importe entró
+       porque el papel entró. El papel se guarda igual —perderlo sería peor—
+       pero el importe sigue vacío, y eso hay que decirlo con todas las letras.
+       Pasó de verdad: una boleta municipal archivada y el mes diciendo «falta»
+       durante semanas. */
+    var montoEl = $("lq_" + clave + "_monto");
+    var sinImporte = montoEl && !String(montoEl.value || "").trim();
+    est.innerHTML = '<div class="aviso ' + (sinImporte ? "bad" : "warn") + '"><span>' +
+      (sinImporte ? "🚫" : "⚠️") + "</span><div>" +
       (saturado
         ? "<b>La IA está saturada.</b> No es tu archivo ni la clave: es Google, que por momentos no da abasto. " +
           "Lo intenté " + (ESPERAS_GEMINI.length + 1) + " veces."
         : "No pude leerlo: " + esc(e.message || String(e))) +
       " <b>No pude revisar que sea de " + esc(corto) + " y de este período</b>, así que lo dejé adjunto sin verificar. " +
-      '<a href="#" onclick="leerPapelDeLiquidacion(\'' + clave + '\',true);return false;">Probar de nuevo</a>' +
+      (sinImporte
+        ? '<div style="margin-top:8px"><b>El papel quedó guardado, pero el importe sigue vacío.</b> ' +
+          "Escribilo a mano acá arriba y apretá <b>Guardar</b>, o el mes va a seguir diciendo «falta».</div>"
+        : "") +
+      '<div style="margin-top:8px"><a href="#" onclick="leerPapelDeLiquidacion(\'' + clave + '\',true);return false;">Probar de nuevo</a></div>' +
       (saturado ? '<div class="ayuda" style="margin-top:6px">Si sigue pasando, en <b>Configuración → Asistente (IA)</b> ' +
         "podés poner otro modelo.</div>" : "") + "</div></div>";
   });
@@ -8970,6 +9050,7 @@ function _avisoPapelLeido(clave, corto, d){
       "</b>, un período anterior al de esta liquidación (<b>" + periodoLargo(_liqActual.periodo) + "</b>).");
   }
 
+  var aGuardar = {};
   CAMPOS_VEP.forEach(function(cv){
     var valor = d[cv.dato];
     if (valor === null || valor === undefined || valor === "") return;
@@ -8980,6 +9061,7 @@ function _avisoPapelLeido(clave, corto, d){
     var texto = cv.campo === "monto" ? pesos(valor) : String(valor);
     if (!actual){
       el.value = cv.campo === "monto" ? (parseFloat(valor) || "") : valor;
+      aGuardar[cv.guarda] = cv.campo === "monto" ? (parseFloat(valor) || 0) : valor;
       completados.push(cv.rotulo + ": " + texto);
     } else if (actual !== String(valor)){
       distintos.push('<div style="margin-top:4px">' + esc(cv.rotulo) + " — el papel dice <b>" + esc(texto) +
@@ -8988,6 +9070,8 @@ function _avisoPapelLeido(clave, corto, d){
     }
   });
 
+  _guardarDatosDelPapel(clave, aGuardar);
+
   var html = "";
   if (avisos.length){
     html += '<div class="aviso warn"><span>📅</span><div>' + avisos.join("<br>") + "</div></div>";
@@ -8995,7 +9079,7 @@ function _avisoPapelLeido(clave, corto, d){
   html += '<div class="aviso ' + (completados.length ? "ok" : "info") + '"><span>' +
     (completados.length ? "✓" : "ℹ️") + "</span><div>" +
     (completados.length
-      ? "Completé del papel — " + esc(completados.join(" · "))
+      ? "Completé del papel y <b>lo guardé</b> — " + esc(completados.join(" · "))
       : "Del papel no saqué ningún dato nuevo" + (distintos.length ? "" : ": cargalos a mano")) +
     (distintos.length ? distintos.join("") : "") +
     "</div></div>";
@@ -9009,6 +9093,9 @@ function usarDatoDelPapel(clave, dato){
   var el = $("lq_" + clave + "_" + cv.campo);
   if (!el) return;
   el.value = cv.campo === "monto" ? (parseFloat(d[dato]) || "") : d[dato];
+  var campos = {};
+  campos[cv.guarda] = cv.campo === "monto" ? (parseFloat(d[dato]) || 0) : d[dato];
+  _guardarDatosDelPapel(clave, campos);
   _modalSucio = true;
   toast(cv.rotulo + " actualizado con lo del papel", "ok");
 }
@@ -9086,6 +9173,11 @@ function editarLiquidacion(clienteId, periodo){
         '<div class="campo"><label>Vence el</label>' +
           '<input type="date" id="lq_' + i.clave + '_vto" value="' + esc(d.vencimiento || "") + '"></div>' +
       "</div>" +
+      /* Un mes sin boleta no es un olvido. Sin esto, la única forma de que
+         el mes dejara de decir «falta» era inventar un importe. */
+      '<label class="check"><input type="checkbox" id="lq_' + i.clave + '_sinbol"' +
+        (d.sinBoleta ? " checked" : "") + "> Este mes <b>no hay boleta</b> de " + esc(i.corto) +
+        " — nada que pagar</label>" +
       (i.clave === "arca" ? "" :
         '<div class="campo"><label>Retenciones y percepciones del mes</label>' +
           '<input type="number" step="0.01" id="lq_' + i.clave + '_ret" value="' + (d.retenciones || "") +
@@ -9373,6 +9465,7 @@ function guardarLiquidacion(clienteId, periodo){
       var ret = $("lq_" + i.clave + "_ret");
       datos[i.clave] = {
         monto: parseFloat($("lq_" + i.clave + "_monto").value) || 0,
+        sinBoleta: !!($("lq_" + i.clave + "_sinbol") || {}).checked,
         vep: $("lq_" + i.clave + "_vep").value.trim(),
         vencimiento: $("lq_" + i.clave + "_vto").value,
         link: $("lq_" + i.clave + "_link").value.trim(),
@@ -12047,7 +12140,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v81";
+var VERSION_APP = "v82";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
