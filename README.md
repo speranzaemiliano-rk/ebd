@@ -6,6 +6,38 @@ recategorización semestral.
 
 **En línea:** <https://speranzaemiliano-rk.github.io/ebd/>
 
+## La lista del mes, en Inicio
+
+El trabajo del estudio es un mes y una lista de clientes: quién está liquidado y
+quién no. Eso vivía repartido entre un recuadro que decía un número y la grilla
+de **Liquidación**, a dos clics.
+
+Ahora **Inicio** abre con la lista entera de los clientes activos del mes en
+curso, y **lo liquidado se tacha solo**. Un cliente cuenta como liquidado por
+tres motivos, en este orden:
+
+1. **el mail del mes ya salió** —lleva la pastilla «Enviado»—;
+2. **está tildado a mano**, acá o en «Mes completado» del cuadro de liquidación
+   —es la misma marca: dos casilleros que dicen lo mismo guardan lo mismo—;
+3. **no falta ningún importe**. Éste es el que más vale, porque nadie va a ir a
+   marcar a mano lo que el sistema ya sabe. Es el mismo «falta» de la grilla, así
+   que un **exento**, un **Monotributo Unificado** o un mes marcado **«sin
+   boleta»** no lo trancan; y un cliente al que este mes no se le pide nada
+   también sale tachado.
+
+Cuando se tacha solo, el casillero queda **trabado**: destildarlo no cambiaría
+nada —el sistema lo volvería a tachar— y el título dice por qué está tachado.
+El que todavía falta dice **qué** falta («falta ARBA, Municipal») y, tocándole el
+nombre, se abre su liquidación.
+
+Arriba hay **‹ • ›** para mirar otro mes (el **•** vuelve al mes en curso), el
+contador «3 de 12 liquidados» y un casillero para **esconder los liquidados**
+cuando sólo interesa lo que queda.
+
+> El recuadro **«Sin liquidar este mes»** contaba por una marca que **nadie
+> escribía**: daba siempre el total de clientes, mes tras mes. Ahora cuenta lo
+> mismo que la lista.
+
 ## Buscador general
 
 La lupa de la barra —o **Ctrl+K** (⌘K en Mac)— abre un buscador que mira en

@@ -958,6 +958,15 @@ tbody tr:hover{background:#FAFAFC}
 .lista-simple .crece{flex:1;min-width:0}
 .lista-simple .tit{font-weight:500}
 .lista-simple .sub{color:var(--gris);font-size:12.5px}
+/* Lo liquidado se tacha. No se esconde: ver lo hecho al lado de lo que falta
+   es la mitad de para qué sirve una lista así. */
+.lista-simple li.hecho .tit{text-decoration:line-through;color:var(--gris);font-weight:400}
+.lista-simple li.hecho{opacity:.72}
+.lista-simple li .nombre-boton{
+  background:none;border:none;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer;
+}
+.lista-simple li .nombre-boton:hover{color:var(--azul-link)}
+.lista-liq{max-height:420px;overflow-y:auto}
 
 /* Título de sección: en minúscula y con peso, no versalita espaciada */
 .seccion-tit{
@@ -1442,6 +1451,21 @@ tbody tr:hover{background:#FAFAFC}
         <div class="kpi bad"><div class="lbl">Deben recategorizar</div><div class="val" id="kpiRecat">—</div><div class="pie">al corte vigente</div></div>
         <div class="kpi warn"><div class="lbl">Cerca del tope</div><div class="val" id="kpiCerca">—</div><div class="pie">más del 85% del tope</div></div>
         <div class="kpi"><div class="lbl">Sin liquidar este mes</div><div class="val" id="kpiSinLiq">—</div><div class="pie" id="kpiPeriodo">&nbsp;</div></div>
+      </div>
+
+      <!-- La lista del mes: quién está liquidado y quién no, de un vistazo.
+           Es el trabajo del estudio puesto en una sola lista, y lo hecho se
+           tacha solo. -->
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-head">
+          <h2>Liquidación de <span id="homeMesTxt">—</span></h2>
+          <button class="btn-icono" id="homeMesAnt" title="Mes anterior">‹</button>
+          <button class="btn-icono" id="homeMesHoy" title="Volver al mes en curso">•</button>
+          <button class="btn-icono" id="homeMesSig" title="Mes siguiente">›</button>
+          <span class="badge b-gris" id="homeLiqCuenta">—</span>
+          <label class="check"><input type="checkbox" id="homeVerHechos" checked> Ver también los liquidados</label>
+        </div>
+        <div id="homeLiqMes"></div>
       </div>
 
       <div class="grid g2">
@@ -3535,17 +3559,22 @@ function llenarAnios(){
 function renderHome(){
   var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
   var corte = cortesDisponibles()[0];
-  var per = periodoHoy();
+  var per = homeMes();
 
-  var suben = 0, cerca = 0, sinLiq = 0, filas = [];
+  /* La lista del mes se arma primero: de ahí sale también el número del KPI,
+     para que el recuadro y la lista no puedan decir cosas distintas.
+     ⚠️ El KPI contaba por `liq.cerrada`, una marca que NADIE escribe: daba
+     siempre el total de clientes, mes tras mes, y nadie le creía. */
+  var delMes = _homeLiqFilas(per);
+  var sinLiq = delMes.filter(function(f){ return !f.hecho; }).length;
+
+  var suben = 0, cerca = 0, filas = [];
   ids.forEach(function(id){
     var cli = ESTADO.clientes[id];
     if (cli.impuestos && cli.impuestos.arca === false) return;
     var an = analizar(id, corte ? corte.valor : per);
     if (an.estado === "sube" || an.estado === "excluido") suben++;
     if (an.estado === "cerca") cerca++;
-    var liq = (ESTADO.liquidaciones[id] || {})[per];
-    if (!liq || !liq.cerrada) sinLiq++;
     filas.push({ id:id, cli:cli, an:an });
   });
 
@@ -3604,7 +3633,138 @@ function renderHome(){
     return '<li><div class="crece"><div class="tit">' + esc(v.que) + '</div><div class="sub">' + esc(v.cuando) + "</div></div>" +
       '<span class="badge b-gris">' + esc(v.quien) + "</span></li>";
   }).join("") + "</ul>";
+
+  _pintarLiqDelMes(per, delMes);
 }
+
+/* ---------- LA LISTA DEL MES ----------
+   El trabajo del estudio es un mes y una lista de clientes: quién está
+   liquidado y quién no. Eso vivía repartido entre un recuadro que decía un
+   número y la grilla de Liquidación, a dos clics de distancia.
+
+   Qué cuenta como hecho, en este orden:
+   1. el mail del mes ya salió (`enviado`);
+   2. está tildado a mano, acá o en «Mes completado» del cuadro (`completada`);
+   3. no falta ningún importe — y esto es lo que más vale, porque nadie va a
+      ir a marcar a mano lo que el sistema ya sabe. Es el mismo `falta` de la
+      grilla (`_estadoLiqDe` → `celdaImpuestoLiq`), así que un exento, un
+      Monotributo Unificado o un mes marcado «sin boleta» no lo trancan.
+
+   Un cliente al que este mes no se le pide nada (todo exento o unificado)
+   también va tachado: no hay nada que esperar de él. */
+var _homePeriodo = null;
+
+function homeMes(){ return _homePeriodo || periodoHoy(); }
+
+function homeMoverMes(delta){
+  var p = homeMes();
+  var a = parseInt(p.slice(0,4), 10), m = parseInt(p.slice(4), 10) + delta;
+  while (m < 1){ m += 12; a--; }
+  while (m > 12){ m -= 12; a++; }
+  _homePeriodo = a + String(m).padStart(2, "0");
+  renderHome();
+}
+
+function _cortoImpuesto(clave){
+  var i = IMPUESTOS.filter(function(x){ return x.clave === clave; })[0];
+  return i ? i.corto : clave;
+}
+
+function _homeLiqFilas(per){
+  return Object.keys(ESTADO.clientes)
+    .filter(function(id){ return ESTADO.clientes[id].activo !== false; })
+    .map(function(id){
+      var e = _estadoLiqDe(id, per), liq = e.liq;
+      /* Sin nada pedido no hay nada que esperar: cuenta como hecho. */
+      var solo = e.pedidos > 0 ? !e.sinCargar.length : true;
+      return {
+        id: id, nombre: ESTADO.clientes[id].razonSocial || "", e: e,
+        solo: solo, enviado: !!liq.enviado, aMano: !!liq.completada,
+        hecho: !!liq.enviado || !!liq.completada || solo
+      };
+    })
+    .sort(function(a, b){
+      /* Lo que falta arriba: una lista de tareas se lee por lo que queda. */
+      if (a.hecho !== b.hecho) return a.hecho ? 1 : -1;
+      return a.nombre.localeCompare(b.nombre);
+    });
+}
+
+function _pintarLiqDelMes(per, filas){
+  var cont = $("homeLiqMes");
+  if (!cont) return;
+  $("homeMesTxt").textContent = periodoLargo(per);
+
+  var hechos = filas.filter(function(f){ return f.hecho; }).length;
+  $("homeLiqCuenta").textContent = hechos + " de " + filas.length + " liquidados";
+
+  if (!filas.length){
+    cont.innerHTML = '<div class="vacio"><div class="ico">👥</div><div>Todavía no hay clientes activos.</div></div>';
+    return;
+  }
+
+  var verHechos = ($("homeVerHechos") || {}).checked !== false;
+  var muestra = verHechos ? filas : filas.filter(function(f){ return !f.hecho; });
+
+  if (!muestra.length){
+    cont.innerHTML = '<div class="vacio"><div class="ico">✅</div><div>No queda ninguno sin liquidar en ' +
+      periodoLargo(per) + ".</div></div>";
+    return;
+  }
+
+  var puede = puedeEscribir();
+  cont.innerHTML = '<ul class="lista-simple lista-liq">' + muestra.map(function(f){
+    var e = f.e, sub;
+    if (!e.pedidos)                sub = "nada que liquidar este mes";
+    else if (e.sinCargar.length)   sub = "falta " + e.sinCargar.map(_cortoImpuesto).join(", ");
+    else                           sub = e.pedidos + (e.pedidos === 1 ? " impuesto cargado" : " impuestos cargados") +
+                                         (e.total ? " · " + pesos(e.total) : "");
+    /* Por qué está tachado, que no es lo mismo en los tres casos. */
+    var porque = f.enviado ? "El mail del mes ya salió"
+               : (f.solo && e.pedidos ? "Ya están todos los importes cargados"
+               : (f.solo ? "Este mes no se le pide nada" : "Marcado a mano"));
+    /* El tilde sólo se toca cuando hay algo que decidir: si ya están todos los
+       importes, destildarlo no cambiaría nada y el casillero volvería solo. */
+    var fijo = f.solo || f.enviado;
+    return '<li class="' + (f.hecho ? "hecho" : "") + '">' +
+      '<input type="checkbox"' + (f.hecho ? " checked" : "") +
+        ((!puede || fijo) ? " disabled" : "") +
+        ' title="' + esc(f.hecho ? porque : "Marcarlo como liquidado") + '"' +
+        (puede && !fijo ? ' onchange="homeMarcarLiq(\'' + f.id + "','" + per + '\',this.checked)"' : "") + ">" +
+      '<div class="crece"><button type="button" class="nombre-boton tit" ' +
+        'onclick="homeAbrirLiq(\'' + f.id + "','" + per + '\')" title="Abrir la liquidación">' +
+        esc(f.nombre) + "</button>" +
+      '<div class="sub">' + esc(sub) + "</div></div>" +
+      (f.enviado ? '<span class="badge b-verde">Enviado</span>' : "") +
+      "</li>";
+  }).join("") + "</ul>";
+}
+
+/* El tilde a mano. Escribe la MISMA marca que «Mes completado» del cuadro de
+   liquidación: dos casilleros que dicen lo mismo tienen que guardar lo mismo,
+   o una pantalla contradice a la otra. */
+function homeMarcarLiq(id, per, tildado){
+  ref("liquidaciones/" + id + "/" + per).update({ completada: !!tildado }).then(function(){
+    if (!ESTADO.liquidaciones[id]) ESTADO.liquidaciones[id] = {};
+    ESTADO.liquidaciones[id][per] = Object.assign(ESTADO.liquidaciones[id][per] || {}, { completada: !!tildado });
+    renderHome();
+    toast(tildado ? "Marcado como liquidado" : "Desmarcado", "ok");
+  }).catch(function(e){
+    toast(explicarError(e), "error");
+    renderHome();   /* el casillero vuelve a lo que de verdad hay guardado */
+  });
+}
+
+/* Desde la lista se entra a liquidar, que es lo que uno quiere hacer cuando
+   ve que falta. */
+function homeAbrirLiq(id, per){
+  editarLiquidacion(id, per);
+}
+
+$("homeMesAnt").onclick = function(){ homeMoverMes(-1); };
+$("homeMesSig").onclick = function(){ homeMoverMes(1); };
+$("homeMesHoy").onclick = function(){ _homePeriodo = null; renderHome(); };
+$("homeVerHechos").onchange = function(){ renderHome(); };
 
 function puntoDe(estado){
   if (estado === "ok" || estado === "baja") return "p-verde";
@@ -12395,7 +12555,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v86";
+var VERSION_APP = "v87";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
