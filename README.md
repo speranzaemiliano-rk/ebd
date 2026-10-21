@@ -259,6 +259,25 @@ el CUIT para copiarlo a mano.
 El mismo arreglo va en la bóveda de claves, que tiene el mismo botón de «copiar
 el CUIT y abrir el sitio» con el mismo problema.
 
+## Copiar un importe para pegarlo en el ente
+
+En pantalla un importe se lee **$ 5.763.310,35**, que es como tiene que leerse.
+Pero eso pegado en el formulario de ARCA o de ARBA **no entra**: los formularios
+quieren el número pelado. Sacarle el signo y los puntos a mano, mirando la
+pantalla de al lado, es justo el paso donde se cambia un dígito.
+
+Al lado de cada importe hay ahora un **📋** que lo deja copiado así:
+
+> 5763310,35
+
+Sin signo, sin puntos de miles y con coma decimal. Está en lo emitido y lo
+recibido de cada mes —en la solapa **Comprobantes** del cliente y en la grilla
+general—, en los totales del año, y en la liquidación al lado del botón para
+entrar al organismo, que es donde están **lo facturado del mes** y **la base de
+los doce meses**: los dos números que se copian para liquidar.
+
+Un importe en cero no lleva botón: no hay nada que pegar.
+
 ## «Enviar al cliente» ya no se queda colgado
 
 Pasaba esto: se tocaba **Enviar al cliente**, se abría la pestaña «Preparando el
