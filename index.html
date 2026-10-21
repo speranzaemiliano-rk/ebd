@@ -8672,12 +8672,59 @@ function cuitPelado(c){
   return String(c || "").replace(/\D/g, "");
 }
 
+/* ---------- COPIAR CUANDO ADEMÁS SE ABRE UNA PESTAÑA ----------
+   `navigator.clipboard.writeText` devuelve una promesa y el navegador la
+   rechaza si el documento NO TIENE EL FOCO. El botón «Entrar a …» abre una
+   pestaña nueva en el mismo clic, y eso le saca el foco al documento: para
+   cuando la promesa iba a correr, ya era tarde. El CUIT no se copiaba y encima
+   no se notaba, porque el error se descartaba en silencio.
+
+   Esto copia de la forma vieja —un textarea y execCommand—, que es
+   SINCRÓNICA: termina dentro del clic, antes de que el navegador se lleve el
+   foco a la pestaña nueva. Está obsoleta y es la única que sirve acá. */
+function copiarEnElClic(texto){
+  var ta = document.createElement("textarea");
+  ta.value = String(texto === null || texto === undefined ? "" : texto);
+  /* Fuera de la vista pero NO con display:none ni visibility:hidden: un campo
+     que el navegador considera invisible no se puede seleccionar, y sin
+     selección execCommand no copia nada. */
+  ta.setAttribute("readonly", "readonly");
+  ta.style.position = "fixed";
+  ta.style.top = "0";
+  ta.style.left = "-9999px";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+
+  var ok = false;
+  try {
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);   /* iOS no selecciona con select() solo */
+    ok = document.execCommand("copy");
+  } catch (_) {}
+  document.body.removeChild(ta);
+  return ok;
+}
+
 function copiarCuitDe(clienteId){
   var c = ESTADO.clientes[clienteId] || {};
   if (!c.cuit) return;
-  copiarAlPortapapeles(cuitPelado(c.cuit))
+  var cuit = cuitPelado(c.cuit);
+
+  if (copiarEnElClic(cuit)){
+    toast("CUIT copiado sin guiones: pegalo en el sitio", "ok");
+    return;
+  }
+
+  /* Si la vieja no anduvo, se prueba la moderna igual: en algún navegador
+     puede ser al revés. */
+  copiarAlPortapapeles(cuit)
     .then(function(){ toast("CUIT copiado sin guiones: pegalo en el sitio", "ok"); })
-    .catch(function(){ /* sin portapapeles no se rompe nada */ });
+    .catch(function(){
+      /* Y si ninguna pudo, se dice. Un botón que promete copiar y no copia, en
+         silencio, es peor que uno que no promete nada: uno pega lo que tenía
+         de antes sin mirar. */
+      toast("No pude copiar el CUIT solo. Es " + cuit + " — copialo del renglón de arriba.", "error");
+    });
 }
 
 function bloqueEnteDeLaLiquidacion(clienteId, periodo, clave){
@@ -11657,6 +11704,12 @@ function arCopiar(id, que){
      una clave— se copia tal cual, letra por letra. */
   var texto = $(id).value;
   if (id === "arUsuario" && cuitPelado(texto).length === 11) texto = cuitPelado(texto);
+
+  /* Sincrónico primero: el botón grande de abajo copia el CUIT Y abre el sitio
+     en el mismo clic, y abrir la pestaña le saca el foco al documento, que es
+     lo que la forma moderna necesita para funcionar. */
+  if (copiarEnElClic(texto)){ toast(que + " copiado al portapapeles", "ok"); return; }
+
   copiarAlPortapapeles(texto)
     .then(function(){ toast(que + " copiado al portapapeles", "ok"); })
     .catch(function(){ toast("No pude copiar solo: seleccionalo y copialo a mano.", "error"); });
@@ -12213,7 +12266,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v83";
+var VERSION_APP = "v84";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

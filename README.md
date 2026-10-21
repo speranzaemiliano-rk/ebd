@@ -234,6 +234,27 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## El botón «Entrar a …» vuelve a copiar el CUIT
+
+El botón abre el sitio del organismo **y** deja el CUIT copiado, las dos cosas
+en el mismo clic. Había dejado de copiar — y sin decir nada.
+
+La forma moderna de copiar (`navigator.clipboard.writeText`) devuelve una
+promesa, y el navegador la rechaza si **el documento no tiene el foco**. Abrir
+la pestaña nueva es justamente lo que le saca el foco al documento: para cuando
+la promesa iba a correr, ya era tarde. El error se descartaba en silencio, así
+que el botón prometía copiar, no copiaba, y no avisaba — lo peor de los tres
+mundos, porque uno pega lo que tenía de antes sin mirar.
+
+Ahora se copia con la forma vieja (un `textarea` y `execCommand`), que es
+**sincrónica**: termina adentro del clic, antes de que el navegador se lleve el
+foco. Está obsoleta y es la única que sirve para este caso. Si por lo que sea no
+anduviera, se prueba igual la moderna; y si ninguna pudo, **lo dice** y muestra
+el CUIT para copiarlo a mano.
+
+El mismo arreglo va en la bóveda de claves, que tiene el mismo botón de «copiar
+el CUIT y abrir el sitio» con el mismo problema.
+
 ## «Enviar al cliente» ya no se queda colgado
 
 Pasaba esto: se tocaba **Enviar al cliente**, se abría la pestaña «Preparando el
