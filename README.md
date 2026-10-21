@@ -234,6 +234,46 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## La boleta que subís deja el importe guardado
+
+Pasó de verdad: se subió la boleta de la tasa municipal de un cliente, el papel
+quedó archivado, y el mes siguió diciendo **«falta»** durante semanas.
+
+La causa eran **dos mitades de una misma acción que se guardaban distinto**. El
+papel se guarda apenas se sube. El importe que la IA saca de ese papel, hasta
+ahora, no: se escribía en la pantalla y se perdía al cerrar el cuadro sin
+apretar **Guardar**. Nada lo decía.
+
+Ahora lo que el papel completa **se guarda solo**, por ruta puntual (el importe,
+el número y el vencimiento), sin pisar el archivo del VEP ni el link que viven
+al lado. El cartel lo dice: «Completé del papel **y lo guardé**».
+
+Y cuando la IA **no puede leer el papel** —está saturada, o falla—, el papel se
+archiva igual (perderlo sería peor) pero el aviso ahora dice con todas las
+letras: **«El papel quedó guardado, pero el importe sigue vacío»**, y qué hacer.
+Ése era el agujero exacto: el cartel hablaba del papel y uno entendía que estaba
+todo cargado.
+
+## «Este mes no hay boleta»
+
+Un mes sin boleta no es un olvido, pero la única forma de que dejara de decir
+«falta» era inventar un importe. Cada impuesto tiene ahora su casillero **«Este
+mes no hay boleta — nada que pagar»**: la columna muestra **—** en gris, el mes
+deja de estar esperando ese importe y no pide su VEP. Si igual hay un importe
+cargado, manda el importe.
+
+## Una sola regla para las dos tablas
+
+La grilla mensual y la solapa **Liquidaciones** de la ficha muestran lo mismo y
+lo decidían por su cuenta, así que se habían separado: la ficha no sabía del
+**régimen simplificado** de AGIP ni del **Monotributo Unificado** de ARBA y decía
+«falta» donde la grilla decía «—» o «unificado», y recalculaba el contador de VEP
+y el estado a mano.
+
+Ahora las dos pasan por `celdaImpuestoLiq` y por `_estadoLiqDe`. Dos pantallas
+que dicen cosas distintas del mismo mes es peor que cualquiera de las dos
+equivocada: no se sabe a cuál creerle.
+
 ## La casilla del estudio, a un toque
 
 En la barra de arriba hay un botón **✉️** que abre la casilla de
