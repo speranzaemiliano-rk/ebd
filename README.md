@@ -63,8 +63,10 @@ de vuelta arriba a la izquierda.
 |---|---|
 | **Resumen** | Los dos cortes de recategorización, todos sus datos y la alícuota de IIBB que se le aplica, con su procedencia |
 | **Comprobantes** | Lo facturado mes a mes, y el detalle de cada mes |
+| **Recategorización** | Todos los cortes cumplidos de este cliente —no uno— y, abajo, el mes a mes de los doce que entran en el último: el número de arriba sale de esa suma y un mes sin cargar lo cambia entero |
 | **Liquidaciones** | Qué paga por impuesto cada mes, cuántos VEP tiene y en qué estado está, con el botón para cargar |
 | **Papeles** | Las carpetas por mes (ver abajo) |
+| **Mails** | Qué mes se le mandó y cuál no, con el mismo ver y abrir en Gmail que usa la tanda |
 | **Honorarios** | Lo que le corresponde al estudio mes a mes: monto, pagado, saldo y vencimiento |
 
 Es la misma información de siempre, pero ordenada alrededor de la persona en
@@ -559,24 +561,30 @@ IA:
 
 ## Cada pantalla en su lugar
 
-La barra de Clientes repetía cuatro solapas —Clientes · Comprobantes ·
-Liquidación · Honorarios—, y no todas eran del cliente:
+La barra de arriba tenía doce solapas y seis hablaban de lo mismo: clientes. En
+una pantalla chica no entraban, y para ir de la grilla de liquidación a los
+mails del mismo mes había que cruzar media barra.
 
-- **Liquidación mensual** es la grilla de **todo el estudio** en un mes: quién
-  falta liquidar. **Honorarios** es el cuadro del año entero, con sus totales
-  arriba. Ninguna de las dos habla de un cliente: son vistas generales, como
-  Caja. Ahora viven **arriba, una a cada lado de Caja**, y al entrar se enciende
-  su propio botón.
-- **Comprobantes** es la pantalla de importar el archivo de Mis Comprobantes de
-  ARCA. Salió de la barra porque ya se llega **desde adentro del cliente**, con
-  el botón *Importar* —que además lo deja elegido, sin buscarlo de nuevo—. Sigue
-  contando como Clientes: estando ahí, arriba queda encendida Clientes.
-- Lo del cliente vive **adentro del cliente**: su ficha tiene Resumen,
-  Comprobantes, Liquidaciones, Papeles y Honorarios.
+Ahora son **dos niveles**:
 
-De la sub-barra sólo queda **la tira del cliente elegido** —👤 con su ✕ para
-soltarlo—, que sigue haciendo falta porque filtra Liquidación. Sin cliente
-elegido no se dibuja: vacía dejaba un escalón en blanco arriba de la tarjeta.
+| Arriba | Abajo, cuando se está en Clientes |
+|---|---|
+| Inicio · **Clientes** · Socios · Caja · Honorarios · Escalas ARCA · Alícuotas IIBB · Configuración | Clientes · Comprobantes · Recategorización · Liquidación · Mails · Archivos |
+
+Las seis de abajo son las vistas **de todos los clientes**: la grilla de un mes,
+la tabla de recategorización al corte, los mails del período, los papeles del
+estudio. Estando en cualquiera de ellas, arriba queda encendida **Clientes**.
+
+**Honorarios y Caja no entraron** al grupo a propósito: honorarios es el cuadro
+del año entero y Caja es la plata del estudio. No son vistas de clientes.
+
+Y **adentro de un cliente están las mismas, filtradas a él**: su ficha tiene
+Recategorización, Liquidaciones, Papeles y Mails junto a Resumen, Comprobantes y
+Honorarios. Son dos puertas al mismo lado — la de arriba para trabajar un mes
+entero, la de adentro para mirar un cliente.
+
+A la derecha de la sub-barra sigue **la tira del cliente elegido** —👤 con su ✕
+para soltarlo—, que hace falta porque filtra Liquidación.
 
 ## Documentos del cliente
 
