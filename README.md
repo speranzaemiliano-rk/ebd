@@ -234,6 +234,42 @@ si el usuario guardado es un CUIT, se copia pelado; si es un usuario de verdad
 El municipio manda al sitio que se cargó para él, con su nombre. Si no tiene
 sitio cargado no aparece el botón: no hay a dónde ir.
 
+## «Enviar al cliente» ya no se queda colgado
+
+Pasaba esto: se tocaba **Enviar al cliente**, se abría la pestaña «Preparando el
+correo…», aparecía **«Adjuntando los papeles…»** y ahí quedaba. Para siempre.
+Sin error, sin aviso, sin bajar nada.
+
+Lo raro era que el respaldo ya existía: si algo **falla**, el sistema baja los
+papeles y abre el correo igual, diciendo por qué. El problema es que no estaba
+fallando: estaba **esperando**. Una promesa que queda pendiente no rechaza, así
+que ningún `catch` corre, el respaldo no se dispara, y la pestaña reservada se
+queda abierta con ese texto — nadie la cierra, porque lo único que la cierra es
+justamente el `catch` que nunca llega.
+
+Había **tres pasos sin reloj**, y ninguno tenía forma de darse por vencido:
+
+- **El permiso de Google.** Es el peor: su promesa sólo la cierran los callbacks
+  de la librería de Google. Si ésta no llama a ninguno de los dos —el popup
+  quedó detrás de la pestaña esperando un login, las cookies de terceros están
+  bloqueadas, la red se cayó— no hay nada en el programa que la despierte.
+- **La lectura de los papeles.** `once("value")` de Firebase no falla cuando no
+  hay conexión: espera.
+- **La subida a Gmail.** Un `fetch` sin `AbortController` ni límite de tiempo.
+
+Ahora cada paso tiene su reloj (`conLimite`), y al vencerse **rechaza** — que es
+exactamente lo que hace entrar al camino de respaldo que ya existía. Los plazos
+son generosos a propósito (30 s el permiso, 25 s cada papel, 2 min la subida):
+el objetivo no es cortar rápido sino que **exista un final**. La subida además
+se **corta de verdad** con `AbortController`: un `fetch` abandonado sigue
+ocupando la conexión.
+
+Dos cosas más: un papel que no vuelve **se saltea** y el resto se manda igual,
+en vez de frenar el envío entero; y a los quince segundos la pestaña deja de
+mostrar una palabra quieta y cuenta qué está pasando («está tardando. Si no
+responde, bajo los papeles y abro el correo igual»), porque una palabra
+congelada no distingue «está trabajando» de «se colgó».
+
 ## La boleta que subís deja el importe guardado
 
 Pasó de verdad: se subió la boleta de la tasa municipal de un cliente, el papel

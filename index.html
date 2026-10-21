@@ -6043,6 +6043,47 @@ function gmailTokenVivo(){ return !!(_gmToken && _gmToken.vence > Date.now() + 6
    los papeles NO se puede: esa ventana ya se gastó reservando la pestaña, y
    el navegador bloquea la segunda. Por eso el permiso se da una sola vez, a
    mano, desde Configuración, y después se renueva solo y en silencio. */
+/* ---------- NADA PUEDE ESPERAR PARA SIEMPRE ----------
+   «Enviar al cliente» quedaba clavado en «Adjuntando los papeles…» sin ningún
+   error, y el motivo no era que algo FALLARA —un error estaba cubierto: el
+   .catch baja los papeles y abre el correo igual— sino que algo NO TERMINABA.
+   Una promesa que queda pendiente no rechaza, así que ningún catch corre, el
+   respaldo no se dispara y la pestaña reservada se queda abierta para siempre
+   con ese texto.
+
+   Había tres pasos sin reloj —el permiso de Google, la lectura de los papeles
+   y la subida a Gmail— y ninguno tenía forma de darse por vencido. El de
+   Google es el peor: su promesa SÓLO la cierran los callbacks de la librería
+   de Google; si ésta no llama a ninguno de los dos (el popup quedó detrás de
+   la pestaña esperando un login, las cookies de terceros bloqueadas, la red
+   caída), no hay nada que la despierte.
+
+   Esto le pone reloj a cada paso. Al vencerse RECHAZA —no resuelve vacío—,
+   que es lo que hace que entre el camino de respaldo que ya existía. */
+function conLimite(promesa, ms, queEs){
+  var reloj;
+  return Promise.race([
+    Promise.resolve(promesa).then(
+      function(v){ clearTimeout(reloj); return v; },
+      function(e){ clearTimeout(reloj); throw e; }
+    ),
+    new Promise(function(_, rechazar){
+      reloj = setTimeout(function(){
+        rechazar(new Error(queEs + " no respondió en " + Math.round(ms / 1000) + " segundos"));
+      }, ms);
+    })
+  ]);
+}
+
+/* Cuánto esperar cada cosa. Generosos a propósito: el objetivo no es cortar
+   rápido sino que exista un final. Si alguien tiene que elegir la cuenta de
+   Google, 30 segundos le sobran; una subida de varios MB por una conexión
+   lenta puede tardar un minuto largo y cortarla antes sería peor. */
+var ESPERA_TOKEN   = 30000;
+var ESPERA_PAPEL   = 25000;
+var ESPERA_SUBIDA  = 120000;
+var ESPERA_INDICE  = 20000;
+
 function pedirTokenGmail(interactivo){
   if (gmailTokenVivo()) return Promise.resolve(_gmToken.valor);
   if (!gmailListo()) return Promise.reject(new Error("Falta configurar el ID de cliente de Google"));
@@ -6120,10 +6161,15 @@ function armarMimeConAdjuntos(para, asunto, cuerpo, adjuntos){
 /* Se usa el endpoint de subida (`/upload/…`) y no el común: el común corta
    cerca de los 5 MB y cuatro PDF lo pasan sin esfuerzo. */
 function crearBorradorGmail(token, mime){
-  return fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/drafts?uploadType=media", {
+  /* Con AbortController y no sólo con un reloj: si la subida se estancó, hay
+     que CORTARLA. Un fetch abandonado sigue ocupando la conexión y, con varios
+     MB arriba, el intento siguiente compite contra el anterior. */
+  var corte = typeof AbortController === "function" ? new AbortController() : null;
+  var pedido = fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/drafts?uploadType=media", {
     method: "POST",
     headers: { Authorization: "Bearer " + token, "Content-Type": "message/rfc822" },
-    body: mime
+    body: mime,
+    signal: corte ? corte.signal : undefined
   }).then(function(r){
     return r.text().then(function(t){
       var d = null;
@@ -6134,6 +6180,11 @@ function crearBorradorGmail(token, mime){
       }
       return d;
     });
+  });
+
+  return conLimite(pedido, ESPERA_SUBIDA, "Gmail").catch(function(e){
+    if (corte) { try { corte.abort(); } catch (_) {} }
+    throw e;
   });
 }
 
@@ -6197,7 +6248,8 @@ function enviarPapelesDelMes(clienteId, periodo){
 
   function soltarPestana(){ if (pestana && !pestana.closed) pestana.close(); }
 
-  ref("archivos/" + clienteId).once("value").then(function(s){
+  conLimite(ref("archivos/" + clienteId).once("value"), ESPERA_INDICE, "La lista de papeles")
+    .then(function(s){
     var g = papelesPorMes(clienteId, s.val() || {}).filter(function(x){ return x.periodo === periodo; })[0];
     var items = (g && g.items) || [];
 
@@ -6230,11 +6282,24 @@ function bajarYAbrirElMail(clienteId, periodo, c, items, pestana){
   });
 }
 
-function _cartelPestana(v, texto){
+function _cartelPestana(v, texto, avisarSiTarda){
   if (!v || v.closed || !v.document) return;
   try {
     v.document.body.textContent = texto;
   } catch (_) { /* si el navegador no deja escribirla, no pasa nada */ }
+
+  /* Una palabra quieta no distingue «está trabajando» de «se colgó». A los
+     quince segundos la pestaña cuenta qué está pasando y qué va a pasar: con
+     los relojes puestos, esperar ya no es esperar al vacío. */
+  if (!avisarSiTarda) return;
+  setTimeout(function(){
+    if (!v || v.closed || !v.document) return;
+    try {
+      if (v.document.body.textContent !== texto) return;   /* ya cambió: anda */
+      v.document.body.textContent = texto +
+        " está tardando. Si no responde, bajo los papeles y abro el correo igual.";
+    } catch (_) {}
+  }, 15000);
 }
 
 /* De a uno: son data URL grandes y pedirlas todas juntas a Firebase por la
@@ -6243,9 +6308,13 @@ function contenidosDeLosPapeles(clienteId, items){
   var out = [], cadena = Promise.resolve();
   items.forEach(function(it){
     cadena = cadena.then(function(){
+      /* Con reloj y de a uno: `once` no falla cuando no hay conexión, espera.
+         Así un papel que no vuelve se saltea —el .catch de abajo ya está para
+         eso— en vez de dejar colgado el envío entero. */
       var traer = it.contenido
         ? Promise.resolve(it.contenido)
-        : ref("archivosContenido/" + it.id).once("value").then(function(s){ return s.val(); });
+        : conLimite(ref("archivosContenido/" + it.id).once("value").then(function(s){ return s.val(); }),
+                    ESPERA_PAPEL, "El papel «" + (it.nombre || "sin nombre") + "»");
       return traer.then(function(datos){
         var d = _deDataUrl(datos);
         if (d) out.push({ nombre: it.nombre || "papel.pdf", tipo: d.tipo, b64: d.b64 });
@@ -6263,9 +6332,13 @@ function mandarConAdjuntos(clienteId, periodo, c, items, pestana){
     abrirMailDelMes(clienteId, c, periodo, [], { n: 0, zip: false }, pestana);
     return Promise.resolve();
   }
-  _cartelPestana(pestana, "Adjuntando los papeles…");
+  _cartelPestana(pestana, "Adjuntando los papeles…", true);
 
-  return Promise.all([ pedirTokenGmail(false), contenidosDeLosPapeles(clienteId, items) ])
+  return Promise.all([
+    /* El que más colgaba: su promesa sólo la cierran los callbacks de Google. */
+    conLimite(pedirTokenGmail(false), ESPERA_TOKEN, "El permiso de Google"),
+    contenidosDeLosPapeles(clienteId, items)
+  ])
     .then(function(r){
       var token = r[0], adj = r[1];
       if (!adj.length) throw new Error("No pude leer el contenido de los papeles");
@@ -12140,7 +12213,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v82";
+var VERSION_APP = "v83";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
