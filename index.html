@@ -374,6 +374,19 @@ nav.tabs button:active{transform:scale(.98)}
   transition:background .18s, color .18s, transform .09s ease-out;
 }
 .btn-icono:hover{background:rgba(0,0,0,.05);color:var(--texto)}
+/* El 📋 que deja un importe listo para pegar en el sitio del ente. Va pegado
+   al número y no compite con él: chico, gris y casi transparente hasta que el
+   mouse pasa por la fila. En el teléfono no hay mouse, así que ahí se ve. */
+.btn-copiar{
+  width:26px;height:26px;border-radius:50%;color:var(--gris);font-size:12.5px;
+  display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;
+  margin-right:5px;opacity:.35;
+  transition:opacity .18s, background .18s, color .18s, transform .09s ease-out;
+}
+tr:hover .btn-copiar,.aviso .btn-copiar{opacity:.75}
+.btn-copiar:hover{background:rgba(0,0,0,.06);color:var(--texto);opacity:1}
+.btn-copiar:active{transform:scale(.9)}
+@media(max-width:640px){ .btn-copiar{opacity:.8;width:30px;height:30px;font-size:14px} }
 
 /* ---------- BUSCADOR GENERAL ----------
    Cae desde arriba, como el Spotlight: no es una pantalla a la que se va sino
@@ -6843,8 +6856,8 @@ function vistaComprobantesCliente(id){
   pers.forEach(function(p){
     var r = t[p], cant = (r.cantEmitidos || 0) + (r.cantRecibidos || 0);
     html += "<tr><td>" + periodoLargo(p) + "</td>" +
-      '<td class="num">' + pesos(r.emitido || 0) + "</td>" +
-      '<td class="num">' + pesos(r.recibido || 0) + "</td>" +
+      celdaMontoCopiable(r.emitido || 0, "Emitido") +
+      celdaMontoCopiable(r.recibido || 0, "Recibido") +
       '<td class="num">' + cant + "</td>" +
       '<td><button class="btn sec chico" onclick="verDetallePeriodo(\'' + id + "','" + p + '\')">Ver</button></td></tr>';
   });
@@ -7746,15 +7759,15 @@ function renderTablaComprobantes(){
     var r = t[p];
     sumE += r.emitido || 0; sumR += r.recibido || 0;
     html += "<tr><td><b>" + periodoLargo(p) + "</b></td>";
-    if (tipoF !== "recibido") html += '<td class="num">' + pesos(r.emitido || 0) + '</td><td class="num">' + (r.cantEmitidos || 0) + "</td>";
-    if (tipoF !== "emitido")  html += '<td class="num">' + pesos(r.recibido || 0) + '</td><td class="num">' + (r.cantRecibidos || 0) + "</td>";
+    if (tipoF !== "recibido") html += celdaMontoCopiable(r.emitido || 0, "Emitido") + '<td class="num">' + (r.cantEmitidos || 0) + "</td>";
+    if (tipoF !== "emitido")  html += celdaMontoCopiable(r.recibido || 0, "Recibido") + '<td class="num">' + (r.cantRecibidos || 0) + "</td>";
     html += '<td style="text-align:right"><button class="btn-icono" onclick="verDetallePeriodo(\'' + id + "','" + p + '\')" title="Ver detalle">🔍</button></td></tr>';
   });
   /* Con un mes elegido, la suma de arriba es la de ese mes; el año entero se
      agrega abajo para no perderlo de vista. */
   html += '<tr style="background:var(--fondo)"><td><b>Total ' + (mes ? periodoLargo(anio + mes) : anio) + "</b></td>";
-  if (tipoF !== "recibido") html += '<td class="num"><b>' + pesos(sumE) + "</b></td><td></td>";
-  if (tipoF !== "emitido")  html += '<td class="num"><b>' + pesos(sumR) + "</b></td><td></td>";
+  if (tipoF !== "recibido") html += '<td class="num">' + btnCopiarMonto(sumE, "Total emitido") + "<b>" + pesos(sumE) + "</b></td><td></td>";
+  if (tipoF !== "emitido")  html += '<td class="num">' + btnCopiarMonto(sumR, "Total recibido") + "<b>" + pesos(sumR) + "</b></td><td></td>";
   html += "<td></td></tr>";
 
   if (mes){
@@ -8718,6 +8731,45 @@ function copiarEnElClic(texto){
   return ok;
 }
 
+/* ---------- UN IMPORTE, LISTO PARA PEGAR EN EL ENTE ----------
+   En pantalla un importe se lee «$ 5.763.310,35», que es como tiene que
+   leerse. Pero eso pegado en el formulario de ARCA o de ARBA no entra: los
+   formularios quieren el número pelado, con coma decimal y sin los puntos de
+   miles. Sacárselos a mano, mirando la pantalla de al lado, es justo el paso
+   donde se cambia un dígito. */
+function montoParaPegar(n){
+  var v = Math.round((parseFloat(n) || 0) * 100) / 100;
+  return v.toFixed(2).replace(".", ",");
+}
+
+function copiarMonto(n, que){
+  var texto = montoParaPegar(n);
+  var listo = (que || "Importe") + " copiado: " + texto;
+  /* Sincrónico primero, igual que el CUIT: la forma moderna necesita que el
+     documento tenga el foco, y un clic que además abre el sitio del ente se lo
+     saca. */
+  if (copiarEnElClic(texto)){ toast(listo, "ok"); return; }
+  copiarAlPortapapeles(texto)
+    .then(function(){ toast(listo, "ok"); })
+    .catch(function(){ toast("No pude copiar solo. El número es " + texto, "error"); });
+}
+
+/* El botón, para meterlo al lado de cualquier importe. Un importe en cero no
+   lo lleva: no hay nada que pegar. */
+function btnCopiarMonto(n, que){
+  var v = parseFloat(n) || 0;
+  if (!v) return "";
+  return '<button type="button" class="btn-copiar" title="Copiar ' + esc(que) +
+    ' sin puntos, para pegar en el sitio del ente" onclick="copiarMonto(' + v +
+    ",'" + esc(que) + "')\">📋</button>";
+}
+
+/* La celda completa: el botón y el número, alineados a la derecha como el
+   resto de los importes. */
+function celdaMontoCopiable(n, que){
+  return '<td class="num">' + btnCopiarMonto(n, que) + pesos(parseFloat(n) || 0) + "</td>";
+}
+
 function copiarCuitDe(clienteId){
   var c = ESTADO.clientes[clienteId] || {};
   if (!c.cuit) return;
@@ -8745,10 +8797,14 @@ function bloqueEnteDeLaLiquidacion(clienteId, periodo, clave){
   var t = (ESTADO.totales[clienteId] || {})[periodo] || {};
   var doce = ingresosParaTramo(clienteId, periodo);
 
+  /* Los dos números que se pegan en el sitio del ente son justo éstos: lo
+     facturado del mes y la base de los doce meses. Van con su botón. */
   var facturado = t.emitido
-    ? "Facturado en " + periodoLargo(periodo) + ": <b>" + pesos(t.emitido) + "</b>"
+    ? "Facturado en " + periodoLargo(periodo) + ": " + btnCopiarMonto(t.emitido, "Lo facturado del mes") +
+      "<b>" + pesos(t.emitido) + "</b>"
     : '<span style="color:var(--amar)">Sin comprobantes cargados en ' + periodoLargo(periodo) + "</span>";
-  if (doce.monto) facturado += " · " + esc(doce.base) + ": <b>" + pesos(doce.monto) + "</b>";
+  if (doce.monto) facturado += " · " + esc(doce.base) + ": " + btnCopiarMonto(doce.monto, "Lo facturado del año") +
+    "<b>" + pesos(doce.monto) + "</b>";
   if (clave === "arca" && c.categoriaActual) facturado += ' · categoría <b>' + esc(c.categoriaActual) + "</b>";
 
   var url = urlDelOrganismo(clave, c);
@@ -12339,7 +12395,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v85";
+var VERSION_APP = "v86";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
