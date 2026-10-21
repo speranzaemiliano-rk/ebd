@@ -1381,13 +1381,9 @@ tbody tr:hover{background:#FAFAFC}
   <nav class="tabs" id="navTabs">
     <button data-tab="tabHome" class="activo">Inicio</button>
     <button data-tab="tabClientes">Clientes</button>
-    <button data-tab="tabRecat">Recategorización</button>
     <button data-tab="tabSocios" id="tabBtnSocios">Socios</button>
-    <button data-tab="tabLiquidacion">Liquidación</button>
     <button data-tab="tabCaja">Caja</button>
     <button data-tab="tabHonorarios">Honorarios</button>
-    <button data-tab="tabMails">Mails</button>
-    <button data-tab="tabArchivos">Archivos</button>
     <button data-tab="tabEscalas">Escalas ARCA</button>
     <button data-tab="tabAlicuotas">Alícuotas IIBB</button>
     <button data-tab="tabConfig">Configuración</button>
@@ -1558,6 +1554,7 @@ tbody tr:hover{background:#FAFAFC}
 
     <!-- ---------- RECATEGORIZACIÓN ---------- -->
     <section class="panel" id="tabRecat">
+      <nav class="sub-tabs subnav-clientes"></nav>
       <div class="card">
         <div class="card-head">
           <h2>Control de recategorización</h2>
@@ -1679,6 +1676,7 @@ tbody tr:hover{background:#FAFAFC}
 
     <!-- ---------- MAILS ---------- -->
     <section class="panel" id="tabMails">
+      <nav class="sub-tabs subnav-clientes"></nav>
       <div class="card">
         <div class="card-head">
           <h2>Envío de avisos de pago</h2>
@@ -1708,6 +1706,7 @@ tbody tr:hover{background:#FAFAFC}
 
     <!-- ---------- ARCHIVOS ---------- -->
     <section class="panel" id="tabArchivos">
+      <nav class="sub-tabs subnav-clientes"></nav>
       <div class="card">
         <div class="card-head">
           <h2>Declaraciones juradas y resúmenes</h2>
@@ -3345,18 +3344,24 @@ window.addEventListener("resize", _programarEtiquetado);
    una sola puerta de entrada y la barra de arriba deja de tener cinco solapas
    que hablaban de lo mismo. */
 /* Las pantallas que son «Clientes» para la barra de arriba: estando en
-   cualquiera de ellas, el botón que queda marcado es Clientes.
+   cualquiera de ellas, el botón que queda marcado es Clientes, y abajo
+   aparece la sub-barra con todas.
 
-   Antes acá vivían también Liquidación y Honorarios, con una sub-barra propia
-   que las repetía. No eran del cliente: la liquidación mensual es la grilla de
-   TODO el estudio en un mes y honorarios es el cuadro del año entero. Ahora
-   están donde corresponde —arriba, al lado de Caja, con las demás vistas
-   generales— y la sub-barra dejó de existir. Comprobantes sí se queda: es la
-   pantalla de importar el archivo de ARCA y se entra desde el cliente, con el
-   cliente ya elegido. */
+   Son las vistas «de todos los clientes»: la grilla de un mes, la tabla de
+   recategorización al corte, los mails del período, los papeles del estudio.
+   Arriba eran seis solapas sueltas que hablaban de lo mismo y la barra no
+   entraba en una pantalla chica. Honorarios y Caja NO están acá: son el
+   cuadro del año y la plata del estudio, no una vista de clientes.
+
+   Adentro de un cliente están las mismas, filtradas a él (ver CLI_VISTAS).
+   Las dos puertas llevan al mismo lado. */
 var TABS_CLIENTES = [
   { tab:"tabClientes",     nombre:"Clientes" },
-  { tab:"tabComprobantes", nombre:"Comprobantes" }
+  { tab:"tabComprobantes", nombre:"Comprobantes" },
+  { tab:"tabRecat",        nombre:"Recategorización" },
+  { tab:"tabLiquidacion",  nombre:"Liquidación" },
+  { tab:"tabMails",        nombre:"Mails" },
+  { tab:"tabArchivos",     nombre:"Archivos" }
 ];
 /* ---------- EL CLIENTE ELEGIDO NO SE PIERDE AL CAMBIAR DE VISTA ----------
    Las cuatro vistas hablan del mismo cliente, pero cada una tenía su propia
@@ -3403,19 +3408,34 @@ function esDeClientes(tabId){
   return false;
 }
 /* Se pinta sólo adentro del panel que se está mostrando: los otros quedan con
-   la tira vieja, que nadie ve, y se repinta al entrar. */
+   la tira vieja, que nadie ve, y se repinta al entrar.
+
+   Lleva dos cosas: las solapas del grupo Clientes y, si hay uno elegido, su
+   chip. En una pantalla que no es del grupo (Honorarios) va sólo el chip,
+   como antes. */
 function pintarBarraClienteElegido(tabId){
   var panel = $(tabId);
   if (!panel) return;
   var barra = panel.querySelector(".subnav-clientes");
   if (!barra) return;
-  /* Sin cliente elegido la tira se esconde: vacía seguía ocupando su margen y
-     dejaba un escalón en blanco arriba de la tarjeta. */
-  barra.classList.toggle("oculto", !_clienteActivo);
-  barra.innerHTML = _clienteActivo
+
+  var delGrupo = TABS_CLIENTES.filter(function(t){ return t.tab === tabId; }).length > 0;
+  var botones = delGrupo
+    ? TABS_CLIENTES.map(function(t){
+        return '<button type="button"' + (t.tab === tabId ? ' class="activo"' : "") +
+          ' onclick="irA(\'' + t.tab + '\')">' + esc(t.nombre) + "</button>";
+      }).join("")
+    : "";
+
+  var chip = _clienteActivo
     ? '<span class="chip-cliente" id="chipClienteActivo">👤 ' + esc(nombreClienteActivo()) +
       '<button type="button" title="Ver todos los clientes" onclick="fijarClienteActivo(\'\')">✕</button></span>'
     : "";
+
+  /* Vacía seguía ocupando su margen y dejaba un escalón en blanco arriba de
+     la tarjeta. */
+  barra.classList.toggle("oculto", !botones && !chip);
+  barra.innerHTML = botones + chip;
 }
 
 function irA(tabId){
@@ -3799,13 +3819,13 @@ var PANTALLAS_BUSCABLES = [
   { tab:"tabHome",         nombre:"Inicio" },
   { tab:"tabClientes",     nombre:"Clientes" },
   { tab:"tabComprobantes", nombre:"Comprobantes",   en:"Clientes" },
-  { tab:"tabRecat",        nombre:"Recategorización" },
+  { tab:"tabRecat",        nombre:"Recategorización", en:"Clientes" },
   { tab:"tabSocios",       nombre:"Socios" },
-  { tab:"tabLiquidacion",  nombre:"Liquidación" },
+  { tab:"tabLiquidacion",  nombre:"Liquidación",       en:"Clientes" },
   { tab:"tabCaja",         nombre:"Caja" },
   { tab:"tabHonorarios",   nombre:"Honorarios" },
-  { tab:"tabMails",        nombre:"Mails" },
-  { tab:"tabArchivos",     nombre:"Archivos" },
+  { tab:"tabMails",        nombre:"Mails",             en:"Clientes" },
+  { tab:"tabArchivos",     nombre:"Archivos",          en:"Clientes" },
   { tab:"tabEscalas",      nombre:"Escalas ARCA" },
   { tab:"tabAlicuotas",    nombre:"Alícuotas IIBB" },
   { tab:"tabConfig",       nombre:"Configuración" }
@@ -6803,11 +6823,18 @@ function agregarPapelAlMes(clienteId, periodo){
    alrededor de la tarea.
    ========================================================================== */
 
+/* Las vistas de adentro de un cliente. Son las mismas pantallas que cuelgan
+   de Clientes arriba, pero filtradas a él: el mismo orden y el mismo nombre,
+   para que se entienda que son dos puertas al mismo lado. «Papeles» es la que
+   arriba se llama Archivos —acá sigue siendo papeles, que es como se los
+   nombra en todo el sistema—. */
 var CLI_VISTAS = [
   { clave:"resumen",       nombre:"Resumen" },
   { clave:"comprobantes",  nombre:"Comprobantes" },
+  { clave:"recat",         nombre:"Recategorización" },
   { clave:"liquidaciones", nombre:"Liquidaciones" },
   { clave:"papeles",       nombre:"Papeles" },
+  { clave:"mails",         nombre:"Mails" },
   { clave:"honorarios",    nombre:"Honorarios" }
 ];
 
@@ -6898,6 +6925,8 @@ function pintarVistaCliente(id, c){
   else if (_clienteVista === "comprobantes")  cont.innerHTML = vistaComprobantesCliente(id);
   else if (_clienteVista === "liquidaciones") cont.innerHTML = vistaLiquidacionesCliente(id, c);
   else if (_clienteVista === "honorarios")    cont.innerHTML = vistaHonorariosCliente(id);
+  else if (_clienteVista === "recat")         cont.innerHTML = vistaRecatCliente(id, c);
+  else if (_clienteVista === "mails")         cont.innerHTML = vistaMailsCliente(id, c);
   else if (_clienteVista === "papeles"){
     cont.innerHTML = '<div id="fcArchivos"><div class="ayuda">Buscando…</div></div>';
     pintarArchivosDeLaFicha(id);
@@ -7060,6 +7089,102 @@ function vistaLiquidacionesCliente(id, c){
 }
 
 /* --- Honorarios: lo que le corresponde al estudio, mes a mes --- */
+/* --- Recategorización: los cortes de este cliente y de dónde sale el número ---
+   Arriba, la tabla de recategorización tiene una fila por cliente a UN corte.
+   Acá es al revés: un cliente a todos los cortes, que es la pregunta que uno
+   se hace parado adentro de su ficha («¿viene subiendo?»). Abajo, el mes a
+   mes de los doce que entran en el último corte: el número de arriba sale de
+   esa suma y un mes sin cargar lo cambia entero. */
+function vistaRecatCliente(id, c){
+  var cortes = cortesDisponibles();
+  if ((c.impuestos || {}).arca === false){
+    return '<div class="vacio"><div class="ico">📊</div><div>Este cliente no está en monotributo.</div>' +
+      '<div class="ayuda" style="margin-top:8px">La recategorización es de ARCA: sin monotributo no hay nada que recategorizar.</div></div>';
+  }
+  if (!cortes.length) return '<div class="vacio"><div class="ico">📊</div><div>Todavía no hay ningún corte cumplido.</div></div>';
+
+  var html = '<div class="tabla-wrap"><table><thead><tr><th>Corte</th>' +
+    "<th class=num>Facturado 12 meses</th><th>Datos</th><th>Actual</th><th>Corresponde</th>" +
+    "<th class=num>Cuota</th><th>Situación</th></tr></thead><tbody>";
+
+  cortes.slice(0, 6).forEach(function(co){
+    var an = analizar(id, co.valor);
+    html += "<tr><td>" + esc(co.etiqueta) + "</td>" +
+      celdaMontoCopiable(an.ingresos, "Facturado 12 meses") +
+      "<td>" + (an.mesesConDatos < 12
+        ? '<span class="badge b-amar" title="Faltan meses cargados">' + an.mesesConDatos + "/12</span>"
+        : '<span class="badge b-verde">12/12</span>') + "</td>" +
+      "<td>" + (c.categoriaActual ? '<span class="cat-chip">' + esc(c.categoriaActual) + "</span>" : "—") + "</td>" +
+      "<td>" + (an.excluido
+        ? '<span class="cat-chip fuera">✕</span>'
+        : '<span class="cat-chip">' + esc(an.categoriaSugerida || "—") + "</span>") + "</td>" +
+      '<td class="num">' + (an.cuotaSugerida ? pesos(an.cuotaSugerida) : "—") + "</td>" +
+      "<td>" + badgeEstado(an) + "</td></tr>";
+  });
+  html += "</tbody></table></div>";
+
+  var co = cortes[0], pers = ventana12(co.valor), suma = 0, faltan = 0;
+  html += '<div class="seccion-tit">Mes a mes · ' + esc(co.etiqueta) + "</div>" +
+    '<div class="tabla-wrap"><table><thead><tr><th>Período</th><th class=num>Facturado</th></tr></thead><tbody>';
+  pers.forEach(function(p){
+    var m = ((ESTADO.totales[id] || {})[p] || {}).emitido || 0;
+    suma += m;
+    if (!m) faltan++;
+    html += "<tr><td>" + periodoLargo(p) + "</td>" +
+      (m ? celdaMontoCopiable(m, "Facturado del mes")
+         : '<td class="num" style="color:var(--amar)">sin cargar</td>') + "</tr>";
+  });
+  html += '<tr style="background:var(--fondo)"><td><b>Total de los 12 meses</b></td>' +
+    celdaMontoCopiable(suma, "Facturado 12 meses") + "</tr>";
+  html += "</tbody></table></div>";
+
+  if (faltan){
+    html += '<div class="aviso warn" style="margin-top:12px"><span>⚠️</span><div>' +
+      (faltan === 1 ? "Falta un mes sin cargar" : "Faltan " + faltan + " meses sin cargar") +
+      ". El total de arriba —y la categoría que sale de él— están incompletos. " +
+      '<a href="#" onclick="importarComprobantesDe(\'' + id + '\');return false;">Importar comprobantes</a></div></div>';
+  }
+  return html;
+}
+
+/* --- Mails: lo que se le mandó a este cliente y lo que falta mandarle ---
+   Arriba, Mails es la tanda del mes para todos. Acá es la historia de uno:
+   qué mes se le mandó y cuál no, con el mismo botón de ver y de abrir en
+   Gmail que usa la tanda. */
+function vistaMailsCliente(id, c){
+  var correos = mailsDe(c);
+  var html = correos.length
+    ? '<div class="aviso info"><span>✉️</span><div>Los mails de este cliente van a <b>' +
+      esc(correos.join(" · ")) + "</b>.</div></div>"
+    : '<div class="aviso warn"><span>⚠️</span><div>Este cliente <b>no tiene correo cargado</b>, así que no se le puede mandar nada. ' +
+      "Cargalo con <b>Editar</b>, arriba.</div></div>";
+
+  var set = {};
+  Object.keys(ESTADO.liquidaciones[id] || {}).forEach(function(p){ set[p] = true; });
+  set[periodoHoy()] = true;
+  var pers = Object.keys(set).sort().reverse().slice(0, 12);
+
+  html += '<div class="tabla-wrap"><table><thead><tr><th>Período</th><th class=num>Total a pagar</th>' +
+    "<th>Estado</th><th></th></tr></thead><tbody>";
+  pers.forEach(function(p){
+    var liq = liqDe(id, p), tot = totalLiq(c, liq);
+    html += "<tr><td>" + periodoLargo(p) + "</td>" +
+      (tot ? celdaMontoCopiable(tot, "Total a pagar")
+           : '<td class="num" style="color:var(--amar)">sin liquidar</td>') +
+      "<td>" + (liq.enviado
+        ? '<span class="badge b-verde">Enviado ' + esc((liq.fechaEnvio || "").slice(0,10).split("-").reverse().join("/")) + "</span>"
+        : '<span class="badge b-gris">Sin enviar</span>') + "</td>" +
+      '<td style="white-space:nowrap">' +
+        '<button type="button" class="btn-icono" title="Ver el mail" onclick="verMail(\'' + id + "','" + p + '\')">👁️</button>' +
+        '<button type="button" class="btn-icono" title="Abrir en Gmail" onclick="abrirEnGmail(\'' + id + "','" + p + '\')">📧</button>' +
+      "</td></tr>";
+  });
+  html += "</tbody></table></div>" +
+    '<div class="ayuda" style="margin-top:10px">Para mandar la tanda de todos los clientes de un mes, ' +
+    '<a href="#" onclick="irA(\'tabMails\');return false;">Mails</a>.</div>';
+  return html;
+}
+
 function vistaHonorariosCliente(id){
   var pers = periodosDe(id).sort().reverse();
   if (!pers.length){
@@ -12555,7 +12680,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v87";
+var VERSION_APP = "v88";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
