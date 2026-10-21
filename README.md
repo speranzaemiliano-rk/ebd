@@ -90,16 +90,20 @@ Un detalle: el filtro de Liquidación es de texto, así que el cliente elegido
 entra por ahí y se ve escrito. Si uno escribe otra cosa encima, soltar el
 cliente **no** se lleva puesto lo que escribió.
 
-## Declaración jurada y acuse, con su botón
+## Los tres papeles de ARBA
 
-En **ARCA** y en **ARBA**, los dos papeles que se piden siempre tienen su propio
-botón adentro del bloque del impuesto:
+Los papeles que ARBA pide todos los meses tienen su propio botón adentro del
+bloque del impuesto:
 
-> 📎 Subir declaración jurada &nbsp;&nbsp; 📎 Subir acuse de presentación
+> 📎 Subir VEP de pago &nbsp;&nbsp; 📎 Subir declaración jurada &nbsp;&nbsp; 📎 Subir acuse de presentación
 
 Abren el selector de archivos con el tipo ya puesto, así no hay que ir a
-elegirlo en una lista —que es donde se elige mal—. En ARBA la declaración
-jurada que carga es la de **Ingresos Brutos**, que es la suya.
+elegirlo en una lista —que es donde se elige mal—. La declaración jurada que
+carga es la de **Ingresos Brutos**, que es la suya.
+
+El **VEP de pago** tenía que entrar por la lista de «otro papel», y terminaba
+subido como **acuse**, que era el tipo que estaba al lado. Ahora tiene su botón,
+y además es el papel del que salen el importe, el número y el vencimiento.
 
 El **acuse de presentación** es un tipo de papel más, disponible también en la
 lista de los cuatro impuestos. Es el que prueba que la declaración se presentó,
@@ -646,7 +650,15 @@ existe.
 ## El VEP se lee solo
 
 En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la
-IA lo lee y completa **el importe, el número y el vencimiento**.
+IA lo lee y completa **el importe, el número, el vencimiento** y las
+**retenciones y percepciones del mes**.
+
+Las retenciones no vienen del VEP: están en la **declaración jurada o el resumen**
+de Ingresos Brutos, que es donde el organismo las lista, y son lo que se
+descuenta del impuesto determinado para llegar al saldo. Al subir ese papel, el
+casillero se completa solo y el cálculo de arriba pasa a decir el saldo con las
+retenciones ya restadas. Un papel que no las informa no toca el casillero: no se
+le escribe un cero que nadie leyó de ningún lado.
 
 Lo que está vacío se completa solo. **Lo que ya tiene algo cargado no se pisa**:
 se muestra qué dice el papel y se ofrece el cambio, porque un importe escrito
@@ -1157,6 +1169,27 @@ momento, los deja listos para copiar de a uno y abre la página de ingreso.
 No entra solo, y no es un tema de programación: ARCA, ARBA y AGIP piden segundo
 factor o captcha, y la única forma de saltearlos sería mandarle las claves de
 todos los clientes a un servicio de terceros.
+
+### El botón nunca se queda callado
+
+Apretar **🔑 Entrar** y que no pase nada era posible: la lectura de las claves
+no tenía tope de tiempo, así que si no volvía —la conexión cortada, la base sin
+responder— el botón se quedaba esperando para siempre, sin modal y sin aviso. Y
+había dos salidas más que directamente no decían nada.
+
+Ahora cada final tiene su cartel, y son distintos a propósito:
+
+- **tarda** → «Buscando las claves de …» al segundo de apretar;
+- **no vuelve** (15 segundos) → «No pude leer las claves de …», con el motivo;
+- **vuelve pero no abre** → «No pude descifrar: ¿la contraseña maestra es la
+  correcta?» — ése es el único caso en que la contraseña maestra tiene la culpa,
+  y antes ese cartel salía también cuando el problema era otro;
+- **el cliente no tiene claves de ese organismo** → lo dice con el nombre del
+  organismo.
+
+Lo mismo vale para abrir la lista de la bóveda y para **Ver / editar**. «No hace
+nada» no se puede arreglar: lo que esto cambia es que el próximo reporte venga
+con el motivo adentro.
 
 ## Qué falta (próximos pasos)
 
