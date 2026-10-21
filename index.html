@@ -2262,7 +2262,11 @@ var PAPELES_AL_TOQUE = {
   arca: [ { tipo:"vep",        texto:"Subir VEP de monotributo" },
           { tipo:"credencial", texto:"Subir credencial de pago" },
           { tipo:"d960",       texto:"Subir Formulario D960" } ],
-  arba: [ { tipo:"ddjjiibb", texto:"Subir declaración jurada" },
+  /* En ARBA el VEP va con los otros dos: es el papel que trae el importe, el
+     número y el vencimiento, y sin botón propio terminaba subido como acuse
+     —que es el tipo que estaba al lado— o por la lista de «otro papel». */
+  arba: [ { tipo:"vep",      texto:"Subir VEP de pago" },
+          { tipo:"ddjjiibb", texto:"Subir declaración jurada" },
           { tipo:"acuse",    texto:"Subir acuse de presentación" } ],
   /* En el municipio los dos papeles son otros: la boleta —que es la que trae
      el importe y el vencimiento— y el acuse de que se presentó. Van separados
@@ -6083,6 +6087,15 @@ var ESPERA_TOKEN   = 30000;
 var ESPERA_PAPEL   = 25000;
 var ESPERA_SUBIDA  = 120000;
 var ESPERA_INDICE  = 20000;
+var ESPERA_CLAVES  = 15000;
+
+/* El texto de un error, para poder decirlo en pantalla sin que llegue un
+   «undefined». Un aviso con el motivo adentro es lo que hace que el próximo
+   reporte sirva para algo: «no hace nada» no se puede arreglar. */
+function motivoDe(e){
+  var m = (e && (e.message || e.code)) || String(e || "");
+  return m || "error desconocido";
+}
 
 function pedirTokenGmail(interactivo){
   if (gmailTokenVivo()) return Promise.resolve(_gmToken.valor);
@@ -8985,11 +8998,19 @@ function _traeNroDeVep(clave){
 }
 
 /* `campo` es el final del id en pantalla, `guarda` el nombre con el que vive en
-   la base: no son iguales (vto / vencimiento) y hacen falta los dos. */
+   la base: no son iguales (vto / vencimiento) y hacen falta los dos. `plata`
+   marca los que son importes: se formatean con $ y se guardan como número.
+
+   Las retenciones no vienen del VEP sino de la declaración jurada o del
+   resumen del mes, que es donde ARBA las lista. Tipearlas a mano mirando el
+   PDF al lado es, justamente, lo que esto vino a sacar del medio. En ARCA el
+   casillero no existe (no hay retenciones en el monotributo) y el renglón se
+   saltea solo, porque el campo no está en pantalla. */
 var CAMPOS_VEP = [
-  { dato:"importe",     campo:"monto", guarda:"monto",       rotulo:"Importe" },
+  { dato:"importe",     campo:"monto", guarda:"monto",       rotulo:"Importe", plata:true },
   { dato:"nroVep",      campo:"vep",   guarda:"vep",         rotulo:"Nº de VEP" },
-  { dato:"vencimiento", campo:"vto",   guarda:"vencimiento", rotulo:"Vencimiento" }
+  { dato:"vencimiento", campo:"vto",   guarda:"vencimiento", rotulo:"Vencimiento" },
+  { dato:"retenciones", campo:"ret",   guarda:"retenciones", rotulo:"Retenciones y percepciones", plata:true }
 ];
 
 /* ---------- LO QUE SACA EL PAPEL SE GUARDA SOLO ----------
@@ -9058,12 +9079,16 @@ function leerPapelDeLiquidacion(clave, reintento){
     "una declaración jurada, un acuse o constancia de presentación, una boleta de tasa municipal, " +
     "una credencial de pago del monotributo, un formulario D960, o un comprobante de pago. " +
     "Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
-    '{"tipo":"vep","organismo":"arca","importe":123456.78,"nroVep":"1234567890","vencimiento":"2026-09-22","periodo":"202608"}. ' +
+    '{"tipo":"vep","organismo":"arca","importe":123456.78,"nroVep":"1234567890","vencimiento":"2026-09-22",' +
+    '"periodo":"202608","retenciones":1234.56}. ' +
     "tipo: vep, ddjj, acuse, boleta, credencial, d960, pago u otro. " +
     "organismo: arca, arba, agip o municipal. " +
     "Si el papel es de un municipio o una municipalidad, organismo es municipal. importe: el total a pagar, como número, " +
     "con punto decimal y sin separador de miles. nroVep: el número del VEP o del comprobante, sin puntos. " +
     "vencimiento: la fecha de vencimiento o de pago en formato AAAA-MM-DD. periodo: el período fiscal en AAAAMM. " +
+    "retenciones: en una declaración jurada o un resumen de Ingresos Brutos, el TOTAL de retenciones, percepciones y " +
+    "recaudaciones del período —lo que se descuenta del impuesto determinado para llegar al saldo a pagar—, como número. " +
+    "Si el papel no las informa, null; no lo confundas con el saldo ni con el impuesto determinado. " +
     "Lo que no figure en el papel va en null. No inventes ningún número.";
 
   preguntarAGemini(prompt, f, 0, function(intento, segundos){
@@ -9175,20 +9200,27 @@ function _avisoPapelLeido(clave, corto, d){
     var valor = d[cv.dato];
     if (valor === null || valor === undefined || valor === "") return;
     if (cv.dato === "nroVep" && !_traeNroDeVep(clave)) return;
+    /* Un papel sin retenciones no tiene nada que decir de ese casillero:
+       escribirle un cero sería hacerle creer al usuario que lo leyó de ahí. */
+    if (cv.dato === "retenciones" && !(parseFloat(valor) > 0)) return;
     var el = $("lq_" + clave + "_" + cv.campo);
     if (!el) return;
     var actual = String(el.value || "").trim();
-    var texto = cv.campo === "monto" ? pesos(valor) : String(valor);
+    var texto = cv.plata ? pesos(valor) : String(valor);
     if (!actual){
-      el.value = cv.campo === "monto" ? (parseFloat(valor) || "") : valor;
-      aGuardar[cv.guarda] = cv.campo === "monto" ? (parseFloat(valor) || 0) : valor;
+      el.value = cv.plata ? (parseFloat(valor) || "") : valor;
+      aGuardar[cv.guarda] = cv.plata ? (parseFloat(valor) || 0) : valor;
       completados.push(cv.rotulo + ": " + texto);
     } else if (actual !== String(valor)){
       distintos.push('<div style="margin-top:4px">' + esc(cv.rotulo) + " — el papel dice <b>" + esc(texto) +
-        "</b> y vos tenés <b>" + esc(cv.campo === "monto" ? pesos(actual) : actual) + "</b>. " +
+        "</b> y vos tenés <b>" + esc(cv.plata ? pesos(actual) : actual) + "</b>. " +
         '<a href="#" onclick="usarDatoDelPapel(\'' + clave + "','" + cv.dato + '\');return false;">Usar el del papel</a></div>');
     }
   });
+
+  /* El saldo a pagar de arriba se calcula restando las retenciones: si entran
+     solas, el cálculo tiene que decir el número nuevo en el acto. */
+  if (aGuardar.retenciones !== undefined) pintarCalculoIIBB(clave);
 
   _guardarDatosDelPapel(clave, aGuardar);
 
@@ -9212,9 +9244,10 @@ function usarDatoDelPapel(clave, dato){
   if (!cv || d[dato] === undefined || d[dato] === null) return;
   var el = $("lq_" + clave + "_" + cv.campo);
   if (!el) return;
-  el.value = cv.campo === "monto" ? (parseFloat(d[dato]) || "") : d[dato];
+  el.value = cv.plata ? (parseFloat(d[dato]) || "") : d[dato];
   var campos = {};
-  campos[cv.guarda] = cv.campo === "monto" ? (parseFloat(d[dato]) || 0) : d[dato];
+  campos[cv.guarda] = cv.plata ? (parseFloat(d[dato]) || 0) : d[dato];
+  if (cv.guarda === "retenciones") pintarCalculoIIBB(clave);
   _guardarDatosDelPapel(clave, campos);
   _modalSucio = true;
   toast(cv.rotulo + " actualizado con lo del papel", "ok");
@@ -11592,7 +11625,8 @@ function copiarAlPortapapeles(texto){
 }
 
 function listarCredenciales(){
-  ref("credenciales").once("value").then(function(s){
+  conLimite(ref("credenciales").once("value"), ESPERA_CLAVES, "La lista de claves")
+    .then(function(s){
     var cred = s.val() || {};
     var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
     ids.sort(function(a,b){ return ESTADO.clientes[a].razonSocial.localeCompare(ESTADO.clientes[b].razonSocial); });
@@ -11616,6 +11650,8 @@ function listarCredenciales(){
 
     abrirModal("Bóveda de claves", html + "</tbody></table></div>",
       [{ texto:"Cerrar", clase:"gris", accion:cerrarModalPedido }], "ancho");
+  }).catch(function(e){
+    toast("No pude abrir la bóveda: " + motivoDe(e), "error");
   });
 }
 
@@ -11634,20 +11670,50 @@ function accesoRapido(clienteId, organismoClave){
   }
   var org = organismoPorClave(organismoClave);
   var cli = ESTADO.clientes[clienteId];
-  if (!org || !cli) return;
+  /* Antes los dos faltantes salían por un `return` callado: el botón no hacía
+     NADA y no había forma de saber por qué. Un botón mudo no se puede arreglar. */
+  if (!org){ toast("No reconozco el organismo «" + organismoClave + "». Recargá la página.", "error"); return; }
+  if (!cli){ toast("Ese cliente ya no está en la lista. Recargá la página.", "error"); return; }
 
-  ref("credenciales/" + clienteId + "/" + organismoClave).once("value").then(function(s){
-    var c = s.val();
-    if (!c){ toast("Ese cliente no tiene claves guardadas para " + org.nombre, "error"); return; }
-    return Promise.all([
-      c.usuario ? descifrar(ESTADO.claveMaestra, c.usuario) : Promise.resolve(""),
-      c.pass    ? descifrar(ESTADO.claveMaestra, c.pass)    : Promise.resolve("")
-    ]).then(function(r){
-      mostrarAccesoRapido(cli, org, r[0], r[1]);
+  /* Si la lectura tarda, que se vea que el botón respondió. */
+  var avisar = setTimeout(function(){
+    toast("Buscando las claves de " + org.nombre + "…", "info");
+  }, 1200);
+
+  /* Tres finales distintos, cada uno con su aviso, y ninguno sin final:
+     la lectura puede no volver nunca (por eso el reloj de `conLimite`),
+     puede volver y no descifrar (ahí sí es la contraseña maestra), o puede
+     fallar algo más. Antes todo caía en el mismo cartel —«¿la contraseña
+     maestra es la correcta?»— y la lectura colgada no caía en ninguno. */
+  conLimite(ref("credenciales/" + clienteId + "/" + organismoClave).once("value"),
+            ESPERA_CLAVES, "Las claves guardadas")
+    .then(function(s){
+      clearTimeout(avisar);
+      var c = s.val();
+      if (!c){ toast("Ese cliente no tiene claves guardadas para " + org.nombre, "error"); return; }
+      /* `descifrar` puede reventar SINCRÓNICAMENTE —`atob` con algo que no es
+         base64, que es como se ve una credencial vieja o pisada—, y un throw
+         sincrónico se saltea el manejador de al lado. Envuelto en una promesa,
+         los dos modos de fallar terminan en el mismo cartel. */
+      var abiertas = Promise.resolve().then(function(){
+        return Promise.all([
+          c.usuario ? descifrar(ESTADO.claveMaestra, c.usuario) : Promise.resolve(""),
+          c.pass    ? descifrar(ESTADO.claveMaestra, c.pass)    : Promise.resolve("")
+        ]);
+      });
+      return abiertas.then(function(r){
+        mostrarAccesoRapido(cli, org, r[0], r[1]);
+      }, function(){
+        toast("No pude descifrar: ¿la contraseña maestra es la correcta?", "error");
+      });
+    }, function(e){
+      clearTimeout(avisar);
+      toast("No pude leer las claves de " + org.nombre + ": " + motivoDe(e), "error");
+    })
+    .catch(function(e){
+      clearTimeout(avisar);
+      toast("No pude abrir las claves de " + org.nombre + ": " + motivoDe(e), "error");
     });
-  }).catch(function(){
-    toast("No pude descifrar: ¿la contraseña maestra es la correcta?", "error");
-  });
 }
 
 function mostrarAccesoRapido(cli, org, usuario, pass){
@@ -11725,17 +11791,22 @@ function editarCredenciales(clienteId){
     abrirDialogoBoveda(function(){ editarCredenciales(clienteId); });
     return;
   }
-  ref("credenciales/" + clienteId).once("value").then(function(s){
+  conLimite(ref("credenciales/" + clienteId).once("value"), ESPERA_CLAVES, "Las claves del cliente")
+    .then(function(s){
     var cred = s.val() || {};
-    var pendientes = ORGANISMOS.map(function(o){
-      if (!cred[o.clave]) return Promise.resolve({ clave:o.clave, usuario:"", pass:"" });
-      return Promise.all([
-        cred[o.clave].usuario ? descifrar(ESTADO.claveMaestra, cred[o.clave].usuario) : Promise.resolve(""),
-        cred[o.clave].pass    ? descifrar(ESTADO.claveMaestra, cred[o.clave].pass)    : Promise.resolve("")
-      ]).then(function(r){ return { clave:o.clave, usuario:r[0], pass:r[1] }; });
+    /* Envuelto por lo mismo que en `accesoRapido`: `descifrar` puede reventar
+       sincrónicamente y acá el throw se llevaba puesto el cartel de abajo. */
+    var pendientes = Promise.resolve().then(function(){
+      return Promise.all(ORGANISMOS.map(function(o){
+        if (!cred[o.clave]) return Promise.resolve({ clave:o.clave, usuario:"", pass:"" });
+        return Promise.all([
+          cred[o.clave].usuario ? descifrar(ESTADO.claveMaestra, cred[o.clave].usuario) : Promise.resolve(""),
+          cred[o.clave].pass    ? descifrar(ESTADO.claveMaestra, cred[o.clave].pass)    : Promise.resolve("")
+        ]).then(function(r){ return { clave:o.clave, usuario:r[0], pass:r[1] }; });
+      }));
     });
 
-    Promise.all(pendientes).then(function(vals){
+    pendientes.then(function(vals){
       var mapa = {};
       vals.forEach(function(v){ mapa[v.clave] = v; });
       var html = ORGANISMOS.map(function(o){
@@ -11755,6 +11826,8 @@ function editarCredenciales(clienteId){
           { texto:"Guardar cifrado", accion:function(){ guardarCredenciales(clienteId); } }
         ], "ancho");
     }).catch(function(){ toast("No pude descifrar: ¿la contraseña maestra es la correcta?", "error"); });
+  }).catch(function(e){
+    toast("No pude leer las claves de ese cliente: " + motivoDe(e), "error");
   });
 }
 
@@ -12266,7 +12339,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v84";
+var VERSION_APP = "v85";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
