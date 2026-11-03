@@ -6040,8 +6040,9 @@ function pintarArchivosDeLaFicha(id){
     _papelesFicha = { clienteId: id, grupos: grupos };
 
     var cabecera = '<div class="ayuda" style="margin-bottom:12px">' +
-      "<b>Enviar al cliente</b> descarga los papeles del mes y abre tu programa de correo con el texto listo. " +
-      "Los adjuntos hay que arrastrarlos a mano: el navegador no puede adjuntar archivos por su cuenta." +
+      "<b>Enviar al cliente</b> arma el correo del mes con los papeles. Con <b>Gmail conectado</b> " +
+      "(Configuración → Correo) deja un <b>borrador con los archivos ya adjuntos</b>, para revisar y mandar; " +
+      "si no, baja los papeles en un .zip y abre el correo con el texto listo, para arrastrarlos a mano." +
       (puede ? ' <a href="#" onclick="agregarPapelAlMes(\'' + id + '\',\'\');return false;">Subir papeles</a>.' : "") +
       "<br>Los <b>documentos del cliente</b> —contrato de alquiler, título profesional, estatuto— van en su propio " +
       "bloque arriba de todo: no son de un mes y no salen en el correo mensual." +
@@ -6535,13 +6536,17 @@ function _cartelPestana(v, texto, avisarSiTarda){
 
 /* De a uno: son data URL grandes y pedirlas todas juntas a Firebase por la
    misma conexión no las trae antes. */
+/* Devuelve los que se pudieron leer Y los nombres de los que no. ⚠️ Que un
+   papel se saltee no puede frenar a los demás —por eso el catch—, pero
+   tampoco puede pasar en silencio: el cuerpo del mail los sigue nombrando a
+   todos y el cliente recibe un correo que dice «adjunto el VEP» sin el VEP. */
 function contenidosDeLosPapeles(clienteId, items){
-  var out = [], cadena = Promise.resolve();
+  var out = [], fallaron = [], cadena = Promise.resolve();
   items.forEach(function(it){
     cadena = cadena.then(function(){
       /* Con reloj y de a uno: `once` no falla cuando no hay conexión, espera.
-         Así un papel que no vuelve se saltea —el .catch de abajo ya está para
-         eso— en vez de dejar colgado el envío entero. */
+         Así un papel que no vuelve se saltea en vez de dejar colgado el envío
+         entero. */
       var traer = it.contenido
         ? Promise.resolve(it.contenido)
         : conLimite(ref("archivosContenido/" + it.id).once("value").then(function(s){ return s.val(); }),
@@ -6549,10 +6554,11 @@ function contenidosDeLosPapeles(clienteId, items){
       return traer.then(function(datos){
         var d = _deDataUrl(datos);
         if (d) out.push({ nombre: it.nombre || "papel.pdf", tipo: d.tipo, b64: d.b64 });
-      }).catch(function(){ /* que falte uno no puede frenar a los demás */ });
+        else fallaron.push(it.nombre || "sin nombre");
+      }).catch(function(){ fallaron.push(it.nombre || "sin nombre"); });
     });
   });
-  return cadena.then(function(){ return out; });
+  return cadena.then(function(){ return { adj: out, fallaron: fallaron }; });
 }
 
 function mandarConAdjuntos(clienteId, periodo, c, items, pestana){
@@ -6571,7 +6577,7 @@ function mandarConAdjuntos(clienteId, periodo, c, items, pestana){
     contenidosDeLosPapeles(clienteId, items)
   ])
     .then(function(r){
-      var token = r[0], adj = r[1];
+      var token = r[0], adj = r[1].adj, fallaron = r[1].fallaron;
       if (!adj.length) throw new Error("No pude leer el contenido de los papeles");
       var t = textoDelMailDelMes(clienteId, c, periodo, items);
       return crearBorradorGmail(token, armarMimeConAdjuntos(paraDe(c), t.asunto, t.cuerpo, adj))
@@ -6581,8 +6587,14 @@ function mandarConAdjuntos(clienteId, periodo, c, items, pestana){
           var url = urlDelBorrador(idMsg);
           if (pestana && !pestana.closed) pestana.location.href = url;
           else _clickEnlace(url, true);
+          /* Si alguno quedó afuera se dice CUÁL y con cartel de error: el
+             cuerpo del mail lo nombra igual, así que un faltante silencioso
+             manda un correo que promete un papel que no está. */
           toast(adj.length + (adj.length === 1 ? " papel adjuntado" : " papeles adjuntados") +
-            ": el borrador quedó en Gmail, revisalo y mandalo", "ok");
+            ": el borrador quedó en Gmail, revisalo y mandalo" +
+            (fallaron.length ? " · ⚠️ NO pude leer " + fallaron.length + ": " + fallaron.join(", ") +
+                               " — adjuntalos a mano" : ""),
+            fallaron.length ? "error" : "ok");
         });
     })
     .catch(function(e){
@@ -6695,8 +6707,15 @@ function _nombresSinRepetir(nombres){
 
 function bajarZipDelMes(clienteId, periodo, items){
   var c = ESTADO.clientes[clienteId] || {};
-  return contenidosDeLosPapeles(clienteId, items).then(function(adj){
+  return contenidosDeLosPapeles(clienteId, items).then(function(r){
+    var adj = r.adj, fallaron = r.fallaron;
     if (!adj.length) throw new Error("No pude leer el contenido de los papeles");
+    /* Lo mismo que al adjuntar: si alguno no se pudo leer, el .zip sale sin él
+       y hay que decirlo, porque el texto del mail lo nombra igual. */
+    if (fallaron.length){
+      toast("⚠️ No pude leer " + fallaron.length + " papel" + (fallaron.length === 1 ? "" : "es") +
+            ": " + fallaron.join(", ") + " — no van en el .zip", "error");
+    }
     var nombres = _nombresSinRepetir(adj.map(function(a){ return a.nombre; }));
     var zip = armarZip(adj.map(function(a, i){
       return { nombre: nombres[i], bytes: _bytesDeBase64(a.b64) };
@@ -7201,7 +7220,9 @@ function vistaMailsCliente(id, c){
         : '<span class="badge b-gris">Sin enviar</span>') + "</td>" +
       '<td style="white-space:nowrap">' +
         '<button type="button" class="btn-icono" title="Ver el mail" onclick="verMail(\'' + id + "','" + p + '\')">👁️</button>' +
-        '<button type="button" class="btn-icono" title="Abrir en Gmail" onclick="abrirEnGmail(\'' + id + "','" + p + '\')">📧</button>' +
+        '<button type="button" class="btn-icono" title="Abrir en Gmail (sin adjuntos)" onclick="abrirEnGmail(\'' + id + "','" + p + '\')">📧</button>' +
+        '<button type="button" class="btn-icono" title="Mandar con los papeles del mes adjuntos" onclick="enviarPapelesDelMes(\'' +
+          id + "','" + p + '\')">📎</button>' +
       "</td></tr>";
   });
   html += "</tbody></table></div>" +
@@ -10183,8 +10204,9 @@ function editarLiquidacion(clienteId, periodo){
   if (html){
     html += '<div class="seccion-tit">Mandarle los papeles</div>' +
       '<div class="aviso info"><span>📧</span><div>Junta <b>todos</b> los papeles de ' + periodoLargo(periodo) +
-        " —los de acá y los que estén cargados en la ficha del cliente—, los descarga y abre el correo con el " +
-        "texto listo. Los adjuntos se arrastran a mano: el navegador no puede adjuntarlos solo." +
+        " —los de acá y los que estén cargados en la ficha del cliente—. Con <b>Gmail conectado</b> deja un " +
+        "borrador con los archivos <b>ya adjuntos</b>; si no, los baja en un .zip y abre el correo con el texto " +
+        "listo para arrastrarlos." +
         '<div style="margin-top:10px"><button type="button" class="btn sec chico" onclick="enviarPapelesDelMes(\'' +
           clienteId + "','" + periodo + '\')">📧 Enviar los papeles del mes</button></div></div></div>';
   }
@@ -10580,6 +10602,16 @@ function renderMails(){
   } else {
     $("avisoEmailjs").innerHTML = '<div class="aviso ok"><span>✅</span><div>EmailJS configurado. Los mails salen desde la casilla conectada del estudio.</div></div>';
   }
+  /* ⚠️ Lo que más confunde de esta pantalla: «Enviar seleccionados» manda el
+     aviso con los importes y NO adjunta nada —EmailJS recibe cinco textos y
+     ningún archivo—, y el 📧 de cada fila abre un link de redacción de Gmail,
+     que por definición no puede llevar archivos. El único que adjunta es el
+     📎, y hasta ahora no estaba en esta pantalla. */
+  $("avisoEmailjs").innerHTML +=
+    '<div class="aviso info"><span>📎</span><div><b>El aviso y los papeles son dos envíos distintos.</b> ' +
+    "<b>Enviar seleccionados</b> manda el aviso de pago con los importes, en texto, a todos los tildados: " +
+    "<b>no lleva adjuntos</b>. Para mandar los papeles del mes —VEP, declaraciones juradas, acuses— usá el " +
+    "<b>📎</b> de cada fila, que arma el correo con los archivos adentro.</div></div>";
 
   var ids = Object.keys(ESTADO.clientes).filter(function(id){
     return esElClienteElegido(id) && ESTADO.clientes[id].activo !== false;
@@ -10611,7 +10643,12 @@ function renderMails(){
         : '<span class="badge b-gris">Sin enviar</span>') + "</td>" +
       '<td style="white-space:nowrap">' +
         '<button class="btn-icono" onclick="verMail(\'' + id + "','" + periodo + '\')" title="Ver el mail">👁️</button>' +
-        '<button class="btn-icono" onclick="abrirEnGmail(\'' + id + "','" + periodo + '\')" title="Abrir en Gmail">📧</button>' +
+        '<button class="btn-icono" onclick="abrirEnGmail(\'' + id + "','" + periodo + '\')" title="Abrir en Gmail (sin adjuntos)">📧</button>' +
+        /* El único camino que adjunta los papeles. Vivía sólo en la ficha del
+           cliente y en la liquidación, así que desde la pantalla que se llama
+           «Mails» no había forma de mandar un papel. */
+        '<button class="btn-icono" onclick="enviarPapelesDelMes(\'' + id + "','" + periodo +
+          '\')" title="Mandar con los papeles del mes adjuntos">📎</button>' +
       "</td></tr>";
   });
   $("tablaMails").innerHTML = html + "</tbody></table></div>";
@@ -10637,9 +10674,12 @@ function verMail(clienteId, periodo){
 function abrirEnGmail(clienteId, periodo){
   var m = armarMail(clienteId, periodo);
   if (!m.para){ toast("Este cliente no tiene correo cargado", "error"); return; }
-  var url = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(m.para) +
-            "&su=" + encodeURIComponent(m.asunto) + "&body=" + encodeURIComponent(m.cuerpo);
-  window.open(url, "_blank");
+  /* Por `urlDeCorreo`, como todo el resto: armaba la URL a mano y se salteaba
+     las dos cosas que ese helper resuelve —el modo «programa del equipo», que
+     acá terminaba igual en Gmail, y el `authuser` de la casilla del estudio,
+     sin el cual Gmail abre la cuenta personal que quedó logueada en esa
+     computadora—. Esta URL no puede llevar adjuntos: para eso está el 📎. */
+  _clickEnlace(urlDeCorreo(m.para, m.asunto, m.cuerpo), configCorreo().modo !== "programa");
 }
 
 $("btnPreviewMail").onclick = function(){
@@ -10664,6 +10704,8 @@ $("btnEnviarMails").onclick = function(){
   abrirModal("Confirmar envío",
     '<div class="aviso warn"><span>⚠️</span><div>Se van a enviar <b>' + ids.length + " correos</b> a los clientes seleccionados, " +
     "con los importes cargados en " + periodoLargo(periodo) + ". Esta acción no se puede deshacer.</div></div>" +
+    '<div class="aviso info"><span>📎</span><div>Van <b>sin adjuntos</b>: es el aviso de pago, con los importes y los ' +
+    "números de VEP escritos en el texto. Los papeles se mandan con el <b>📎</b> de cada fila, de a un cliente.</div></div>" +
     '<ul class="lista-simple">' + ids.map(function(id){
       var c = ESTADO.clientes[id], m = armarMail(id, periodo);
       return '<li><div class="crece"><div class="tit">' + esc(c.razonSocial) + '</div><div class="sub">' + esc(paraDe(c)) + "</div></div>" +
@@ -13167,7 +13209,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v90";
+var VERSION_APP = "v91";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

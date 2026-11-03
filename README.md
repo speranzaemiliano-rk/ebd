@@ -830,6 +830,32 @@ y con un cartel de «Preparando el correo…», y recién se la manda a Gmail cu
 los papeles terminaron de bajar. Abrirla después sería un pop-up para el
 navegador, y la bloquearía.
 
+### El aviso y los papeles son dos envíos distintos
+
+«Cuando envío mail no me adjunta el archivo.» No fallaba nada: **ese botón no
+adjunta y nunca adjuntó**.
+
+| Botón | Qué manda |
+|---|---|
+| **Enviar seleccionados** (Mails) | El aviso de pago con los importes, por EmailJS. **Texto, sin adjuntos.** |
+| **📧** de cada fila | Abre Gmail con el texto escrito. Un link de redacción **no puede llevar archivos**: lo prohíbe Gmail, no es algo que falte programar. |
+| **📎** de cada fila | **Los papeles del mes, adjuntos.** |
+
+El 📎 es nuevo en esta pantalla: hasta ahora ese camino existía sólo adentro de
+la ficha del cliente y al pie de la liquidación, con otro nombre. Ahora está
+también en Mails y en la solapa Mails del cliente, y la pantalla lo dice arriba
+de la tabla y otra vez en la confirmación del envío en tanda.
+
+Dos arreglos que venían con esto:
+
+- un papel que **no se puede leer** se salteaba en silencio y el mail salía
+  igual, nombrándolo en el texto: el cliente recibe «adjunto el VEP» sin el VEP.
+  Ahora dice **cuál** faltó, en rojo, tanto al adjuntar como al armar el .zip;
+- el **📧** armaba la URL de Gmail a mano y se salteaba el helper de siempre:
+  ignoraba el modo «programa del equipo» (abría Gmail igual) y no ponía
+  `authuser`, así que abría la **cuenta personal** que hubiera quedado logueada
+  en esa computadora en vez de la casilla del estudio.
+
 ### Los adjuntos van adentro del mail
 
 El link de redacción de Gmail **no puede llevar archivos**: acepta
