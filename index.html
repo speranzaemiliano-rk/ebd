@@ -7357,12 +7357,26 @@ function mapearColumnas(headers){
   return { mapa: mapa, norm: norm };
 }
 
-/* Detecta si el archivo es de emitidos o recibidos mirando el encabezado.
-   En Mis Comprobantes, emitidos trae "Receptor" y recibidos trae "Emisor". */
-function detectarTipo(headers){
+/* Detecta si el archivo es de emitidos o recibidos. En Mis Comprobantes, el
+   de emitidos trae una columna "Receptor" (la contraparte es el cliente de
+   él) y el de recibidos trae "Emisor" (la contraparte es el proveedor).
+
+   Tres respuestas, y la tercera es la importante: «no sé». Antes, con las DOS
+   palabras presentes devolvía «recibido» porque el primer `if` ganaba, y
+   cuando no encontraba ninguna devolvía null… que arriba se convertía en
+   «emitido» sin que nadie se enterara. Ahora lo ambiguo es ambiguo y se
+   pregunta. */
+function detectarTipo(headers, nombreArchivo){
   var txt = headers.map(normHeader).join("|");
-  if (txt.indexOf("emisor") !== -1)   return "recibido";
-  if (txt.indexOf("receptor") !== -1) return "emitido";
+  var emisor = txt.indexOf("emisor") !== -1, receptor = txt.indexOf("receptor") !== -1;
+  if (emisor && !receptor) return "recibido";
+  if (receptor && !emisor) return "emitido";
+
+  /* Segunda señal: el nombre del archivo, que ARCA deja como
+     «Mis Comprobantes Recibidos …». */
+  var n = normHeader(String(nombreArchivo || ""));
+  if (n.indexOf("recibido") !== -1 && n.indexOf("emitido") === -1) return "recibido";
+  if (n.indexOf("emitido")  !== -1 && n.indexOf("recibido") === -1) return "emitido";
   return null;
 }
 
@@ -7430,6 +7444,17 @@ function procesarArchivo(file){
   lector.readAsText(file, "UTF-8");
 }
 
+/* El archivo leído, esperando a que alguien diga de qué tipo es. */
+var _impPendiente = null;
+
+function _impSeguirCon(tipo){
+  var p = _impPendiente;
+  if (!p) return;
+  _impPendiente = null;
+  $("impResultado").innerHTML = "";
+  seguirConLasFilas(p.filas, p.clienteId, p.nombreArchivo, p.origen, tipo);
+}
+
 function seguirConLasFilas(filas, clienteId, nombreArchivo, origen, tipoForzado){
     if (filas.length < 2){ toast("El archivo no tiene filas de datos", "error"); return; }
 
@@ -7450,7 +7475,27 @@ function seguirConLasFilas(filas, clienteId, nombreArchivo, origen, tipoForzado)
     }
 
     var tipoSel = tipoForzado || $("impTipo").value;
-    var tipo = tipoSel === "auto" ? (detectarTipo(headers) || "emitido") : tipoSel;
+    var tipo = tipoSel === "auto" ? detectarTipo(headers, nombreArchivo) : tipoSel;
+
+    /* ⚠️ Acá estaba el agujero: `detectarTipo(...) || "emitido"`. Ante la duda
+       el archivo entraba ENTERO como emitido, en silencio y con un cartel
+       verde de éxito — y lo emitido es justo lo que suma la recategorización,
+       así que un archivo de compras inflaba la categoría del monotributo.
+       Ahora, si no se puede saber, se pregunta. */
+    if (!tipo){
+      _impPendiente = { filas: filas, clienteId: clienteId, nombreArchivo: nombreArchivo, origen: origen };
+      $("impResultado").innerHTML =
+        '<div class="aviso warn"><span>🤔</span><div><b>No puedo saber si este archivo es de emitidos o de recibidos.</b><br>' +
+        "Los encabezados no dicen ni «Emisor» ni «Receptor»:<br><span class=\"mono\">" +
+        esc(headers.join(" | ")) + "</span>" +
+        '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button type="button" class="btn sec chico" onclick="_impSeguirCon(\'emitido\')">Son <b>emitidos</b> (ventas)</button>' +
+          '<button type="button" class="btn sec chico" onclick="_impSeguirCon(\'recibido\')">Son <b>recibidos</b> (compras)</button>' +
+        "</div>" +
+        '<div class="ayuda" style="margin-top:6px">En los emitidos la contraparte es el cliente de él; ' +
+        "en los recibidos, el proveedor.</div></div></div>";
+      return;
+    }
 
     var registros = [], errores = 0;
     for (var r = idxHead + 1; r < filas.length; r++){
@@ -7485,6 +7530,18 @@ function seguirConLasFilas(filas, clienteId, nombreArchivo, origen, tipoForzado)
     mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreArchivo);
 }
 
+/* La foto de lo que se está por importar, para poder darlo vuelta sin volver
+   a leer el archivo. */
+var _impPreview = null;
+
+function invertirTipoPreview(){
+  var p = _impPreview;
+  if (!p) return;
+  var otro = p.tipo === "emitido" ? "recibido" : "emitido";
+  p.registros.forEach(function(r){ r.tipo = otro; });
+  mostrarPreviewImportacion(p.clienteId, otro, p.registros, p.errores, p.nombreArchivo);
+}
+
 function mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreArchivo){
   var porPeriodo = {};
   registros.forEach(function(reg){
@@ -7496,12 +7553,46 @@ function mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreAr
   var totalGeneral = registros.reduce(function(a,b){ return a + b.total; }, 0);
   var cli = ESTADO.clientes[clienteId];
 
-  /* Aviso si los CUIT no coinciden: en emitidos el emisor es el cliente,
-     así que el doc de la fila es la contraparte. Solo chequeamos en recibidos
-     que no se haya mezclado el archivo de otro contribuyente. */
-  var html = '<div class="aviso ok"><span>✅</span><div><b>' + registros.length + " comprobantes " + tipo + "s</b> leídos de <span class=mono>" +
+  /* ---------- EL CRUCE DE CUIT ----------
+     En un archivo de EMITIDOS la columna de documento es el CLIENTE de él; en
+     uno de RECIBIDOS es el PROVEEDOR. En ninguno de los dos casos puede ser su
+     propio CUIT… salvo en los recibidos de un monotributista que se factura a
+     sí mismo, que no existe. Así que si la mayoría de las filas apunta al
+     propio cliente, el archivo está al revés del tipo elegido.
+
+     Esto estaba escrito como comentario desde siempre y nunca implementado, y
+     es la validación que habría frenado todo: los dos datos ya estaban acá. */
+  var cuitCli = String(cli.cuit || "").replace(/\D/g, "");
+  var propias = 0, conDoc = 0;
+  registros.forEach(function(r){
+    if (!r.docNro) return;
+    conDoc++;
+    if (r.docNro === cuitCli) propias++;
+  });
+  var mayoriaPropias = cuitCli && conDoc >= 3 && propias / conDoc > 0.6;
+
+  _impPreview = { clienteId: clienteId, tipo: tipo, registros: registros,
+                  errores: errores, nombreArchivo: nombreArchivo };
+
+  var otroTipo = tipo === "emitido" ? "recibido" : "emitido";
+  var html = '<div class="aviso ok"><span>✅</span><div><b>' + registros.length + " comprobantes</b> leídos de <span class=mono>" +
     esc(nombreArchivo) + "</span> para <b>" + esc(cli.razonSocial) + "</b>." +
     (errores ? " Se saltearon " + errores + " filas sin fecha válida." : "") + "</div></div>";
+
+  /* El tipo, en su propio renglón y con el botón para darlo vuelta: antes
+     salía interpolado en medio del cartel verde de éxito («✅ N comprobantes
+     emitidos leídos…»), donde se lee como «salió bien», no como «confirmá
+     esto». */
+  html += '<div class="aviso ' + (mayoriaPropias ? "bad" : "info") + '"><span>' +
+    (mayoriaPropias ? "🚩" : "⇄") + "</span><div>Se van a cargar como <b>" +
+    (tipo === "emitido" ? "EMITIDOS (ventas)" : "RECIBIDOS (compras)") + "</b>." +
+    (mayoriaPropias
+      ? " <b>Ojo:</b> " + propias + " de " + conDoc + " filas tienen el CUIT del propio cliente en la columna de documento. " +
+        "En un archivo de " + (tipo === "emitido" ? "ventas" : "compras") + " esa columna debería ser " +
+        (tipo === "emitido" ? "el cliente de él" : "el proveedor") + ", no él mismo: lo más probable es que estén al revés."
+      : "") +
+    ' <a href="#" onclick="invertirTipoPreview();return false;">No, son ' +
+    (otroTipo === "emitido" ? "emitidos" : "recibidos") + "</a></div></div>";
 
   html += '<div class="tabla-wrap" style="max-height:300px;overflow-y:auto"><table><thead><tr>' +
     "<th>Período</th><th class=num>Comprobantes</th><th class=num>Importe</th><th class=num>Ya cargado</th></tr></thead><tbody>";
@@ -7517,20 +7608,47 @@ function mostrarPreviewImportacion(clienteId, tipo, registros, errores, nombreAr
     '</b></td><td class="num"><b>' + pesos(totalGeneral) + "</b></td><td></td></tr>";
   html += "</tbody></table></div>";
 
-  html += '<div class="aviso warn" style="margin-top:14px"><span>⚠️</span><div>Al confirmar, los períodos listados se <b>reemplazan</b> con estos comprobantes ' +
-    "(los importes de la columna “Ya cargado” se pisan). Los períodos que no aparecen acá no se tocan.</div></div>";
+  /* ⚠️ Lo que se reemplaza es SÓLO la rama del tipo que se importa. El cartel
+     decía «los períodos se reemplazan», que es falso para la otra mitad: por
+     eso reimportar bien un archivo que había entrado al revés no arreglaba
+     nada y el mes quedaba contado dos veces. */
+  html += '<div class="aviso warn" style="margin-top:14px"><span>⚠️</span><div>Al confirmar se reemplaza <b>lo ' +
+    (tipo === "emitido" ? "emitido" : "recibido") + "</b> de los períodos listados (la columna “Ya cargado” se pisa). " +
+    "Lo " + (otroTipo === "emitido" ? "emitido" : "recibido") + " de esos meses y los períodos que no aparecen acá " +
+    "no se tocan.</div></div>";
+
+  /* Y si en esos mismos meses ya hay algo en la OTRA rama, se dice y se
+     ofrece limpiarlo en el mismo movimiento: es el caso de «lo importé mal,
+     lo vuelvo a importar bien» y sin esto quedaba la plata duplicada. */
+  var conOtra = pers.filter(function(p){
+    var t = (ESTADO.totales[clienteId] || {})[p] || {};
+    return (otroTipo === "emitido" ? t.emitido : t.recibido) > 0;
+  });
+  if (conOtra.length){
+    var montoOtra = conOtra.reduce(function(a, p){
+      var t = (ESTADO.totales[clienteId] || {})[p] || {};
+      return a + (otroTipo === "emitido" ? t.emitido : t.recibido);
+    }, 0);
+    html += '<div class="aviso warn"><span>🧹</span><div>Esos meses tienen además <b>' + pesos(montoOtra) +
+      "</b> cargado como <b>" + (otroTipo === "emitido" ? "emitido" : "recibido") + "</b> (" +
+      conOtra.map(periodoLargo).join(", ") + ").<br>" +
+      '<label class="check" style="margin-top:8px"><input type="checkbox" id="impLimpiarOtra"> ' +
+      "Borrar también eso — <b>marcalo si este archivo ya lo habías importado del lado equivocado</b></label></div></div>";
+  }
 
   abrirModal("Confirmar importación", html, [
     { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
     { texto:"Importar " + registros.length + " comprobantes", accion:function(){
-        confirmarImportacion(clienteId, tipo, registros, porPeriodo);
+        confirmarImportacion(clienteId, tipo, registros, porPeriodo,
+                             !!($("impLimpiarOtra") || {}).checked);
       } }
   ], "ancho");
 }
 
-function confirmarImportacion(clienteId, tipo, registros, porPeriodo){
+function confirmarImportacion(clienteId, tipo, registros, porPeriodo, limpiarOtra){
   var updates = {};
   var pers = Object.keys(porPeriodo);
+  var otroTipo = tipo === "emitido" ? "recibido" : "emitido";
 
   /* Cada período se escribe entero, de una sola vez. Antes se hacían dos
      cosas en el mismo pedido: poner el nodo del período en null y, adentro,
@@ -7552,13 +7670,21 @@ function confirmarImportacion(clienteId, tipo, registros, porPeriodo){
     updates["comprobantes/" + clienteId + "/" + p + "/" + tipo] = docsPorPeriodo[p];
   });
 
+  if (limpiarOtra){
+    /* El pedido explícito de «esto ya lo había importado del lado
+       equivocado»: la otra rama de ESTOS meses se va en el mismo update. */
+    pers.forEach(function(p){ updates["comprobantes/" + clienteId + "/" + p + "/" + otroTipo] = null; });
+  }
+
   pers.forEach(function(p){
     var prev = (ESTADO.totales[clienteId] || {})[p] || {};
+    var otroMonto = limpiarOtra ? 0 : (otroTipo === "emitido" ? (prev.emitido || 0) : (prev.recibido || 0));
+    var otraCant  = limpiarOtra ? 0 : (otroTipo === "emitido" ? (prev.cantEmitidos || 0) : (prev.cantRecibidos || 0));
     var nuevo = {
-      emitido:       tipo === "emitido"  ? porPeriodo[p].monto : (prev.emitido || 0),
-      recibido:      tipo === "recibido" ? porPeriodo[p].monto : (prev.recibido || 0),
-      cantEmitidos:  tipo === "emitido"  ? porPeriodo[p].cant  : (prev.cantEmitidos || 0),
-      cantRecibidos: tipo === "recibido" ? porPeriodo[p].cant  : (prev.cantRecibidos || 0),
+      emitido:       tipo === "emitido"  ? porPeriodo[p].monto : otroMonto,
+      recibido:      tipo === "recibido" ? porPeriodo[p].monto : otroMonto,
+      cantEmitidos:  tipo === "emitido"  ? porPeriodo[p].cant  : otraCant,
+      cantRecibidos: tipo === "recibido" ? porPeriodo[p].cant  : otraCant,
       actualizado:   new Date().toISOString()
     };
     updates["totales/" + clienteId + "/" + p] = nuevo;
@@ -7580,8 +7706,20 @@ function confirmarImportacion(clienteId, tipo, registros, porPeriodo){
   guardado.then(function(){
     cerrarModal();
     toast(registros.length + " comprobantes importados", "ok");
-    $("impResultado").innerHTML = '<div class="aviso ok"><span>✅</span><div>Importación completada. ' +
-      "Ya podés ver el resultado en <b>Recategorización</b>.</div></div>";
+    /* El select vuelve a «detectar»: quedaba pegado en lo último elegido y el
+       archivo siguiente —el de recibidos— entraba con ese tipo sin que la
+       detección se llegara a consultar. Era el camino más probable del
+       «me tomó unos recibidos como emitidos». */
+    if ($("impTipo")) $("impTipo").value = "auto";
+    _impPreview = null;
+    var unPeriodo = pers.length === 1 ? pers[0] : null;
+    $("impResultado").innerHTML = '<div class="aviso ok"><span>✅</span><div>Importación completada como <b>' +
+      (tipo === "emitido" ? "emitidos" : "recibidos") + "</b>." +
+      (unPeriodo
+        ? ' <a href="#" onclick="verDetallePeriodo(\'' + clienteId + "','" + unPeriodo +
+          '\');return false;">Ver y corregir ' + periodoLargo(unPeriodo) + "</a> ·"
+        : "") +
+      ' Ya podés ver el resultado en <a href="#" onclick="irA(\'tabRecat\');return false;">Recategorización</a>.</div></div>';
     renderHome();
     renderTablaComprobantes();
   }).catch(function(e){ toast(explicarError(e), "error"); });
@@ -8164,27 +8302,38 @@ function pintarDetallePeriodo(){
   if (!cont || !_detalle) return;
   var filas = filasDelDetalle(), puede = puedeEscribir();
 
+  /* ⚠️ Un mes puede tener TOTALES cargados y ningún comprobante individual:
+     pasa con la carga manual. Antes esto era un callejón sin salida —el cuadro
+     decía «sin comprobantes» y no ofrecía nada, ni siquiera borrar el
+     período, porque el botón está más abajo en esta misma función—. */
   if (!filas.length){
-    cont.innerHTML = '<div class="vacio"><div class="ico">📄</div><div>Sin comprobantes en este período.</div></div>';
+    cont.innerHTML = _detalleSinComprobantes(puede);
     return;
   }
 
   var sumaE = 0, sumaR = 0;
-  filas.forEach(function(c){ if (c.tipo === "recibido") sumaR += (c.total || 0); else sumaE += (c.total || 0); });
+  /* Se suma por la RAMA en la que está guardado cada uno, que es lo que
+     cuentan los totales del mes. El campo `tipo` de adentro del registro
+     debería decir lo mismo, pero si alguna vez no coincide manda la rama:
+     dos lugares diciendo cosas distintas del mismo comprobante es peor. */
+  filas.forEach(function(c){ if (c._tp === "recibido") sumaR += (c.total || 0); else sumaE += (c.total || 0); });
 
   cont.innerHTML =
+    (puede ? _barraDeSeleccion(filas) : _avisoSoloLectura()) +
     '<div class="tabla-wrap" style="max-height:440px;overflow-y:auto"><table><thead><tr>' +
+      (puede ? '<th style="width:34px"><input type="checkbox" id="cbTodos" title="Marcar todos" onchange="_marcarTodosLosCbtes(this.checked)"></th>' : "") +
       "<th>Fecha</th><th>Tipo</th><th>Nº</th><th>Contraparte</th><th>E/R</th><th class=num>Total</th>" +
       (puede ? "<th></th>" : "") +
     "</tr></thead><tbody>" +
     filas.map(function(c, i){
       return '<tr id="cbteFila' + i + '">' +
+        (puede ? '<td><input type="checkbox" class="cbSel" data-i="' + i + '" onchange="_refrescarBarraSeleccion()"></td>' : "") +
         "<td>" + esc(String(c.fecha || "").split("-").reverse().join("/")) + "</td>" +
         "<td>" + esc(c.cbteTipo || "—") + "</td>" +
         '<td class="mono">' + esc(_nroComprobante(c) || "—") + "</td>" +
         "<td>" + esc(c.denom || formatCuit(c.docNro) || "—") + "</td>" +
-        '<td><span class="badge ' + (c.tipo === "emitido" ? "b-azul" : "b-gris") + '">' +
-          (c.tipo === "emitido" ? "Emitido" : "Recibido") + "</span></td>" +
+        '<td><span class="badge ' + (c._tp === "emitido" ? "b-azul" : "b-gris") + '">' +
+          (c._tp === "emitido" ? "Emitido" : "Recibido") + "</span></td>" +
         '<td class="num">' + pesos(c.total || 0) + "</td>" +
         (puede
           ? '<td style="white-space:nowrap">' +
@@ -8201,6 +8350,156 @@ function pintarDetallePeriodo(){
       ? '<div style="margin-top:14px;display:flex;justify-content:flex-end">' +
         '<button type="button" class="btn sec chico" onclick="pedirBorrarPeriodoEntero()">🗑️ Borrar todo el período</button></div>'
       : "");
+}
+
+/* ---------- EL MES QUE TIENE TOTALES PERO NINGÚN COMPROBANTE ----------
+   No es un error: es lo que deja la carga manual, que escribe los importes y
+   nunca los comprobantes. Lo que SÍ era un error es que acá no se pudiera
+   hacer nada con ellos. */
+function _detalleSinComprobantes(puede){
+  var t = (ESTADO.totales[_detalle.clienteId] || {})[_detalle.periodo] || {};
+  var hay = (t.emitido || 0) || (t.recibido || 0);
+
+  var html = '<div class="aviso info"><span>📄</span><div>Este mes <b>no tiene comprobantes cargados uno por uno</b>' +
+    (hay ? ", sólo los totales." : " ni totales.") + "</div></div>";
+
+  if (hay){
+    html += '<div class="tabla-wrap"><table><thead><tr><th>&nbsp;</th><th class=num>Importe</th>' +
+      "<th class=num>Comprobantes</th></tr></thead><tbody>" +
+      "<tr><td>Emitido</td>" + celdaMontoCopiable(t.emitido || 0, "Emitido") +
+        '<td class="num">' + (t.cantEmitidos || 0) + "</td></tr>" +
+      "<tr><td>Recibido</td>" + celdaMontoCopiable(t.recibido || 0, "Recibido") +
+        '<td class="num">' + (t.cantRecibidos || 0) + "</td></tr>" +
+      "</tbody></table></div>" +
+      '<div class="ayuda" style="margin-top:8px">' +
+        (t.origen === "manual" ? "Cargado a mano." :
+         t.origen === "recalculado" ? "Recalculado desde los comprobantes; antes estaba cargado a mano." :
+         "Importado.") +
+      "</div>";
+  }
+
+  if (!puede) return html + _avisoSoloLectura();
+
+  return html +
+    '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button type="button" class="btn sec chico" onclick="abrirCargaManual(_detalle.clienteId, _detalle.periodo)">' +
+        "✏️ Corregir los totales del mes</button>" +
+      (hay ? '<button type="button" class="btn sec chico" onclick="pedirBorrarPeriodoEntero()">🗑️ Borrar todo el período</button>' : "") +
+    "</div>";
+}
+
+/* Con rol lector no se pinta ninguna acción, y antes no se pintaba tampoco un
+   motivo: la pantalla se veía como si la app no dejara corregir nada. */
+function _avisoSoloLectura(){
+  return '<div class="aviso warn"><span>👁️</span><div>Entraste con rol <b>lector</b>: podés mirar pero no corregir. ' +
+    "Para editar comprobantes hace falta rol <b>editor</b> o <b>admin</b>.</div></div>";
+}
+
+/* ---------- MARCAR VARIOS Y DARLOS VUELTA DE UNA ----------
+   «Me tomó unos comprobantes recibidos como emitidos»: el selector de E/R
+   existía desde siempre, pero de a UN comprobante por vez. Un archivo de
+   compras mal importado son cuarenta ediciones, cada una con su escritura y
+   su recálculo de totales. Acá se marcan y se dan vuelta todos juntos, en un
+   solo `update()` y un solo recálculo. */
+function _barraDeSeleccion(filas){
+  var emitidos = filas.filter(function(c){ return c._tp === "emitido"; }).length;
+  return '<div id="cbBarraSel" class="aviso info" style="align-items:center">' +
+    "<span>⇄</span><div>" +
+    '<span id="cbSelCuenta">Marcá los que estén mal clasificados</span> ' +
+    '<span id="cbSelBotones" style="display:none;margin-left:6px">' +
+      '<button type="button" class="btn sec chico" onclick="pasarSeleccionados(\'recibido\')">Pasar a Recibido</button> ' +
+      '<button type="button" class="btn sec chico" onclick="pasarSeleccionados(\'emitido\')">Pasar a Emitido</button>' +
+    "</span>" +
+    '<div class="ayuda" style="margin-top:6px">' + emitidos + " de " + filas.length +
+      " están como emitidos. Lo emitido es lo que suma en la recategorización.</div>" +
+    "</div></div>";
+}
+
+function _seleccionDelDetalle(){
+  return Array.prototype.slice.call(document.querySelectorAll(".cbSel"))
+    .filter(function(ch){ return ch.checked; })
+    .map(function(ch){ return parseInt(ch.dataset.i, 10); });
+}
+
+function _marcarTodosLosCbtes(on){
+  Array.prototype.forEach.call(document.querySelectorAll(".cbSel"), function(ch){ ch.checked = !!on; });
+  _refrescarBarraSeleccion();
+}
+
+function _refrescarBarraSeleccion(){
+  var n = _seleccionDelDetalle().length;
+  var txt = $("cbSelCuenta"), bts = $("cbSelBotones");
+  if (!txt || !bts) return;
+  txt.innerHTML = n ? "<b>" + n + (n === 1 ? " marcado</b>" : " marcados</b>") : "Marcá los que estén mal clasificados";
+  bts.style.display = n ? "" : "none";
+}
+
+/* La clave en la rama nueva. Se conserva la de siempre si está libre: antes se
+   le pegaba «-m<timestamp>» en cada corrección y las claves se iban alargando
+   (`5-123-0-mabc-mdef`) hasta ser ilegibles. */
+function _claveLibre(rama, k, tomadas){
+  if ((!rama || rama[k] === undefined) && !(tomadas && tomadas[k])) return k;
+  var n = 2;
+  while ((rama && rama[k + "-" + n] !== undefined) || (tomadas && tomadas[k + "-" + n])) n++;
+  return k + "-" + n;
+}
+
+function pasarSeleccionados(tipoDestino){
+  if (!_detalle) return;
+  var id = _detalle.clienteId, per = _detalle.periodo;
+  var filas = filasDelDetalle();
+  var elegidas = _seleccionDelDetalle().map(function(i){ return filas[i]; })
+    .filter(function(c){ return c && c._tp !== tipoDestino; });
+
+  if (!elegidas.length){
+    toast("Los que marcaste ya están como " + (tipoDestino === "emitido" ? "emitidos" : "recibidos"), "info");
+    return;
+  }
+
+  var suma = elegidas.reduce(function(a, c){ return a + (c.total || 0); }, 0);
+  var cont = $("detalleCuerpo");
+  cont.innerHTML = '<div class="aviso warn"><span>⇄</span><div>Pasan <b>' + elegidas.length +
+    (elegidas.length === 1 ? "</b> comprobante" : "</b> comprobantes") + " por <b>" + pesos(suma) +
+    "</b> a <b>" + (tipoDestino === "emitido" ? "Emitido" : "Recibido") + "</b>." +
+    (tipoDestino === "recibido"
+      ? " Ese importe <b>deja de contar</b> para la recategorización, que suma sólo lo emitido."
+      : " Ese importe <b>pasa a contar</b> para la recategorización, que suma lo emitido.") +
+    "</div></div>" +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button type="button" class="btn" id="btnSiPasar">Sí, pasarlos</button>' +
+      '<button type="button" class="btn gris" onclick="pintarDetallePeriodo()">Cancelar</button>' +
+    "</div>";
+
+  $("btnSiPasar").onclick = function(){
+    var updates = {}, hechos = [], tomadas = {};
+    elegidas.forEach(function(c){
+      var nuevo = Object.assign({}, c, { tipo: tipoDestino });
+      delete nuevo._tp; delete nuevo._k;
+      var clave = _claveLibre(_detalle.datos[tipoDestino], c._k, tomadas);
+      tomadas[clave] = true;
+      updates["comprobantes/" + id + "/" + per + "/" + c._tp + "/" + c._k] = null;
+      updates["comprobantes/" + id + "/" + per + "/" + tipoDestino + "/" + clave] = nuevo;
+      hechos.push({ viejo: c, clave: clave, nuevo: nuevo });
+    });
+
+    ref("").update(updates).then(function(){
+      /* La foto local se toca recién con el write hecho. */
+      hechos.forEach(function(h){
+        if (_detalle.datos[h.viejo._tp]) delete _detalle.datos[h.viejo._tp][h.viejo._k];
+        if (!_detalle.datos[tipoDestino]) _detalle.datos[tipoDestino] = {};
+        _detalle.datos[tipoDestino][h.clave] = h.nuevo;
+      });
+      return recalcularTotalesDe(id, per);
+    }).then(function(){
+      pintarDetallePeriodo();
+      refrescarDondeSeVenLosComprobantes();
+      toast(hechos.length + (hechos.length === 1 ? " comprobante pasó a " : " comprobantes pasaron a ") +
+            (tipoDestino === "emitido" ? "Emitido" : "Recibido"), "ok");
+    }).catch(function(e){
+      toast(explicarError(e), "error");
+      pintarDetallePeriodo();
+    });
+  };
 }
 
 /* ---------- EDITAR: LA FILA SE VUELVE CAMPOS ---------- */
@@ -8242,6 +8541,7 @@ function guardarComprobante(i){
   var total = parseFloat($("cbTot").value);
   if (isNaN(total)){ toast("Falta el importe", "error"); return; }
 
+  var perNuevo = fecha.slice(0,4) + fecha.slice(5,7);
   var nuevo = Object.assign({}, vieja, {
     fecha: fecha,
     cbteTipo: $("cbT").value.trim(),
@@ -8249,11 +8549,13 @@ function guardarComprobante(i){
     nro: parseInt($("cbNro").value, 10) || 0,
     denom: $("cbD").value.trim(),
     tipo: $("cbER").value,
-    total: total
+    total: total,
+    /* El importador graba el período adentro de cada comprobante. Si se
+       corrige la fecha a otro mes, el registro se muda de nodo pero ese campo
+       se quedaba diciendo el mes viejo. */
+    periodo: perNuevo
   });
   delete nuevo._tp; delete nuevo._k;
-
-  var perNuevo = fecha.slice(0,4) + fecha.slice(5,7);
   moverOGuardarComprobante(id, per, vieja, nuevo, perNuevo)
     .then(function(){ toast("Comprobante guardado", "ok"); })
     .catch(function(e){ toast(explicarError(e), "error"); pintarDetallePeriodo(); });
@@ -8268,18 +8570,27 @@ function moverOGuardarComprobante(id, per, vieja, nuevo, perNuevo){
   updates["comprobantes/" + id + "/" + per + "/" + vieja._tp + "/" + vieja._k] = null;
 
   var mismoLugar = perNuevo === per && nuevo.tipo === vieja._tp;
-  var claveNueva = mismoLugar ? vieja._k : (vieja._k + "-m" + Date.now().toString(36));
+  var claveNueva = mismoLugar
+    ? vieja._k
+    : (perNuevo === per
+        ? _claveLibre(_detalle.datos[nuevo.tipo], vieja._k)       /* misma rama conocida */
+        : vieja._k + "-m" + Date.now().toString(36));             /* otro mes: no está bajado */
   updates["comprobantes/" + id + "/" + perNuevo + "/" + nuevo.tipo + "/" + claveNueva] = nuevo;
 
-  /* La rama local también, para poder recalcular sin volver a bajar todo. */
-  if (_detalle.datos[vieja._tp]) delete _detalle.datos[vieja._tp][vieja._k];
-  if (perNuevo === per){
-    if (!_detalle.datos[nuevo.tipo]) _detalle.datos[nuevo.tipo] = {};
-    _detalle.datos[nuevo.tipo][claveNueva] = nuevo;
-  }
-
   return ref("").update(updates)
-    .then(function(){ return recalcularTotalesDe(id, per); })
+    .then(function(){
+      /* ⚠️ La foto local se toca RECIÉN acá, con el write hecho. Antes se
+         modificaba antes de escribir y el `.catch` repintaba desde esa foto ya
+         cambiada: si la escritura rebotaba, el usuario veía el cambio aplicado
+         igual, y al reabrir el cuadro estaba como antes. Es exactamente «lo
+         edito, parece que lo toma, vuelvo y está igual». */
+      if (_detalle.datos[vieja._tp]) delete _detalle.datos[vieja._tp][vieja._k];
+      if (perNuevo === per){
+        if (!_detalle.datos[nuevo.tipo]) _detalle.datos[nuevo.tipo] = {};
+        _detalle.datos[nuevo.tipo][claveNueva] = nuevo;
+      }
+      return recalcularTotalesDe(id, per);
+    })
     .then(function(){ return perNuevo === per ? null : recalcularTotalesDe(id, perNuevo); })
     .then(function(){
       pintarDetallePeriodo();
@@ -8297,9 +8608,12 @@ function pedirBorrarComprobante(btn, i){
   _confirmarEnFila(btn, function(){
     var u = {};
     u["comprobantes/" + id + "/" + per + "/" + c._tp + "/" + c._k] = null;
-    if (_detalle.datos[c._tp]) delete _detalle.datos[c._tp][c._k];
     ref("").update(u)
-      .then(function(){ return recalcularTotalesDe(id, per); })
+      .then(function(){
+        /* Igual que al editar: la foto local recién cuando el borrado salió. */
+        if (_detalle.datos[c._tp]) delete _detalle.datos[c._tp][c._k];
+        return recalcularTotalesDe(id, per);
+      })
       .then(function(){
         pintarDetallePeriodo(); refrescarDondeSeVenLosComprobantes();
         toast("Comprobante borrado", "ok");
@@ -8365,51 +8679,110 @@ function recalcularTotalesDe(clienteId, periodo){
         if (ESTADO.totales[clienteId]) delete ESTADO.totales[clienteId][periodo];
       });
     }
-    var nuevo = { emitido:e, recibido:r, cantEmitidos:ce, cantRecibidos:cr,
-                  actualizado: new Date().toISOString() };
-    return ref("totales/" + clienteId + "/" + periodo).set(nuevo).then(function(){
+    /* ⚠️ No se reemplaza el nodo: se conserva lo que esta función no calcula.
+       Antes hacía `set()` con un objeto de cinco claves y se llevaba puesto
+       todo lo demás, empezando por `origen:"manual"`. Un mes con los importes
+       cargados a mano al que después se le importó UN comprobante perdía esos
+       importes en el instante en que alguien tocaba el ✏️ de ese comprobante:
+       los totales pasaban a ser lo que sumara ese único registro, sin aviso. */
+    var prev = ((ESTADO.totales[clienteId] || {})[periodo]) || {};
+    var nuevo = Object.assign({}, prev, {
+      emitido:e, recibido:r, cantEmitidos:ce, cantRecibidos:cr,
+      actualizado: new Date().toISOString()
+    });
+    if (prev.origen === "manual"){
+      /* Lo que había cargado a mano no se tira: queda al lado, por si el
+         recálculo desde un comprobante suelto dejó el mes más chico. */
+      nuevo.origen = "recalculado";
+      nuevo.manualEmitido  = prev.emitido  || 0;
+      nuevo.manualRecibido = prev.recibido || 0;
+    }
+    return ref("totales/" + clienteId + "/" + periodo).update(nuevo).then(function(){
       if (!ESTADO.totales[clienteId]) ESTADO.totales[clienteId] = {};
       ESTADO.totales[clienteId][periodo] = nuevo;
     });
   });
 }
 
-$("btnCargaManual").onclick = function(){
+/* Carga manual de los totales de un mes. Se abre sola desde el botón de la
+   pantalla, y APUNTADA desde el detalle de un período —ahí ya se sabe de qué
+   cliente y de qué mes se está hablando, y hay importes que corregir—. */
+function abrirCargaManual(clienteId, periodo){
   var opc = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; })
     .sort(function(a,b){ return ESTADO.clientes[a].razonSocial.localeCompare(ESTADO.clientes[b].razonSocial); })
     .map(function(id){ return '<option value="' + id + '">' + esc(ESTADO.clientes[id].razonSocial) + "</option>"; }).join("");
 
+  var per = periodo || periodoHoy();
+
   abrirModal("Carga manual de totales",
     '<div class="aviso info"><span>ℹ️</span><div>Sirve para cargar meses viejos de los que no tenés el CSV. Escribí el total facturado del período.</div></div>' +
     '<div class="grid g2">' +
-      '<div class="campo"><label>Cliente</label><select id="cmCliente">' + opc + "</select></div>" +
-      '<div class="campo"><label>Período</label><input type="month" id="cmPeriodo" value="' + periodoAMonthInput(periodoHoy()) + '"></div>' +
+      '<div class="campo"><label>Cliente</label><select id="cmCliente" onchange="_cmRefrescar()">' + opc + "</select></div>" +
+      '<div class="campo"><label>Período</label><input type="month" id="cmPeriodo" value="' + periodoAMonthInput(per) + '" onchange="_cmRefrescar()"></div>' +
       '<div class="campo"><label>Total emitido (facturado)</label><input type="number" step="0.01" id="cmEmitido"></div>' +
       '<div class="campo"><label>Total recibido (compras)</label><input type="number" step="0.01" id="cmRecibido"></div>' +
-    "</div>",
+    "</div>" +
+    '<div id="cmAviso"></div>',
     [
       { texto:"Cancelar", clase:"gris", accion:cerrarModalPedido },
-      { texto:"Guardar", accion:function(){
-          var id = $("cmCliente").value;
-          var p  = monthInputAPeriodo($("cmPeriodo").value);
-          var prev = (ESTADO.totales[id] || {})[p] || {};
-          var nuevo = {
-            emitido:  parseFloat($("cmEmitido").value)  || 0,
-            recibido: parseFloat($("cmRecibido").value) || 0,
-            cantEmitidos: prev.cantEmitidos || 0,
-            cantRecibidos: prev.cantRecibidos || 0,
-            origen: "manual",
-            actualizado: new Date().toISOString()
-          };
-          ref("totales/" + id + "/" + p).set(nuevo).then(function(){
-            if (!ESTADO.totales[id]) ESTADO.totales[id] = {};
-            ESTADO.totales[id][p] = nuevo;
-            cerrarModal(); toast("Período guardado", "ok");
-            renderTablaComprobantes(); renderHome();
-          });
-        } }
+      { texto:"Guardar", accion:guardarCargaManual }
     ]);
-};
+
+  setTimeout(function(){
+    if (clienteId && $("cmCliente")) $("cmCliente").value = clienteId;
+    _cmRefrescar();
+  }, 40);
+}
+$("btnCargaManual").onclick = function(){ abrirCargaManual(_clienteActivo || null, null); };
+
+/* Lo que ya hay cargado se muestra EN los campos, no sólo en un cartel: el
+   formulario arrancaba vacío y guardar con un campo sin tocar escribía un
+   cero, así que «corregir el emitido» borraba el recibido. */
+function _cmRefrescar(){
+  var id = ($("cmCliente") || {}).value, p = monthInputAPeriodo(($("cmPeriodo") || {}).value);
+  var prev = ((ESTADO.totales[id] || {})[p]) || {};
+  var hay = (prev.emitido || 0) || (prev.recibido || 0) || prev.cantEmitidos || prev.cantRecibidos;
+
+  if ($("cmEmitido"))  $("cmEmitido").value  = prev.emitido  || "";
+  if ($("cmRecibido")) $("cmRecibido").value = prev.recibido || "";
+
+  var av = $("cmAviso");
+  if (!av) return;
+  av.innerHTML = !hay ? "" :
+    '<div class="aviso warn"><span>⚠️</span><div><b>' + periodoLargo(p) + "</b> ya tiene cargado " +
+      pesos(prev.emitido || 0) + " emitido y " + pesos(prev.recibido || 0) + " recibido" +
+      ((prev.cantEmitidos || prev.cantRecibidos)
+        ? " (" + ((prev.cantEmitidos || 0) + (prev.cantRecibidos || 0)) + " comprobantes importados)"
+        : "") +
+      ". Lo que guardes <b>pisa esos totales</b>.</div></div>";
+}
+
+function guardarCargaManual(){
+  var id = $("cmCliente").value;
+  var p  = monthInputAPeriodo($("cmPeriodo").value);
+  var prev = (ESTADO.totales[id] || {})[p] || {};
+  var em = parseFloat($("cmEmitido").value)  || 0;
+  var re = parseFloat($("cmRecibido").value) || 0;
+
+  /* ⚠️ La cantidad de comprobantes sólo vale si el importe no se tocó: si se
+     escribe otro número, los que había contados ya no son los de ese importe
+     y el mes quedaba diciendo «$ 0,00 · 12 comprobantes». */
+  var nuevo = Object.assign({}, prev, {
+    emitido: em,
+    recibido: re,
+    cantEmitidos:  em === (prev.emitido  || 0) ? (prev.cantEmitidos  || 0) : 0,
+    cantRecibidos: re === (prev.recibido || 0) ? (prev.cantRecibidos || 0) : 0,
+    origen: "manual",
+    actualizado: new Date().toISOString()
+  });
+
+  ref("totales/" + id + "/" + p).update(nuevo).then(function(){
+    if (!ESTADO.totales[id]) ESTADO.totales[id] = {};
+    ESTADO.totales[id][p] = nuevo;
+    cerrarModal(); toast("Período guardado", "ok");
+    refrescarDondeSeVenLosComprobantes();
+  }).catch(function(e){ toast(explicarError(e), "error"); });
+}
 
 /* ---------- 14. RECATEGORIZACIÓN ---------- */
 function renderRecat(){
@@ -12794,7 +13167,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v89";
+var VERSION_APP = "v90";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

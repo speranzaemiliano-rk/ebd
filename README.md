@@ -945,6 +945,60 @@ hay que arrastrarlos a mano**: un `mailto:` no puede llevar archivos, y eso lo
 prohíbe el navegador — no es algo que falte programar. Por eso el sistema hace
 las dos mitades que sí puede: bajar los papeles y dejar el correo escrito.
 
+## Un mes que entró mal se da vuelta de una
+
+«Me tomó unos comprobantes recibidos como emitidos.» El selector de
+**Emitido / Recibido** existía desde siempre, pero de a **un comprobante por
+vez**: un archivo de compras mal importado son cuarenta ediciones. Ahora, en el
+detalle de un período (el 🔍 de cada mes), cada comprobante tiene su casilla,
+hay una para marcarlos a todos, y dos botones: **Pasar a Recibido** y **Pasar a
+Emitido**. Van todos en una sola escritura y un solo recálculo de totales.
+
+Antes de hacerlo pregunta, con el importe a la vista y qué cambia: lo emitido es
+lo que suma en la **recategorización**, así que dar vuelta un mes mueve la
+categoría del monotributo.
+
+Cuatro cosas más de la misma pantalla:
+
+- un mes con **totales cargados y ningún comprobante** (lo que deja la carga
+  manual) decía «sin comprobantes» y no ofrecía nada — ni corregir los totales,
+  ni borrar el período. Ahora muestra lo que hay y los dos botones;
+- la **carga manual** viene con los importes que ya estaban (arrancaba vacía, y
+  guardar «para corregir el emitido» escribía un cero en el recibido), avisa que
+  va a pisar lo que haya, y ya no deja meses con «$ 0,00 · 12 comprobantes»;
+- si la escritura **rebota** (permiso, red), la pantalla ya no muestra el cambio
+  igual: era «lo edito, parece que lo toma, vuelvo y está como antes»;
+- el recálculo de totales **ya no borra** lo que se había cargado a mano.
+
+## Cuando no se sabe si es de ventas o de compras, se pregunta
+
+La causa de fondo: el importador decidía por **archivo** —no por fila— mirando
+si el encabezado decía «Emisor» o «Receptor», y **ante la duda asumía
+«emitido»**, en silencio y con un cartel verde de éxito. Lo emitido es
+justamente lo que suma la recategorización, así que un archivo de compras
+inflaba la categoría.
+
+Ahora:
+
+- si no se puede saber, **no importa nada**: muestra los encabezados que vio y
+  pregunta «¿son emitidos o recibidos?»;
+- con las **dos** palabras presentes ya no gana «recibido»: eso es ambiguo;
+- el **nombre del archivo** sirve de segunda señal («MisComprobantesRecibidos…»);
+- el tipo sale en **su propio renglón** de la confirmación, no interpolado en el
+  cartel verde, y con un «No, son recibidos» que lo da vuelta sin volver a leer
+  el archivo;
+- **cruce de CUIT**: en un archivo de ventas la columna de documento es el
+  cliente de él, y en uno de compras es el proveedor. Si la mayoría de las filas
+  tienen el CUIT **del propio cliente**, el archivo está al revés y lo dice en
+  rojo. (Estaba escrito como comentario desde el primer día y nunca
+  implementado.)
+- el selector **vuelve a «detectar»** después de importar: quedaba pegado en lo
+  último elegido y el archivo siguiente entraba con ese tipo sin consultar nada;
+- y si esos meses ya tienen plata cargada **del otro lado**, lo dice y ofrece
+  **borrarla en el mismo movimiento**. Sin eso, reimportar bien un archivo que
+  había entrado al revés dejaba el mes contado **dos veces** — y el cartel
+  prometía un reemplazo que no hacía.
+
 ## Corregir los comprobantes importados
 
 Un archivo importado llega mal: una fila con el importe cambiado, el mismo mes
