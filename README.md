@@ -758,6 +758,38 @@ vencimiento. El **acuse** trae su número de transacción, que no se copia al
 casillero del número — si se copiara, la liquidación contaría un pago que no
 existe.
 
+## Varios papeles juntos, y cada uno a su impuesto
+
+Un mes son tres o cuatro papeles por impuesto, y subirlos de a uno —elegir el
+tipo, esperar, volver a abrir el selector— es la parte más tediosa de cargar una
+liquidación.
+
+Ahora el campo de papeles acepta **varios a la vez**, y la IA los reparte: lee
+cada uno, decide **de qué organismo es** y **qué es**, y lo archiva en el bloque
+que corresponda — el VEP de ARBA va a ARBA aunque se lo haya soltado en el
+casillero de ARCA—, completando ahí el importe, el número, el vencimiento y las
+retenciones.
+
+Mientras trabaja se ve **«3 de 11 — 2 listos»** con un **✕ Frenar**, y al final
+queda la lista de qué pasó con cada archivo:
+
+- **✓** `vep-arba.pdf` — VEP → ARBA · $ 230.532,41
+- **🚫** `acuse-agip.pdf` — dice ser de AGIP, que este cliente no tiene cargado
+- **⚠️** `resumen.pdf` — guardado sin leer en los papeles del mes
+
+Tres decisiones que importan:
+
+- van **de a uno y no todos juntos**: la cuenta de Gemini tiene un límite por
+  minuto y en paralelo se lo lleva puesto;
+- cada lectura tiene **reloj** (dos minutos y medio): un pedido que no vuelve
+  frenaba la tanda entera para siempre, sin error y sin salida;
+- un papel que **no se pudo leer** entra igual —perderlo es peor— pero como
+  **«otro»**, nunca como VEP: el VEP vive adentro de la liquidación, es el que
+  cuenta para «cuántos faltan» y hay uno por impuesto, así que un papel
+  desconocido se llevaría puesto el de verdad.
+
+Con **un solo** archivo todo sigue como antes.
+
 ## El VEP se lee solo
 
 En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la
