@@ -9710,10 +9710,11 @@ function bloqueVepArchivo(clave, d){
         TIPOS_LIQ.map(function(t){
           return '<option value="' + t + '">' + esc(nombreTipoArchivo(t)) + "</option>";
         }).join("") + "</select>" +
-      '<input type="file" accept="application/pdf,image/*" id="lq_' + clave + '_file"' +
+      '<input type="file" accept="application/pdf,image/*" multiple id="lq_' + clave + '_file"' +
         ' onchange="leerPapelDeLiquidacion(\'' + clave + '\')">' +
     "</div>" +
-    '<div class="ayuda">Hasta 3 MB. Al elegirlo, la IA lo lee y completa el importe, el número y el vencimiento. ' +
+    '<div class="ayuda">Hasta 3 MB cada uno. <b>Podés elegir varios juntos</b>: la IA lee cada uno, lo manda ' +
+      "al impuesto que corresponda —aunque no sea éste— y completa el importe, el número y el vencimiento. " +
       "El VEP queda con la liquidación; lo demás va a los papeles del cliente, en este mes.</div>" +
     '<div id="lqIA_' + clave + '" style="margin-top:8px"></div></div>';
 }
@@ -9786,7 +9787,7 @@ function pedirBorrarPapelDeImpuesto(btn, clave, id){
 /* Guarda el adjunto donde corresponde según su tipo. */
 function guardarPapelDeImpuesto(clave, file, tipo){
   var id = _liqActual.clienteId, per = _liqActual.periodo;
-  return leerArchivo($("lq_" + clave + "_file"), 3).then(function(leido){
+  return leerArchivoDe(file, 3).then(function(leido){
     if (!leido) return null;
     if (tipo === "vep"){
       _vepsDelModal[clave] = leido;                 /* se graba al guardar la liquidación */
@@ -9877,8 +9878,181 @@ function _guardarDatosDelPapel(clave, campos){
   });
 }
 
+/* ---------- VARIOS PAPELES DE UNA VEZ ----------
+   Un mes son tres o cuatro papeles por impuesto, y subirlos de a uno —elegir
+   el tipo, esperar, volver a abrir el selector— es la parte más tediosa de
+   cargar una liquidación.
+
+   Acá se eligen todos juntos y la IA decide, papel por papel, de qué
+   organismo es y qué es: el VEP de ARBA se archiva en ARBA aunque se lo haya
+   soltado en el casillero de ARCA, y completa el importe, el número, el
+   vencimiento y las retenciones en EL BLOQUE QUE CORRESPONDE.
+
+   De a uno y no todos juntos a propósito: la cuenta de Gemini tiene un límite
+   por minuto y en paralelo se lo lleva puesto. Y con reloj (`conLimite`): un
+   pedido que no vuelve frenaba la tanda entera para siempre, sin error y sin
+   salida — el mismo agujero que el correo tenía antes de v83. */
+var ESPERA_IA = 150000;   /* 2 min y medio por papel: generoso, pero con final */
+var _lqLote = null;
+
+function _lqLoteFrenar(){
+  if (_lqLote) _lqLote.frenar = true;
+}
+
+function _lqLeerLote(clave, files){
+  var est = $("lqIA_" + clave), campo = $("lq_" + clave + "_file");
+  if (!est) return Promise.resolve();
+  _lqLote = { frenar:false, pos:0, total:files.length, filas:[], clave:clave };
+
+  function pintar(){ est.innerHTML = _lqLoteHTML(); }
+  pintar();
+
+  var cadena = Promise.resolve();
+  files.forEach(function(f, i){
+    cadena = cadena.then(function(){
+      if (_lqLote.frenar){
+        _lqLote.filas.push({ nombre:f.name, estado:"frenado", texto:"No se leyó (frenaste la tanda)" });
+        pintar();
+        return;
+      }
+      _lqLote.pos = i + 1;
+      pintar();
+      return _lqUnPapel(clave, f).then(function(fila){
+        _lqLote.filas.push(fila);
+        pintar();
+      });
+    });
+  });
+
+  return cadena.then(function(){
+    _lqLote.pos = _lqLote.total;
+    if (campo) campo.value = "";
+    pintar();
+    /* Las listas de papeles de TODOS los impuestos: la tanda pudo repartir. */
+    return cargarPapelesDelMesEnLiquidacion();
+  });
+}
+
+/* Un papel de la tanda: leerlo, decidir a qué impuesto va, guardarlo ahí y
+   completar los casilleros de ESE bloque. */
+function _lqUnPapel(claveOrigen, f){
+  return conLimite(preguntarAGemini(_promptPapel(), f, 0), ESPERA_IA, "La IA")
+    .then(function(r){
+      var d = jsonDeGemini(r) || {};
+      var destino = _lqDestinoDelPapel(claveOrigen, d);
+      if (destino.error) return { nombre:f.name, estado:"no", texto:destino.error };
+
+      var tipo = _lqTipoDelPapel(destino.clave, d);
+      return guardarPapelDeImpuesto(destino.clave, f, tipo).then(function(){
+        var corto = _cortoImpuesto(destino.clave);
+        _papelLeido[destino.clave] = d;
+        _tipoPapel[destino.clave]  = tipo;
+        /* `_avisoPapelLeido` completa los campos y GUARDA lo que sacó; lo que
+           devuelve es el cartel. Si el papel se fue a otro impuesto, el cartel
+           va en ese bloque; si es éste, acá abajo está la barra de la tanda y
+           pisarla sería perder el progreso. */
+        var cartel = _avisoPapelLeido(destino.clave, corto, d);
+        if (destino.clave !== claveOrigen){
+          var caja = $("lqIA_" + destino.clave);
+          if (caja) caja.innerHTML = cartel;
+        }
+        return { nombre:f.name, estado:"ok", destino:destino.clave,
+                 texto: nombreTipoArchivo(tipo) + " → " + corto +
+                        (d.importe ? " · " + pesos(d.importe) : "") };
+      });
+    })
+    .catch(function(e){
+      /* Si la IA no contesta, el papel entra igual donde se lo soltó y se dice
+         que no se pudo revisar: perderlo sería peor que archivarlo sin leer.
+
+         ⚠️ Pero entra como «otro», NUNCA como VEP, aunque el selector diga
+         eso: el VEP no es un papel más —vive adentro de la liquidación, es el
+         que cuenta para «cuántos faltan» y hay UNO por impuesto—, así que un
+         papel que nadie pudo leer se llevaría puesto el VEP de verdad. */
+      return guardarPapelDeImpuesto(claveOrigen, f, "otro")
+        .then(function(){
+          return { nombre:f.name, estado:"sinleer",
+                   texto:"Guardado sin leer en los papeles del mes (" + motivoDe(e) + ") — fijate qué tipo es" };
+        })
+        .catch(function(e2){ return { nombre:f.name, estado:"error", texto:motivoDe(e2) }; });
+    });
+}
+
+/* A qué impuesto va. El papel manda sobre el casillero donde se lo soltó,
+   pero sólo si el cliente tiene ese impuesto en esta liquidación. */
+function _lqDestinoDelPapel(claveOrigen, d){
+  if (d.periodo && _liqActual && String(d.periodo) > _liqActual.periodo){
+    return { error: "Es del período " + periodoLargo(String(d.periodo)) + ", posterior a esta liquidación" };
+  }
+  var org = d.organismo;
+  if (!org || org === claveOrigen) return { clave: claveOrigen };
+  if ($("lq_" + org + "_monto")) return { clave: org };
+  return { error: "Dice ser de " + _cortoImpuesto(org) + ", que este cliente no tiene cargado" };
+}
+
+/* De qué tipo es, con los nombres que usa el sistema. La declaración jurada
+   de ingresos brutos tiene tipo propio (`ddjjiibb`): es la que se pide en
+   ARBA y en AGIP, y mezclarla con la de ARCA deja los papeles del cliente
+   diciendo cualquier cosa. */
+function _lqTipoDelPapel(destino, d){
+  var t = String(d.tipo || "").toLowerCase().trim();
+  if (t === "ddjj") return destino === "arca" ? "ddjj" : "ddjjiibb";
+  return TIPOS_LIQ.indexOf(t) !== -1 ? t : "otro";
+}
+
+function _lqLoteHTML(){
+  var L = _lqLote;
+  if (!L) return "";
+  var hechos = L.filas.length;
+  var bien = L.filas.filter(function(x){ return x.estado === "ok"; }).length;
+  var mal = hechos - bien;
+  var enCurso = hechos < L.total && !L.frenar;
+  var ICO = { ok:"✓", no:"🚫", sinleer:"⚠️", error:"🚫", frenado:"⏹" };
+
+  return '<div class="aviso ' + (enCurso ? "info" : (mal ? "warn" : "ok")) + '"><span>' +
+    (enCurso ? "⏳" : (mal ? "⚠️" : "✓")) + "</span><div>" +
+    "<b>" + Math.min(L.pos, L.total) + " de " + L.total + "</b> — " + bien +
+    (bien === 1 ? " listo" : " listos") + (mal ? " · " + mal + " con problemas" : "") +
+    (enCurso
+      ? ' <button type="button" class="btn sec chico" onclick="_lqLoteFrenar()">✕ Frenar</button>'
+      : "") +
+    (L.filas.length
+      ? '<ul class="lista-simple" style="margin-top:8px">' + L.filas.map(function(x){
+          return '<li><span>' + (ICO[x.estado] || "•") + "</span>" +
+            '<div class="crece"><div class="tit mono">' + esc(x.nombre) + "</div>" +
+            '<div class="sub">' + esc(x.texto) + "</div></div></li>";
+        }).join("") + "</ul>"
+      : "") +
+    "</div></div>";
+}
+
+/* Lo que se le pide a la IA de un papel de impuestos. En una sola función
+   porque lo usan la lectura de a uno y la de varios juntos: dos copias del
+   mismo prompt se despegan a la primera corrección. */
+function _promptPapel(){
+  return "Te paso un papel de impuestos argentino: puede ser un VEP (volante electrónico de pago), " +
+    "una declaración jurada, un acuse o constancia de presentación, una boleta de tasa municipal, " +
+    "una credencial de pago del monotributo, un formulario D960, o un comprobante de pago. " +
+    "Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
+    '{"tipo":"vep","organismo":"arca","importe":123456.78,"nroVep":"1234567890","vencimiento":"2026-09-22",' +
+    '"periodo":"202608","retenciones":1234.56}. ' +
+    "tipo: vep, ddjj, acuse, boleta, credencial, d960, pago u otro. " +
+    "organismo: arca, arba, agip o municipal. " +
+    "Si el papel es de un municipio o una municipalidad, organismo es municipal. importe: el total a pagar, como número, " +
+    "con punto decimal y sin separador de miles. nroVep: el número del VEP o del comprobante, sin puntos. " +
+    "vencimiento: la fecha de vencimiento o de pago en formato AAAA-MM-DD. periodo: el período fiscal en AAAAMM. " +
+    "retenciones: en una declaración jurada o un resumen de Ingresos Brutos, el TOTAL de retenciones, percepciones y " +
+    "recaudaciones del período —lo que se descuenta del impuesto determinado para llegar al saldo a pagar—, como número. " +
+    "Si el papel no las informa, null; no lo confundas con el saldo ni con el impuesto determinado. " +
+    "Lo que no figure en el papel va en null. No inventes ningún número.";
+}
+
 function leerPapelDeLiquidacion(clave, reintento){
   var campo = $("lq_" + clave + "_file");
+  /* Varios de una vez: otro camino, con barra y resumen. */
+  if (!reintento && campo && campo.files && campo.files.length > 1){
+    return _lqLeerLote(clave, Array.prototype.slice.call(campo.files));
+  }
   var f = reintento ? _ultimoPapel[clave] : (campo && campo.files && campo.files[0]);
   var est = $("lqIA_" + clave);
   if (!f || !est) return;
@@ -9909,21 +10083,7 @@ function leerPapelDeLiquidacion(clave, reintento){
     }).catch(function(e){ toast(explicarError(e), "error"); throw e; });
   }
 
-  var prompt = "Te paso un papel de impuestos argentino: puede ser un VEP (volante electrónico de pago), " +
-    "una declaración jurada, un acuse o constancia de presentación, una boleta de tasa municipal, " +
-    "una credencial de pago del monotributo, un formulario D960, o un comprobante de pago. " +
-    "Devolvé SOLO un JSON con esta forma, sin texto alrededor: " +
-    '{"tipo":"vep","organismo":"arca","importe":123456.78,"nroVep":"1234567890","vencimiento":"2026-09-22",' +
-    '"periodo":"202608","retenciones":1234.56}. ' +
-    "tipo: vep, ddjj, acuse, boleta, credencial, d960, pago u otro. " +
-    "organismo: arca, arba, agip o municipal. " +
-    "Si el papel es de un municipio o una municipalidad, organismo es municipal. importe: el total a pagar, como número, " +
-    "con punto decimal y sin separador de miles. nroVep: el número del VEP o del comprobante, sin puntos. " +
-    "vencimiento: la fecha de vencimiento o de pago en formato AAAA-MM-DD. periodo: el período fiscal en AAAAMM. " +
-    "retenciones: en una declaración jurada o un resumen de Ingresos Brutos, el TOTAL de retenciones, percepciones y " +
-    "recaudaciones del período —lo que se descuenta del impuesto determinado para llegar al saldo a pagar—, como número. " +
-    "Si el papel no las informa, null; no lo confundas con el saldo ni con el impuesto determinado. " +
-    "Lo que no figure en el papel va en null. No inventes ningún número.";
+  var prompt = _promptPapel();
 
   preguntarAGemini(prompt, f, 0, function(intento, segundos){
     est.innerHTML = '<div class="aviso warn"><span>⏳</span><div>La IA está saturada en este momento. ' +
@@ -10113,8 +10273,14 @@ function quitarVep(clave){
 /* Lee el archivo elegido como data URL, que es lo que se guarda y lo que el
    navegador puede volver a abrir sin más trámite. */
 function leerArchivo(input, maxMB){
+  return leerArchivoDe(input && input.files && input.files[0], maxMB);
+}
+
+/* El mismo lector pero de un archivo suelto: cuando se eligen VARIOS, el de
+   arriba devolvía siempre el primero y los demás se habrían guardado con el
+   nombre bien y el contenido equivocado. */
+function leerArchivoDe(f, maxMB){
   return new Promise(function(resolve, reject){
-    var f = input && input.files && input.files[0];
     if (!f) return resolve(null);
     if (f.size > maxMB * 1024 * 1024) return reject(new Error("«" + f.name + "» pesa más de " + maxMB + " MB"));
     var lector = new FileReader();
@@ -13209,7 +13375,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v91";
+var VERSION_APP = "v92";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------
