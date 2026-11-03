@@ -3376,15 +3376,8 @@ var TABS_CLIENTES = [
 var _clienteActivo = "";
 
 function fijarClienteActivo(id, repintar){
-  var antes = nombreClienteActivo();
   _clienteActivo = (id && ESTADO.clientes[id]) ? id : "";
   try { localStorage.setItem("ebd_cliente_activo", _clienteActivo); } catch (_) {}
-
-  /* Al soltarlo hay que sacar su nombre del filtro de Liquidación: es texto y
-     se quedaría ahí, filtrando por un cliente que ya nadie eligió. Sólo si el
-     filtro sigue siendo exactamente ese nombre — lo que uno haya escrito a
-     mano encima no se toca. */
-  if (!_clienteActivo && antes && FILTROS_LIQ.cliente === antes) FILTROS_LIQ.cliente = "";
 
   var panel = document.querySelector(".panel.activo");
   if (repintar !== false && panel) irA(panel.id);
@@ -3400,6 +3393,18 @@ function _recordarClienteActivo(){
 /* El nombre es lo que usa el filtro de Liquidación, que filtra por texto. */
 function nombreClienteActivo(){
   return _clienteActivo ? (ESTADO.clientes[_clienteActivo] || {}).razonSocial || "" : "";
+}
+
+/* ---------- EL CLIENTE ELEGIDO FILTRA TODO ----------
+   El chip 👤 decía el nombre arriba y abajo seguían apareciendo los cien
+   clientes: lo respetaban dos de las seis pantallas del grupo, y cada una a
+   su manera (Liquidación por TEXTO, con match de prefijo, así que «LA ESPIGA
+   SA» traía también a «LA ESPIGA SRL»).
+
+   Ahora todas preguntan lo mismo, por ID exacto. Con nadie elegido devuelve
+   true y vuelven todos, así que soltarlo con la ✕ no necesita limpiar nada. */
+function esElClienteElegido(id){
+  return !_clienteActivo || id === _clienteActivo;
 }
 
 function esDeClientes(tabId){
@@ -3522,7 +3527,7 @@ function inicializarUI(){
   $("mailPeriodo").onchange = renderMails;
 
   llenarSelectClientes($("impCliente"), false);
-  llenarSelectClientes($("verCompCliente"), false);
+  llenarSelectClientes($("verCompCliente"), true);
   llenarAnios();
 
   /* El buscador de arriba y "ver inactivos" repintan sólo las filas, igual que
@@ -3558,10 +3563,20 @@ function llenarSelectClientes(sel, incluirTodos){
     }).join("");
   if (actual && ids.indexOf(actual) !== -1) sel.value = actual;
 }
+function _nombreDeMes(mm){
+  var i = parseInt(mm, 10) - 1;
+  return (MESES[i] || "").charAt(0).toUpperCase() + (MESES[i] || "").slice(1);
+}
+
 function llenarAnios(){
   /* Diez años atrás: al cargar la facturación vieja de un cliente nuevo, con
      cinco no alcanzaba y no había forma de mirar lo que ya estaba importado. */
-  var sel = $("verCompAnio"), hoy = new Date().getFullYear(), out = "";
+  /* Y «Todos los años» primero, que es el default. Sin esa opción, elegir un
+     cliente mostraba sólo lo del año en curso: si el mes que se venía a
+     corregir era de otro año, la pantalla decía «no hay comprobantes» y no
+     había forma de llegar a él. Un cliente nuevo al que se le importó la
+     facturación vieja se veía vacío. */
+  var sel = $("verCompAnio"), hoy = new Date().getFullYear(), out = '<option value="">Todos los años</option>';
   for (var a = hoy; a >= hoy - 9; a--) out += '<option value="' + a + '">Año ' + a + "</option>";
   sel.innerHTML = out;
 
@@ -4183,6 +4198,9 @@ function limpiarFiltrosClientes(){
   Object.keys(FILTROS_CLI).forEach(function(k){ FILTROS_CLI[k] = ""; });
   $("filtroCliente").value = "";
   ORDEN_CLI.campo = "nombre"; ORDEN_CLI.desc = false;
+  /* Limpiar los filtros y que siga mostrando un solo cliente sería un botón
+     que no hace lo que dice. Igual que en Liquidación. */
+  fijarClienteActivo("", false);
   renderClientes();
 }
 
@@ -4196,6 +4214,7 @@ function clientesFiltrados(){
 
   return Object.keys(ESTADO.clientes).filter(function(id){
     var c = ESTADO.clientes[id];
+    if (!esElClienteElegido(id)) return false;
     if (!verInact && c.activo === false) return false;
 
     if (q){
@@ -4235,9 +4254,15 @@ function pintarFilasClientes(){
 
   var cont = $("contadorClientes");
   if (cont){
-    cont.innerHTML = ids.length === total
-      ? total + (total === 1 ? " cliente" : " clientes")
-      : "<b>" + ids.length + "</b> de " + total + " clientes coinciden con los filtros";
+    /* En el listado, el cliente elegido tapa a los demás —es lo que se pidió—
+       pero ésta es justamente la pantalla donde uno viene a elegir OTRO. Así
+       que acá, y sólo acá, la salida se dice con todas las letras. */
+    cont.innerHTML = _clienteActivo
+      ? "Mostrando sólo a <b>" + esc(nombreClienteActivo()) + "</b> de " + total +
+        ' clientes · <a href="#" onclick="fijarClienteActivo(\'\');return false;">ver todos</a>'
+      : (ids.length === total
+          ? total + (total === 1 ? " cliente" : " clientes")
+          : "<b>" + ids.length + "</b> de " + total + " clientes coinciden con los filtros");
   }
 
   if (!ids.length){
@@ -4763,7 +4788,7 @@ function guardarFormCliente(id){
     toast("Cliente guardado", "ok");
     renderClientes(); renderHome();
     llenarSelectClientes($("impCliente"), false);
-    llenarSelectClientes($("verCompCliente"), false);
+    llenarSelectClientes($("verCompCliente"), true);
   }).catch(function(e){ toast(explicarError(e), "error"); });
 }
 
@@ -7211,7 +7236,9 @@ function vistaHonorariosCliente(id){
 $("btnNuevoCliente").onclick = function(){ abrirFormCliente(null); };
 $("btnExportClientes").onclick = function(){
   var filas = [["Razon social","CUIT","Actividad","Categoria","Email","Email 2","ARCA","ARBA","AGIP","Municipal","Municipio","Activo"]];
-  Object.keys(ESTADO.clientes).forEach(function(id){
+  /* Antes exportaba a TODOS aunque la pantalla mostrara tres: el archivo no se
+     parecía a lo que se estaba mirando. */
+  clientesFiltrados().forEach(function(id){
     var c = ESTADO.clientes[id], i = c.impuestos || {};
     filas.push([c.razonSocial, formatCuit(c.cuit), c.actividad, c.categoriaActual || "", c.email || "", c.email2 || "",
       i.arca?"SI":"NO", i.arba?"SI":"NO", i.agip?"SI":"NO", i.municipal?"SI":"NO", c.municipio || "", c.activo===false?"NO":"SI"]);
@@ -8004,11 +8031,14 @@ $("btnProbarBackend").onclick = function(){
 
 function renderComprobantes(){
   llenarSelectClientes($("impCliente"), false);
-  llenarSelectClientes($("verCompCliente"), false);
-  if (_clienteActivo){
-    $("impCliente").value = _clienteActivo;
-    $("verCompCliente").value = _clienteActivo;
-  }
+  /* Con «Todos los clientes» adentro: sin esa opción el select no tenía cómo
+     quedar vacío y soltar el chip con la ✕ dejaba la tabla en el cliente
+     viejo, que es lo contrario de soltarlo. */
+  llenarSelectClientes($("verCompCliente"), true);
+  $("verCompCliente").value = _clienteActivo || "";
+  /* El de importar NO se vacía: es el destino de lo que se importa, no un
+     filtro, y sin cliente no hay a dónde mandar el archivo. */
+  if (_clienteActivo) $("impCliente").value = _clienteActivo;
   renderTablaComprobantes();
 }
 
@@ -8021,16 +8051,22 @@ function renderTablaComprobantes(){
 
   var mes = $("verCompMes").value;
   var t = ESTADO.totales[id] || {};
-  var delAnio = Object.keys(t).filter(function(p){ return p.slice(0,4) === anio; }).sort().reverse();
+  /* Sin año elegido entran todos los períodos cargados. */
+  var delAnio = Object.keys(t).filter(function(p){ return !anio || p.slice(0,4) === anio; }).sort().reverse();
 
   /* Se filtra por mes para ver, pero el acumulado del año se sigue calculando
      sobre todos los meses: uno sirve para liquidar ingresos brutos y el otro
      para la recategorización. */
   var pers = mes ? delAnio.filter(function(p){ return p.slice(4) === mes; }) : delAnio;
 
+  /* Cómo se llama lo que se está mirando, que ya no es siempre un año. */
+  var rango = anio
+    ? (mes ? periodoLargo(anio + mes) : anio)
+    : (mes ? _nombreDeMes(mes) + " de todos los años" : "todo lo cargado");
+
   if (!pers.length){
     cont.innerHTML = '<div class="vacio"><div class="ico">📄</div><div>No hay comprobantes de ' +
-      (mes ? periodoLargo(anio + mes) : anio) + " para este cliente.</div></div>";
+      esc(rango) + " para este cliente.</div></div>";
     return;
   }
 
@@ -8050,12 +8086,13 @@ function renderTablaComprobantes(){
   });
   /* Con un mes elegido, la suma de arriba es la de ese mes; el año entero se
      agrega abajo para no perderlo de vista. */
-  html += '<tr style="background:var(--fondo)"><td><b>Total ' + (mes ? periodoLargo(anio + mes) : anio) + "</b></td>";
+  html += '<tr style="background:var(--fondo)"><td><b>Total ' + esc(rango) + "</b></td>";
   if (tipoF !== "recibido") html += '<td class="num">' + btnCopiarMonto(sumE, "Total emitido") + "<b>" + pesos(sumE) + "</b></td><td></td>";
   if (tipoF !== "emitido")  html += '<td class="num">' + btnCopiarMonto(sumR, "Total recibido") + "<b>" + pesos(sumR) + "</b></td><td></td>";
   html += "<td></td></tr>";
 
-  if (mes){
+  /* El acumulado del año sólo tiene sentido con un año elegido. */
+  if (mes && anio){
     var anualE = 0, anualR = 0, cantE = 0, cantR = 0;
     delAnio.forEach(function(p){
       anualE += t[p].emitido || 0;  cantE += t[p].cantEmitidos || 0;
@@ -8390,7 +8427,7 @@ function renderRecat(){
 
   var ids = Object.keys(ESTADO.clientes).filter(function(id){
     var c = ESTADO.clientes[id];
-    return c.activo !== false && (!c.impuestos || c.impuestos.arca !== false);
+    return esElClienteElegido(id) && c.activo !== false && (!c.impuestos || c.impuestos.arca !== false);
   });
   if (!ids.length){
     $("tablaRecat").innerHTML = '<div class="vacio"><div class="ico">📊</div><div>No hay clientes de monotributo cargados.</div></div>';
@@ -8467,6 +8504,9 @@ $("btnExportRecat").onclick = function(){
   var filas = [["Cliente","CUIT","Actividad","Facturado 12m","Meses con datos","Cat. actual","Cat. corresponde","Cuota","Situacion"]];
   Object.keys(ESTADO.clientes).forEach(function(id){
     var c = ESTADO.clientes[id];
+    /* Lo que baja es lo que se ve: con un cliente elegido, exportar a los cien
+       sería un archivo que no se parece a la pantalla. */
+    if (!esElClienteElegido(id)) return;
     if (c.activo === false) return;
     var an = analizar(id, corte);
     filas.push([c.razonSocial, formatCuit(c.cuit), c.actividad, an.ingresos.toFixed(2), an.mesesConDatos,
@@ -8584,9 +8624,14 @@ function motivoExencion(cli, clave){
 function liqDe(clienteId, periodo){
   return (ESTADO.liquidaciones[clienteId] || {})[periodo] || {};
 }
+/* ⚠️ Un ARBA unificado NO suma, aunque tenga un importe cargado: esa plata ya
+   está adentro de la cuota de ARCA y contarla acá la cobraría dos veces. La
+   celda de la grilla hace lo mismo —muestra «unificado» y no el importe— y las
+   dos pantallas tienen que decir el mismo número. */
 function totalLiq(cli, liq){
   var s = 0;
   IMPUESTOS.forEach(function(i){
+    if (i.clave === "arba" && unificadoArba(cli)) return;
     if (cli.impuestos && cli.impuestos[i.clave] && liq[i.clave] && liq[i.clave].monto) s += liq[i.clave].monto;
   });
   return s;
@@ -8704,9 +8749,10 @@ function _estadoLiqDe(id, periodo){
 
 function renderLiquidacion(){
   var periodo = monthInputAPeriodo($("liqPeriodo").value);
-  /* El filtro por cliente es de texto, así que el cliente elegido entra por
-     ahí: se ve escrito y se puede afinar a mano sin pelearse con nada. */
-  if (_clienteActivo) FILTROS_LIQ.cliente = nombreClienteActivo();
+  /* El cliente elegido NO se escribe más en el filtro de texto: ese filtro
+     matchea por prefijo, así que «LA ESPIGA SA» traía también a «LA ESPIGA
+     SRL». Ahora filtra `esElClienteElegido` por id, y el campo de texto queda
+     libre para lo que uno quiera buscar a mano. */
   if (!Object.keys(ESTADO.clientes).length){
     $("tablaLiquidacion").innerHTML = '<div class="vacio"><div class="ico">💰</div><div>No hay clientes cargados.</div></div>';
     return;
@@ -8772,6 +8818,7 @@ function pintarFilasLiquidacion(){
 
   var ids = activos.filter(function(id){
     var d = datos[id];
+    if (!esElClienteElegido(id)) return false;
     if (F.cliente && !empiezaCon(d.c.razonSocial || "", F.cliente)) return false;
     if (F.estado && d.estado !== F.estado) return false;
     if (F.falta === "alguno" && !d.sinCargar.length) return false;
@@ -8856,9 +8903,10 @@ function pintarCalculoIIBB(clave){
   if (!_liqActual) return;
   var cont = $("calc_" + clave);
   if (!cont) return;
-  var campo = $("lq_" + clave + "_ret");
+  var campo = $("lq_" + clave + "_ret"), monto = $("lq_" + clave + "_monto");
   cont.innerHTML = textoCalculoIIBB(_liqActual.c, _liqActual.clienteId, _liqActual.periodo, clave,
-                                    { retenciones: campo ? campo.value : 0 });
+                                    { retenciones: campo ? campo.value : 0,
+                                      monto: monto ? monto.value : 0 });
 }
 
 /* Monotributo Unificado (Provincia de Buenos Aires): el impuesto sobre los
@@ -8872,14 +8920,65 @@ function unificadoArba(c){
   return !!(((c || {}).iibb || {}).arba || {}).unificado;
 }
 
+/* ---------- EL UNIFICADO SE MARCA DESDE LA LIQUIDACIÓN ----------
+   El régimen unificado —ingresos brutos de Provincia adentro de la cuota del
+   monotributo— se tildaba sólo en la ficha del cliente. Pero uno se entera de
+   que un cliente es unificado justo acá: cuando va a cargar la boleta de ARBA
+   y no hay boleta. Salir a editar la ficha, volver y reabrir el mes era el
+   camino, y eso es exactamente lo que hace que nadie lo marque.
+
+   Escribe en la MISMA marca de la ficha (`iibb/arba/unificado`), no en el mes:
+   el régimen es del cliente y vale para todos los períodos. Por eso lo dice
+   abajo del casillero, para que nadie piense que tildó «este mes». */
+function bloqueUnificadoArba(clienteId){
+  var c = ESTADO.clientes[clienteId] || {};
+  /* Con el exento ya está dicho que no se paga: dos casilleros que dicen
+     cosas parecidas en la misma pantalla sólo confunden. */
+  if (exentoDe(c, "arba")) return "";
+  return '<div id="lqUnifCaja"><label class="check" style="margin:2px 0 4px">' +
+    '<input type="checkbox" id="lqUnifArba"' + (unificadoArba(c) ? " checked" : "") +
+    (puedeEscribir() ? "" : " disabled") +
+    ' onchange="unificadoArbaDesdeLiq(this.checked)"> 🔗 <b>Monotributo Unificado</b> — ' +
+    "ingresos brutos de Provincia va adentro de la cuota del monotributo</label>" +
+    '<div class="ayuda" style="margin-bottom:10px">Es del <b>cliente</b>, no de este mes: queda marcado en su ficha ' +
+    "y vale para todos los períodos.</div></div>";
+}
+
+function unificadoArbaDesdeLiq(on){
+  if (!_liqActual) return;
+  var id = _liqActual.clienteId;
+  ref("clientes/" + id + "/iibb/arba").update({ unificado: !!on }).then(function(){
+    var c = ESTADO.clientes[id];
+    if (!c.iibb) c.iibb = {};
+    if (!c.iibb.arba) c.iibb.arba = {};
+    c.iibb.arba.unificado = !!on;
+    _liqActual.c = c;
+    pintarCalculoIIBB("arba");
+    toast(on ? "Marcado como Monotributo Unificado" : "Ya no es Monotributo Unificado", "ok");
+  }).catch(function(e){
+    toast(explicarError(e), "error");
+    /* El casillero vuelve a lo que de verdad quedó guardado. */
+    if ($("lqUnifArba")) $("lqUnifArba").checked = unificadoArba(ESTADO.clientes[id]);
+  });
+}
+
 function textoCalculoIIBB(c, clienteId, periodo, clave, d){
   var conf = (c.iibb || {})[clave] || {};
 
   if (clave === "arba" && conf.unificado){
+    /* Si el mes ya tenía un importe cargado —se marcó el Unificado después—,
+       hay que decirlo: la celda de la grilla muestra «unificado» y el importe
+       dejó de sumar al total, así que el número desaparecería sin explicación. */
+    var yaCargado = parseFloat((d || {}).monto) || 0;
     return '<div class="aviso ok"><span>🔗</span><div><b>Monotributo Unificado.</b> ' +
       "Ingresos brutos de Provincia va adentro de la cuota del monotributo: se paga todo junto a ARCA, " +
       "no hay boleta de ARBA aparte. Acá no hay nada que cargar — el importe del mes es el de la cuota, " +
-      "en ARCA.</div></div>";
+      "en ARCA.</div></div>" +
+      (yaCargado
+        ? '<div class="aviso warn"><span>⚠️</span><div>Este mes tiene <b>' + pesos(yaCargado) +
+          "</b> cargado en ARBA. Con el Unificado ese importe <b>ya no suma al total del mes</b>: " +
+          "si fue un error, borralo del casillero de abajo.</div></div>"
+        : "");
   }
 
   /* En el simplificado no hay nada que calcular: el importe es fijo por
@@ -9659,9 +9758,13 @@ function editarLiquidacion(clienteId, periodo){
     html += '<div class="seccion-tit">' + esc(nombre) + "</div>" +
       '<div id="lqEnteCaja_' + i.clave + '">' + bloqueEnteDeLaLiquidacion(clienteId, periodo, i.clave) + "</div>" +
       calculoIIBB(c, clienteId, periodo, i.clave, d) +
+      (i.clave === "arba" ? bloqueUnificadoArba(clienteId) : "") +
       '<div class="grid g3">' +
         '<div class="campo"><label>Importe a pagar</label>' +
-          '<input type="number" step="0.01" id="lq_' + i.clave + '_monto" value="' + (d.monto || "") + '"></div>' +
+          /* Repinta el cálculo: así el aviso del Unificado aparece y desaparece
+             al mismo tiempo que el importe que lo provoca. */
+          '<input type="number" step="0.01" id="lq_' + i.clave + '_monto" value="' + (d.monto || "") +
+            '" oninput="pintarCalculoIIBB(\'' + i.clave + '\')"></div>' +
         '<div class="campo"><label>Nº de VEP</label>' +
           '<input type="text" id="lq_' + i.clave + '_vep" value="' + esc(d.vep || "") + '"></div>' +
         '<div class="campo"><label>Vence el</label>' +
@@ -10105,7 +10208,9 @@ function renderMails(){
     $("avisoEmailjs").innerHTML = '<div class="aviso ok"><span>✅</span><div>EmailJS configurado. Los mails salen desde la casilla conectada del estudio.</div></div>';
   }
 
-  var ids = Object.keys(ESTADO.clientes).filter(function(id){ return ESTADO.clientes[id].activo !== false; });
+  var ids = Object.keys(ESTADO.clientes).filter(function(id){
+    return esElClienteElegido(id) && ESTADO.clientes[id].activo !== false;
+  });
   ids.sort(function(a,b){ return ESTADO.clientes[a].razonSocial.localeCompare(ESTADO.clientes[b].razonSocial); });
 
   if (!ids.length){
@@ -12204,6 +12309,9 @@ function guardarCredenciales(clienteId){
 
 function renderArchivos(){
   llenarSelectClientes($("arcCliente"), true);
+  /* Su filtro ya era por id exacto y el vacío ya significaba «todos»: lo único
+     que faltaba era el puente con el chip de arriba. */
+  $("arcCliente").value = _clienteActivo || "";
   var selTipo = $("arcTipo");
   if (selTipo.options.length <= 1){
     selTipo.innerHTML = '<option value="">Todos los tipos</option>' +
@@ -12670,7 +12778,13 @@ function guardarPapeles(){
 }
 
 $("btnSubirArchivo").onclick = function(){ abrirSubirArchivo(); };
-$("arcCliente").onchange = pintarArchivos;
+/* De ida y vuelta, como el de Comprobantes: elegir acá también deja elegido
+   al cliente para las demás pantallas. */
+$("arcCliente").onchange = function(){
+  fijarClienteActivo($("arcCliente").value, false);
+  pintarBarraClienteElegido("tabArchivos");
+  pintarArchivos();
+};
 $("arcTipo").onchange    = pintarArchivos;
 
 /* ---------- 19. INSTALACIÓN COMO APP (PWA) ---------- */
@@ -12680,7 +12794,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v88";
+var VERSION_APP = "v89";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

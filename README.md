@@ -100,6 +100,38 @@ Los enlaces viejos siguen andando: los accesos directos del ícono de la app
 (`?tab=tabLiquidacion`) y el buscador general abren esas pantallas igual, sólo
 que ahora encienden **Clientes** arriba.
 
+## El cliente elegido filtra TODO
+
+Elegir un cliente —entrando a su ficha, o desde el desplegable de Comprobantes
+o de Archivos— ahora filtra **las seis pantallas** del grupo Clientes: el
+listado, Comprobantes, Recategorización, Liquidación, Mails y Archivos. Antes el
+chip 👤 decía el nombre arriba y abajo seguían apareciendo los cien clientes:
+sólo dos pantallas lo respetaban, y cada una a su manera.
+
+Todas preguntan ahora lo mismo y **por id exacto** (`esElClienteElegido`).
+Importa: Liquidación filtraba por **texto**, con match de prefijo, así que
+«LA ESPIGA SA» traía también a «LA ESPIGA SRL». El campo de texto sigue estando
+para buscar a mano; el chip ya no escribe ahí.
+
+Soltarlo con la **✕** del chip devuelve todo a «todos» sin limpiar nada: con
+nadie elegido la condición no corre. Dos arreglos que hacían falta para eso:
+
+- el desplegable de **Comprobantes** no tenía opción «Todos los clientes», así
+  que al soltar el chip la tabla se quedaba en el cliente viejo;
+- en el **listado de clientes** —que es justamente donde uno va a elegir otro—
+  el contador dice «Mostrando sólo a **Fulano** de 42 clientes · **ver todos**».
+
+Y lo que se exporta es lo que se ve: los CSV de Clientes y de Recategorización
+mandaban **todos** los clientes aunque la pantalla mostrara tres.
+
+## Todos los años, no sólo el actual
+
+El filtro de años de Comprobantes arrancaba en el año en curso y no tenía
+«todos»: si el mes que se venía a mirar —o a corregir— era de otro año, la
+pantalla decía «no hay comprobantes» y no había forma de llegar a él. Un cliente
+al que recién se le importó la facturación vieja se veía **vacío**. Ahora la
+primera opción es **Todos los años** y es la que viene puesta.
+
 ## El cliente elegido no se pierde al cambiar de vista
 
 Las cuatro vistas que cuelgan de Clientes hablan del mismo cliente, pero cada
@@ -506,6 +538,26 @@ Ahora se editan y se borran desde la Caja, y **Honorarios se actualiza solo**:
   y se carga de nuevo.
 
 Los movimientos cargados a mano siguen editándose enteros, sin trabas.
+
+## Marcar el Unificado desde la liquidación
+
+El régimen unificado se tildaba sólo en la ficha del cliente. Pero uno se entera
+de que un cliente es unificado **justo en la liquidación**: cuando va a cargar la
+boleta de ARBA y no hay boleta. Salir a editar la ficha, volver y reabrir el mes
+era el camino, y eso es lo que hace que nadie lo marque.
+
+Ahora el casillero **🔗 Monotributo Unificado** está en el bloque de ARBA de la
+liquidación. Escribe en la **misma marca de la ficha** —es del cliente, no del
+mes, y el texto lo aclara— y el cálculo de arriba cambia en el acto.
+
+Dos cosas que se arreglaron de paso:
+
+- un **ARBA unificado ya no suma al total del mes** aunque tenga un importe
+  cargado: esa plata está adentro de la cuota de ARCA y contarla de nuevo la
+  cobraba dos veces. La celda de la grilla ya decía «unificado» en vez del
+  importe, así que las dos pantallas decían números distintos;
+- si el mes **ya tenía** un importe cargado en ARBA, el aviso lo dice con el
+  número a la vista, en vez de hacerlo desaparecer del total sin explicación.
 
 ## Monotributo Unificado (ARBA)
 
