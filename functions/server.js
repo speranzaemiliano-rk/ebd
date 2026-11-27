@@ -445,6 +445,48 @@ const TIPOS_ADJUNTO = [
   'image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'
 ];
 
+/* ---------- CUÁNTO PIENSA ANTES DE CONTESTAR ----------
+   ⚠️ Ésta es la causa grande de «la IA tarda un montón». Los modelos Gemini 3
+   y 4 RAZONAN antes de contestar, y vienen con eso prendido de fábrica:
+   `gemini-3.6-flash` arranca en nivel «medium». Para conversar está bien; para
+   lo que hace el sistema —mirar un VEP y devolver cuatro datos que están
+   escritos en el papel— es tiempo puro: no hay nada que razonar, hay que leer.
+
+   Cada familia acepta cosas distintas, así que no se les manda lo mismo:
+   - Gemini 3 (flash y flash-lite): `thinkingLevel: 'minimal'`, el piso.
+   - Gemini 3.8 y Gemini 4: no aceptan «minimal», su piso es «low».
+   - Gemini 2.5: no entiende `thinkingLevel`; se apaga con `thinkingBudget: 0`.
+   - Cualquier otro: no se manda nada (un campo que el modelo no conoce es un
+     400, y la IA dejaría de andar ENTERA por una mejora de velocidad).
+
+   Se puede forzar con la variable GEMINI_THINKING: un nivel («minimal»,
+   «low», «medium», «high») o «off» para no mandar nada y que cada modelo haga
+   lo suyo. */
+function _pensarConfig(modelo) {
+  const forzado = limpiar(process.env.GEMINI_THINKING).toLowerCase();
+  if (forzado === 'off' || forzado === 'default') return null;
+
+  const m = String(modelo || '').toLowerCase();
+  const es25 = /^gemini-2\.5/.test(m);
+
+  if (forzado) {
+    return es25
+      ? { thinkingBudget: forzado === 'minimal' ? 0 : 1024 }
+      : { thinkingLevel: forzado };
+  }
+  if (es25) return { thinkingBudget: 0 };
+  /* 3.8 y la familia 4 no tienen «minimal»: su mínimo es «low». */
+  if (/^gemini-4/.test(m) || /^gemini-3\.8/.test(m)) return { thinkingLevel: 'low' };
+  if (/^gemini-3/.test(m)) return { thinkingLevel: 'minimal' };
+  return null;
+}
+
+/* Un 400 que se queja justamente del campo que acabamos de agregar. */
+function _esErrorDePensar(j) {
+  const msg = (j && j.error && j.error.message) || '';
+  return /thinking|thinking_?level|thinking_?budget|unknown name/i.test(msg);
+}
+
 /* Los modelos que la clave puede usar para generar texto. Sólo se consulta
    cuando ya falló por el modelo: es una llamada más y no vale la pena hacerla
    siempre. */
@@ -497,24 +539,39 @@ app.post('/gemini', async (req, res) => {
     partes.push({ inline_data: { mime_type: archivo.mime, data: archivo.datos } });
   }
 
-  const cuerpo = {
-    contents: [{ parts: partes }],
-    generationConfig: {
-      temperature: req.body.temperatura === undefined ? 0.2 : Number(req.body.temperatura),
-      maxOutputTokens: 2048
-    }
+  const generationConfig = {
+    temperature: req.body.temperatura === undefined ? 0.2 : Number(req.body.temperatura),
+    maxOutputTokens: 2048
   };
+  const pensar = _pensarConfig(modelo);
+  if (pensar) generationConfig.thinkingConfig = pensar;
+
+  const cuerpo = { contents: [{ parts: partes }], generationConfig };
 
   try {
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
                 encodeURIComponent(modelo) + ':generateContent?key=' + encodeURIComponent(clave);
 
-    const r = await fetch(url, {
+    const t0 = Date.now();
+    const pedir = () => fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cuerpo)
     });
-    const j = await r.json();
+
+    let r = await pedir();
+    let j = await r.json();
+
+    /* Si el modelo no conoce `thinkingConfig` —o no acepta ese nivel— Google
+       contesta 400. Se reintenta UNA vez sin eso: lento es mejor que roto. */
+    let sinPensar = false;
+    if (!r.ok && pensar && _esErrorDePensar(j)) {
+      delete generationConfig.thinkingConfig;
+      sinPensar = true;
+      r = await pedir();
+      j = await r.json();
+    }
+    const ms = Date.now() - t0;
 
     if (!r.ok) {
       /* El error de Google se devuelve tal cual: dice si la clave es inválida,
@@ -533,7 +590,7 @@ app.post('/gemini', async (req, res) => {
         }
       }
 
-      return res.status(r.status).json({ error: 'Gemini rechazó la consulta', detalle, modelo });
+      return res.status(r.status).json({ error: 'Gemini rechazó la consulta', detalle, modelo, ms });
     }
 
     const cand  = j.candidates && j.candidates[0];
@@ -542,13 +599,22 @@ app.post('/gemini', async (req, res) => {
       : '';
 
     if (!texto) {
+      /* MAX_TOKENS con un modelo que razona suele ser esto: se le fue el
+         presupuesto de salida pensando y no le quedó para contestar. */
+      const fin = (cand && cand.finishReason) || 'sin respuesta';
       return res.status(502).json({
         error: 'Gemini no devolvió texto',
-        detalle: (cand && cand.finishReason) || 'sin respuesta'
+        detalle: fin === 'MAX_TOKENS'
+          ? 'MAX_TOKENS: se quedó sin lugar para la respuesta. Probá con otro modelo o bajá el tamaño del papel.'
+          : fin,
+        modelo, ms
       });
     }
 
-    res.json({ texto, modelo });
+    /* `ms` es lo que tardó Google. El sistema lo compara con lo que tardó el
+       pedido entero y así se ve si el tiempo se va en la IA o en despertar
+       este backend, que es la otra mitad de «está lento». */
+    res.json({ texto, modelo, ms, pensar: sinPensar ? 'no soportado' : (pensar ? (pensar.thinkingLevel || ('budget ' + pensar.thinkingBudget)) : 'por defecto') });
   } catch (e) {
     res.status(502).json({ error: 'No pude hablar con Gemini', detalle: e.message });
   }
@@ -607,6 +673,12 @@ app.get('/diag', (req, res) => {
     corsRestringido:    ORIGENES.length > 0,
     geminiConfigurado:  !!GEMINI_KEY,
     geminiModelo:       GEMINI_KEY ? GEMINI_MODELO : '',
+    /* Si GEMINI_MODEL está cargada en Railway, le gana a lo que se elija en
+       Configuración → Asistente (IA) y el sistema lo tiene que decir: si no,
+       uno cambia el modelo ahí y no pasa nada, sin ninguna explicación. */
+    geminiModeloFijado: !!limpiar(process.env.GEMINI_MODEL),
+    geminiPensar:       (function(){ const p = _pensarConfig(GEMINI_MODELO);
+                                     return p ? (p.thinkingLevel || ('budget ' + p.thinkingBudget)) : 'por defecto'; })(),
     avisos
   });
 });
