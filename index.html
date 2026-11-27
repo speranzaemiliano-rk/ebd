@@ -1902,9 +1902,11 @@ tbody tr:hover{background:#FAFAFC}
             Si por lo que sea no se puede, pegala acá y el sistema se la manda al backend en cada consulta.</p>
           <div class="campo"><label>Modelo</label>
             <input type="text" id="cfgGeminiModelo" placeholder="gemini-3.6-flash">
-            <div class="ayuda">Vacío usa el que viene por defecto. Google jubila modelos y les cambia el
-              nombre cada tanto; si alguno deja de andar, el error te va a decir cuáles hay disponibles con
-              tu clave y lo escribís acá.</div></div>
+            <div class="ayuda">Vacío usa el que viene por defecto (<span class="mono">gemini-3.6-flash</span>).
+              Si lo querés <b>más rápido</b>, probá <span class="mono">gemini-3.5-flash-lite</span>: Google lo
+              da como el más veloz de su familia. Google jubila modelos y les cambia el nombre cada tanto; si
+              alguno deja de andar, el error te va a decir cuáles hay disponibles con tu clave y lo escribís
+              acá. Con el botón de abajo medís cuánto tarda cada uno.</div></div>
           <div class="campo"><label>Clave de Gemini</label>
             <input type="password" id="cfgGeminiKey" placeholder="AIzaSy…">
             <div class="ayuda">Se saca de <span class="mono">aistudio.google.com/apikey</span>.
@@ -7821,6 +7823,13 @@ function _geminiSaturado(e){
 }
 var ESPERAS_GEMINI = [3000, 8000];   /* dos reintentos, 3 s y 8 s */
 
+/* Lo que tardó la última consulta, para poder decir DÓNDE se fue el tiempo.
+   `ms` es lo que tardó Google (lo mide el backend) y `total` lo que tardó el
+   pedido entero desde acá: la diferencia es el viaje hasta el backend más,
+   la primera vez en un rato, lo que tarda Railway en despertarlo. Sin separar
+   esas dos cosas, «la IA está lenta» no se puede arreglar. */
+var _geminiUltimo = null;
+
 function preguntarAGemini(prompt, archivo, temperatura, alReintentar){
   var envio = { prompt: prompt };
   if (temperatura !== undefined) envio.temperatura = temperatura;
@@ -7830,7 +7839,12 @@ function preguntarAGemini(prompt, archivo, temperatura, alReintentar){
       if (c.modelo) e.modelo = c.modelo;
       var intento = 0;
       var probar = function(){
-        return postAlBackend("/gemini", e).then(function(r){ return r.texto; })
+        var t0 = Date.now();
+        return postAlBackend("/gemini", e).then(function(r){
+          _geminiUltimo = { ms: r.ms || 0, total: Date.now() - t0,
+                            modelo: r.modelo || "", pensar: r.pensar || "" };
+          return r.texto;
+        })
           .catch(function(err){
             if (intento >= ESPERAS_GEMINI.length || !_geminiSaturado(err)) throw err;
             var espera = ESPERAS_GEMINI[intento++];
@@ -8109,15 +8123,61 @@ $("btnGuardarGemini").onclick = function(){
 
 /* Prueba de punta a punta: hace una consulta de verdad. Es la única forma de
    saber si la clave sirve; que esté cargada no dice nada sobre si es válida. */
+/* ⚠️ Prueba DOS veces a propósito. La primera consulta después de un rato
+   despierta el backend de Railway, que se duerme solo cuando nadie lo usa:
+   puede tardar medio minuto y no tiene nada que ver con la IA. La segunda es
+   la que vale, y el sistema separa cuánto fue de Gemini y cuánto del viaje. */
 $("btnProbarGemini").onclick = function(){
   var cont = $("cfgGeminiEstado");
-  cont.innerHTML = '<div class="aviso info"><span>⏳</span><div>Preguntándole algo a Gemini…</div></div>';
-  /* Se prueba lo que está escrito, sin obligar a guardar antes. */
   var k = $("cfgGeminiKey").value.trim(), m = $("cfgGeminiModelo").value.trim();
   if (k || m) _geminiConf = { key: k, modelo: m };
-  preguntarAGemini("Contestá únicamente con la palabra LISTO.", null, 0).then(function(txt){
-    cont.innerHTML = '<div class="aviso ok"><span>✨</span><div><b>Anda.</b> Gemini contestó: ' +
-      esc(String(txt).slice(0, 60)) + "</div></div>";
+
+  function seg(ms){ return (ms / 1000).toFixed(1).replace(".", ",") + " s"; }
+  function una(){
+    var t0 = Date.now();
+    return preguntarAGemini("Contestá únicamente con la palabra LISTO.", null, 0)
+      .then(function(txt){
+        return { txt: txt, total: Date.now() - t0,
+                 ms: (_geminiUltimo || {}).ms || 0,
+                 modelo: (_geminiUltimo || {}).modelo || "",
+                 pensar: (_geminiUltimo || {}).pensar || "" };
+      });
+  }
+
+  cont.innerHTML = '<div class="aviso info"><span>⏳</span><div>Probando (1 de 2)… ' +
+    "si el backend estaba dormido, esta primera puede tardar.</div></div>";
+
+  una().then(function(a){
+    cont.innerHTML = '<div class="aviso info"><span>⏳</span><div>La primera tardó <b>' + seg(a.total) +
+      "</b>. Probando otra vez, ahora con el backend despierto…</div></div>";
+    return una().then(function(b){ return { a: a, b: b }; });
+  }).then(function(r){
+    var a = r.a, b = r.b;
+    var viaje = Math.max(0, b.total - b.ms);
+    var culpa = b.ms > viaje
+      ? "La mayor parte del tiempo se la lleva <b>Gemini</b>."
+      : "La mayor parte del tiempo se la lleva <b>el viaje hasta el backend</b>, no la IA.";
+    var lenta = b.total > 12000;
+
+    cont.innerHTML = '<div class="aviso ' + (lenta ? "warn" : "ok") + '"><span>' + (lenta ? "🐢" : "✨") +
+      "</span><div><b>Anda</b> — Gemini contestó: " + esc(String(b.txt).slice(0, 40)) + "." +
+      '<ul style="margin:8px 0 0 18px">' +
+        "<li>1ª consulta (despierta el backend): <b>" + seg(a.total) + "</b></li>" +
+        "<li>2ª consulta: <b>" + seg(b.total) + "</b> — de Gemini " + seg(b.ms) +
+          ", de ida y vuelta al backend " + seg(viaje) + "</li>" +
+        "<li>Modelo: <b>" + esc(b.modelo || "?") + "</b> · razonamiento: <b>" + esc(b.pensar || "?") + "</b></li>" +
+      "</ul>" +
+      "<div style=\"margin-top:8px\">" + culpa +
+      (a.total - b.total > 5000
+        ? " Y la diferencia entre las dos consultas (<b>" + seg(a.total - b.total) +
+          "</b>) es lo que tarda Railway en despertar: le pasa a la primera lectura del día."
+        : "") +
+      (b.pensar === "por defecto"
+        ? " <b>Ojo:</b> este modelo está razonando con lo que trae de fábrica. Los Gemini 3 y 4 " +
+          "piensan antes de contestar y eso es la mitad del tiempo; el backend baja eso al mínimo en " +
+          "los modelos que conoce."
+        : "") +
+      "</div></div></div>";
   }).catch(function(e){
     cont.innerHTML = '<div class="aviso bad"><span>⚠️</span><div><b>No anda.</b><br>' + esc(e.message) + "</div></div>";
   });
@@ -8152,7 +8212,12 @@ $("btnProbarBackend").onclick = function(){
           '<div class="aviso ' + (d.geminiConfigurado ? "ok" : "bad") + '" style="margin-top:10px"><span>' +
             (d.geminiConfigurado ? "✨" : "⚠️") + "</span><div><b>Asistente y lectura con IA: " +
             (d.geminiConfigurado
-              ? "andando</b> (modelo " + esc(d.geminiModelo || "?") + ")."
+              ? "andando</b> (modelo " + esc(d.geminiModelo || "?") +
+                ", razonamiento " + esc(d.geminiPensar || "?") + ")." +
+                (d.geminiModeloFijado
+                  ? "<br>⚠️ El modelo está <b>fijado en Railway</b> (variable <span class=mono>GEMINI_MODEL</span>): " +
+                    "lo que escribas acá arriba en «Modelo» <b>no se usa</b>. Para cambiarlo, cambiá la variable."
+                  : "")
               : "no funcionan todavía.</b> Falta la variable <span class=mono>GEMINI_API_KEY</span> " +
                 "en el backend. En Railway: entrá al proyecto, hacé clic en el servicio, pestaña " +
                 "<b>Variables</b>, <b>+ New Variable</b>, nombre <span class=mono>GEMINI_API_KEY</span> " +
@@ -9878,6 +9943,26 @@ function _guardarDatosDelPapel(clave, campos){
   });
 }
 
+/* El contador de segundos del cartel «Leyendo…». Devuelve la función que lo
+   apaga; el que lo prende tiene que llamarla SIEMPRE (también al fallar), o
+   queda un intervalo corriendo contra un cartel que ya no existe. */
+function _lqRelojLeyendo(est, nombre){
+  var t0 = Date.now();
+  function pintar(){
+    if (est.dataset.lqEstado !== "leyendo") return;   /* un reintento escribió otra cosa */
+    var s = Math.round((Date.now() - t0) / 1000);
+    est.innerHTML = '<div class="aviso info"><span>⏳</span><div>Leyendo <b>' + esc(nombre) + "</b>… " +
+      (s ? "(" + s + " s)" : "") +
+      (s >= 8 ? '<div class="ayuda">La primera lectura después de un rato despierta el backend y tarda ' +
+                "más; las siguientes van más rápido.</div>" : "") +
+      "</div></div>";
+  }
+  est.dataset.lqEstado = "leyendo";
+  pintar();
+  var id = setInterval(pintar, 1000);
+  return function(){ clearInterval(id); est.dataset.lqEstado = ""; };
+}
+
 /* ---------- VARIOS PAPELES DE UNA VEZ ----------
    Un mes son tres o cuatro papeles por impuesto, y subirlos de a uno —elegir
    el tipo, esperar, volver a abrir el selector— es la parte más tediosa de
@@ -9902,7 +9987,7 @@ function _lqLoteFrenar(){
 function _lqLeerLote(clave, files){
   var est = $("lqIA_" + clave), campo = $("lq_" + clave + "_file");
   if (!est) return Promise.resolve();
-  _lqLote = { frenar:false, pos:0, total:files.length, filas:[], clave:clave };
+  _lqLote = { frenar:false, pos:0, total:files.length, filas:[], clave:clave, ms:0 };
 
   function pintar(){ est.innerHTML = _lqLoteHTML(); }
   pintar();
@@ -9917,7 +10002,9 @@ function _lqLeerLote(clave, files){
       }
       _lqLote.pos = i + 1;
       pintar();
+      var t0 = Date.now();
       return _lqUnPapel(clave, f).then(function(fila){
+        _lqLote.ms += Date.now() - t0;
         _lqLote.filas.push(fila);
         pintar();
       });
@@ -10013,6 +10100,10 @@ function _lqLoteHTML(){
     (enCurso ? "⏳" : (mal ? "⚠️" : "✓")) + "</span><div>" +
     "<b>" + Math.min(L.pos, L.total) + " de " + L.total + "</b> — " + bien +
     (bien === 1 ? " listo" : " listos") + (mal ? " · " + mal + " con problemas" : "") +
+    /* El promedio por papel: así «la IA está lenta» se puede medir y comparar
+       después de cambiar de modelo. */
+    (hechos ? ' <span class="ayuda">(' + (L.ms / hechos / 1000).toFixed(1).replace(".", ",") +
+              " s por papel)</span>" : "") +
     (enCurso
       ? ' <button type="button" class="btn sec chico" onclick="_lqLoteFrenar()">✕ Frenar</button>'
       : "") +
@@ -10059,7 +10150,11 @@ function leerPapelDeLiquidacion(clave, reintento){
   _ultimoPapel[clave] = f;
 
   var corto = (IMPUESTOS.filter(function(i){ return i.clave === clave; })[0] || {}).corto || clave;
-  est.innerHTML = '<div class="aviso info"><span>⏳</span><div>Leyendo <b>' + esc(f.name) + "</b>…</div></div>";
+  /* El reloj a la vista. Un cartel quieto que dice «Leyendo…» durante treinta
+     segundos se lee como colgado; con los segundos corriendo se ve que está
+     trabajando, y a los ocho explica la causa más común de la espera larga:
+     la primera consulta del día despierta el backend, que se duerme solo. */
+  var _lqReloj = _lqRelojLeyendo(est, f.name);
 
   var tipo = reintento ? (_tipoPapel[clave] || "vep") : (($("lq_" + clave + "_tipo") || {}).value || "vep");
   _tipoPapel[clave] = tipo;
@@ -10086,9 +10181,11 @@ function leerPapelDeLiquidacion(clave, reintento){
   var prompt = _promptPapel();
 
   preguntarAGemini(prompt, f, 0, function(intento, segundos){
+    _lqReloj();   /* el reintento escribe su propio cartel */
     est.innerHTML = '<div class="aviso warn"><span>⏳</span><div>La IA está saturada en este momento. ' +
       "Reintento " + intento + " de " + ESPERAS_GEMINI.length + ", en " + segundos + " segundos…</div></div>";
   }).then(function(r){
+    _lqReloj();
     var d = jsonDeGemini(r);
     _papelLeido[clave] = d;
 
@@ -10107,6 +10204,7 @@ function leerPapelDeLiquidacion(clave, reintento){
       est.innerHTML = _avisoPapelLeido(clave, corto, d);
     });
   }).catch(function(e){
+    _lqReloj();
     var saturado = _geminiSaturado(e);
     /* No se pudo verificar: entra igual, pero se dice que no se revisó. */
     guardarElPapel().catch(function(){});
@@ -13375,7 +13473,7 @@ $("arcTipo").onchange    = pintarArchivos;
 /* Se muestra arriba, al lado de la marca. Sirve para saber de una si el
    navegador está sirviendo una copia vieja: si no coincide con la última
    publicada, hay que recargar. */
-var VERSION_APP = "v92";
+var VERSION_APP = "v93";
 if ($("verApp")) $("verApp").textContent = VERSION_APP;
 
 /* ---------- ¿HAY UNA VERSIÓN NUEVA? ----------

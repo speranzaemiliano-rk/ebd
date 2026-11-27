@@ -790,6 +790,52 @@ Tres decisiones que importan:
 
 Con **un solo** archivo todo sigue como antes.
 
+## Por qué la IA tardaba tanto
+
+Los modelos **Gemini 3 y 4 razonan antes de contestar**, y vienen con eso
+prendido de fábrica: `gemini-3.6-flash`, el que usa el sistema, arranca en nivel
+**medium**. Para conversar está bien; para lo que hace acá —mirar un VEP y
+devolver cuatro datos que están escritos en el papel— es **tiempo puro**: no hay
+nada que razonar, hay que leer.
+
+El backend ahora le pide el **mínimo** de razonamiento a cada modelo, que es
+distinto en cada familia:
+
+| Modelo | Qué se le manda |
+|---|---|
+| Gemini 3 flash y flash-lite | `thinkingLevel: minimal` |
+| Gemini 3.8 y la familia Gemini 4 | `thinkingLevel: low` (no aceptan «minimal») |
+| Gemini 2.5 | `thinkingBudget: 0` (no entiende `thinkingLevel`) |
+| Cualquier otro | nada: un campo que el modelo no conoce es un error |
+
+Y si aun así el modelo lo rechaza, **se reintenta una vez sin eso**: lento es
+mejor que roto. Se puede forzar o apagar con la variable `GEMINI_THINKING` en
+Railway (un nivel, o `off`).
+
+### Medir en vez de suponer
+
+«Está lento» no se arregla si no se sabe **dónde** se va el tiempo, y son dos
+lugares distintos: la IA, o el viaje hasta el backend —que en Railway **se
+duerme solo** cuando nadie lo usa, y la primera consulta del día lo despierta—.
+
+**Configuración → Asistente (IA) → Probar el asistente** hace ahora **dos**
+consultas y muestra las dos:
+
+> 1ª consulta (despierta el backend): **8,4 s**
+> 2ª consulta: **1,9 s** — de Gemini 1,4 s, de ida y vuelta al backend 0,5 s
+> Modelo: **gemini-3.6-flash** · razonamiento: **minimal**
+
+Con eso se ve de una si hay que cambiar de modelo o si lo que hay que resolver
+es el backend dormido. Además: el cartel **«Leyendo…»** cuenta los segundos y a
+los ocho explica lo del backend; la tanda de varios papeles dice **cuánto tardó
+por papel**; y **Probar el backend** avisa si el modelo quedó **fijado en
+Railway** (variable `GEMINI_MODEL`), que le gana a lo que se elija en
+Configuración — antes uno cambiaba el modelo ahí y no pasaba nada, sin ninguna
+explicación.
+
+Si se quiere más rápido todavía, en **Modelo** se puede poner
+`gemini-3.5-flash-lite`, que Google da como el más veloz de su familia.
+
 ## El VEP se lee solo
 
 En la liquidación, al elegir el archivo del VEP o de la declaración jurada, la
